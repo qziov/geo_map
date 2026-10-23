@@ -8,6 +8,7 @@ library;
 export 'src/camera/geo_map_controller.dart';
 export 'src/gesture/globe_gesture_overlay.dart';
 export 'src/globe/globe_image_layer.dart';
+export 'src/globe/geojson_vector_source.dart';
 export 'src/globe/globe_projection.dart';
 export 'src/globe/flat_tile_layer.dart';
 export 'src/globe/globe_tile_layer.dart';
@@ -18,7 +19,8 @@ export 'src/globe/globe_vector_layer.dart'
         GlobePolygonShape,
         GlobeLabel,
         buildGraticule,
-        buildTissot;
+        buildTissot,
+        densifyPath;
 export 'src/globe/tile_source.dart';
 export 'src/source/mbtiles_source.dart';
 export 'src/vendor/flutter_map_camera/flutter_map_camera.dart'

@@ -77,7 +77,20 @@ class FlatProjectionDelegate implements MapProjectionDelegate {
   LatLng? unproject(Offset local) {
     final world = _worldOf(_center, _zoom) +
         Point<double>(local.dx - _screenCenter.dx, local.dy - _screenCenter.dy);
-    return crs.pointToLatLng(world, _zoom);
+    final ll = crs.pointToLatLng(world, _zoom);
+    // 跨日界线：pointToLatLng 只 clamp 不 wrap，补 wrap 保证点击落点正确
+    return LatLng(ll.latitude, _wrapLng(ll.longitude));
+  }
+
+  static double _wrapLng(double lng) {
+    var value = lng;
+    while (value > 180) {
+      value -= 360;
+    }
+    while (value < -180) {
+      value += 360;
+    }
+    return value;
   }
 
   @override
@@ -85,7 +98,9 @@ class FlatProjectionDelegate implements MapProjectionDelegate {
 
   @override
   LatLng panCenter(LatLng from, Offset delta, double zoom) {
-    final world = _worldOf(from, zoom) +
+    // 内容跟手指（与 globe 的 dLng=-dx/dLat=+dy 同约定）：手指右移，
+    // 世界坐标中心左移。
+    final world = _worldOf(from, zoom) -
         Point<double>(delta.dx, delta.dy);
     final ll = crs.pointToLatLng(world, zoom);
     return _clamp(ll);

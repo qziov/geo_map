@@ -6,6 +6,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../vendor/flutter_map_camera/flutter_map_camera.dart';
 
+import '../diagnostics/geo_diagnostics.dart';
+
 import 'tile_source.dart';
 
 /// Draws raster tiles on the globe.
@@ -111,70 +113,152 @@ class _GlobeTilePainter extends CustomPainter {
 
     final paint = Paint()..isAntiAlias = true;
 
-    cache.beginFrame();
+    // ★ MapLibre `_updateRetainedTiles` 语义（tile_manager.ts L682，逐条对齐）：
+    //   ① ideal 瓦片无论有无数据都先占渲染集；
+    //   ② miss 的 ideal：先找已加载**子孙**放大垫住（≤ overscaledZ+3，整代齐全才画）；
+    //   ③ 再沿祖先向上（≤ maxUnderzooming=10，下界 source.minZoom）找**已加载**祖先；
+    //      父未加载但被请求过 → 继续向上请求（parentWasRequested，断链不断请求）；
+    //   ④ 所有画过的（ideal + 子孙 + 祖先）都进渲染集。
+    //   只要金字塔任一祖/孙有数据，屏幕必有覆盖 —— 黑瓦不可能出现。
+    final visible = _visibleTiles(zoom, grid, lng0, lat0, size, radius);
+    var drawn = 0;
+    var missed = 0;
+    var kidTiles = 0;
+    var fallbackTiles = 0;
+    final missDetails = <String>[];
 
-    // MapLibre 规则①：上一帧渲染集垫底。缩放切换时新瓦片尚未解码，先把
-    // 旧渲染集按当前相机重投影画出来（只复用已解码条目，绝不触发解码），
-    // 现行渲染集随后画在上面覆盖它 —— 新旧同屏，无黑块。
-    final prevSet = cache.previousRenderSet;
-    if (prevSet != null && prevSet.first.$1 != zoom) {
-      for (final (pz, px, py) in prevSet) {
-        final entry = cache.lookupRetained(pz, px, py);
-        if (entry == null) continue;
-        final pgrid = TileGrid.of(_scheme, pz);
-        final psub = _subdivisionsFor(2 * math.pi * radius / pgrid.cols);
+    for (final (tx, ty) in visible) {
+      var covered = false;
+
+      // ideal 命中
+      final entry = cache.lookupRetained(zoom, tx, ty);
+      if (entry != null) {
         final vertices = _buildVertices(
-          grid: pgrid,
-          x: px,
-          y: py,
+          grid: grid,
+          x: tx,
+          y: ty,
           lat0: lat0,
           lng0: lng0,
           radius: radius,
           center: center,
           image: entry.image,
-          subdivisions: psub,
+          subdivisions: subdivisions,
         );
-        if (vertices == null) continue;
-        paint.shader = entry.shader;
-        canvas.drawVertices(vertices, BlendMode.srcOver, paint);
-        vertices.dispose();
+        if (vertices != null) {
+          paint.shader = entry.shader;
+          canvas.drawVertices(vertices, BlendMode.srcOver, paint);
+          vertices.dispose();
+        }
+        drawn++;
+        covered = true;
+      } else {
+        missed++;
+        if (missDetails.length < 5) {
+          missDetails.add('$zoom/$tx/$ty=${cache.explainMiss(zoom, tx, ty)}');
+        }
+      }
+
+      // ① 子代保留（maxOverzooming=+3）：缩放进入时用已加载的更细瓦片放大垫住
+      if (!covered) {
+        for (var d = 1;
+            d <= GeoDiagnostics.maxOverzooming && zoom + d <= cache.source.maxZoom;
+            d++) {
+          final scale = 1 << d;
+          final childGrid = TileGrid.of(_scheme, zoom + d);
+          final childSub = _subdivisionsFor(tileScreenPx / scale);
+          final kids = <(int, int)>[];
+          var allLoaded = true;
+          for (var j = 0; j < scale && allLoaded; j++) {
+            for (var i = 0; i < scale; i++) {
+              final cx = tx * scale + i;
+              final cy = ty * scale + j;
+              if (cy >= childGrid.rows ||
+                  cache.lookupRetained(zoom + d, cx, cy) == null) {
+                allLoaded = false;
+                break;
+              }
+              kids.add((cx, cy));
+            }
+          }
+          if (!allLoaded) continue;
+          for (final (cx, cy) in kids) {
+            final childEntry = cache.lookupRetained(zoom + d, cx, cy)!;
+            final vertices = _buildVertices(
+              grid: childGrid,
+              x: cx,
+              y: cy,
+              lat0: lat0,
+              lng0: lng0,
+              radius: radius,
+              center: center,
+              image: childEntry.image,
+              subdivisions: childSub,
+            );
+            if (vertices == null) continue;
+            paint.shader = childEntry.shader;
+            canvas.drawVertices(vertices, BlendMode.srcOver, paint);
+            vertices.dispose();
+            kidTiles++;
+          }
+          covered = true;
+          break;
+        }
+      }
+
+      // ② 父代回退（maxUnderzooming=10，下界 source.minZoom）
+      if (!covered) {
+        var requested = cache.wasRequested('$zoom/$tx/$ty');
+        for (var dz = 1;
+            zoom - dz >= cache.source.minZoom &&
+                dz <= GeoDiagnostics.maxUnderzooming;
+            dz++) {
+          final scale = 1 << dz;
+          final px = tx ~/ scale;
+          final py = ty ~/ scale;
+          final pk = '${zoom - dz}/$px/$py';
+          final pEntry = cache.lookupRetained(zoom - dz, px, py);
+          if (pEntry != null) {
+            final pGrid = TileGrid.of(_scheme, zoom - dz);
+            final vertices = _buildVertices(
+              grid: pGrid,
+              x: px,
+              y: py,
+              lat0: lat0,
+              lng0: lng0,
+              radius: radius,
+              center: center,
+              image: pEntry.image,
+              subdivisions: _subdivisionsFor(tileScreenPx / scale),
+              uvOrigin: dz == 0 ? Offset.zero : _uvOrigin(tx, ty, dz),
+              uvSpan: 1 / scale,
+            );
+            if (vertices != null) {
+              paint.shader = pEntry.shader;
+              canvas.drawVertices(vertices, BlendMode.srcOver, paint);
+              vertices.dispose();
+            }
+            drawn++;
+            fallbackTiles++;
+            covered = true;
+            break;
+          }
+          if (requested && !cache.wasRequested(pk)) {
+            cache.request(zoom - dz, px, py);
+          }
+          requested = cache.wasRequested(pk);
+        }
       }
     }
 
-    for (final key in _visibleTiles(zoom, grid, lng0, lat0, size, radius)) {
-      // 父瓦片回退：当前级瓦片未就绪（解码中/缺失）时，取最近的已加载祖先，
-      // 把它的对应子区域放大铺在这里 —— 消除缩放过程中的透明黑块。
-      // ★ addRenderTile 必须在 hit 判定之后：全 miss 的空帧若也把 key 写入
-      //   渲染集，commitFrame 会把空集存为垫底集 → 上一帧垫底永久失效。
-      final hit = cache.lookupWithFallback(
-        zoom,
-        key.$1,
-        key.$2,
-        cache.source.minZoom,
-      );
-      if (hit == null) continue;
-      cache.addRenderTile(zoom, key.$1, key.$2);
-      final (entry, dz) = hit;
-
-      final vertices = _buildVertices(
-        grid: grid,
-        x: key.$1,
-        y: key.$2,
-        lat0: lat0,
-        lng0: lng0,
-        radius: radius,
-        center: center,
-        image: entry.image,
-        subdivisions: subdivisions,
-        // dz=0 → 整张图；dz>0 → 祖先图里本瓦片覆盖的子矩形
-        uvOrigin: dz == 0 ? Offset.zero : _uvOrigin(key.$1, key.$2, dz),
-        uvSpan: 1 / (1 << dz),
-      );
-      if (vertices == null) continue;
-
-      paint.shader = entry.shader;
-      canvas.drawVertices(vertices, BlendMode.srcOver, paint);
-      vertices.dispose();
+    GeoDiagnostics.frame(
+        '[geo_map:frame] dataZ=$zoom visible=${visible.length} drawn=$drawn '
+        'missed=$missed fallback=$fallbackTiles kids=$kidTiles '
+        'img=${cache.entryCount} pend=${cache.pendingCount} '
+        'c=${camera.center.latitude.toStringAsFixed(1)},'
+        '${camera.center.longitude.toStringAsFixed(1)} '
+        'z${camera.zoom.toStringAsFixed(2)}');
+    if (missDetails.isNotEmpty) {
+      GeoDiagnostics.missDetail('[geo_map:miss] ${missDetails.join(' ')}');
     }
 
     // MapLibre 规则③：极帽拉伸。Web Mercator 只覆盖到 ±85.05°，拉向两极时
@@ -194,8 +278,6 @@ class _GlobeTilePainter extends CustomPainter {
     );
 
     canvas.restore();
-    // MapLibre 规则②：本帧渲染集成为下一帧的垫底集。
-    cache.commitFrame();
   }
 
   /// 极帽填充：对可见的每一列，把行 0（北）/末行（南）瓦片的边缘 1px
@@ -575,7 +657,45 @@ class _TileCache extends ChangeNotifier {
   final GlobeRasterSource source;
   final Map<String, _TileEntry> _entries = {};
   final Set<String> _pending = {};
-  final Set<String> _missing = {};
+
+  /// MapLibre 语义：无永久拉黑。missing 带 TTL（30s 后允许重试）；
+  /// [_requested] 记录所有曾请求过的 key（`wasRequested` 供父级上升链判断）。
+  final Map<String, int> _missing = {};
+  final Set<String> _requested = {};
+
+  static const int _missingTtlMs = 30000;
+
+  bool _isMissing(String key) {
+    final at = _missing[key];
+    if (at == null) return false;
+    if (DateTime.now().millisecondsSinceEpoch - at > _missingTtlMs) {
+      _missing.remove(key); // TTL 过期：允许重试
+      return false;
+    }
+    return true;
+  }
+
+  bool wasRequested(String key) =>
+      _requested.contains(key) || _pending.contains(key);
+
+  int get pendingCount => _pending.length;
+  int get entryCount => _entries.length;
+
+  String explainMiss(int z, int x, int y) {
+    final key = '$z/$x/$y';
+    if (_pending.contains(key)) return 'decoding';
+    if (_isMissing(key)) return 'missing';
+    return 'notRequested';
+  }
+
+  /// 主动请求（父级上升链用）。
+  void request(int z, int x, int y) {
+    final key = '$z/$x/$y';
+    if (_disposed || _pending.contains(key) || _entries.containsKey(key)) return;
+    if (_isMissing(key)) return;
+    _pending.add(key);
+    unawaited(_decode(key, z, x, y));
+  }
 
   static const _maxImages = 384;
 
@@ -583,26 +703,9 @@ class _TileCache extends ChangeNotifier {
   int _frame = 0;
   bool _disposed = false;
 
-  /// 上一帧的渲染集（zoom, x, y）。MapLibre 规则：缩放切换时保留旧渲染集
-  /// 垫底（新旧同屏，新瓦片画在上面），直到新渲染集自己接管。
-  List<(int, int, int)>? _previousRenderSet;
-  final List<(int, int, int)> _currentRenderSet = [];
-
   int get revision => _revision;
 
-  List<(int, int, int)>? get previousRenderSet => _previousRenderSet;
-
-  void beginFrame() => _currentRenderSet.clear();
-
-  void addRenderTile(int z, int x, int y) => _currentRenderSet.add((z, x, y));
-
-  void commitFrame() {
-    if (_currentRenderSet.isNotEmpty) {
-      _previousRenderSet = List.of(_currentRenderSet);
-    }
-  }
-
-  /// 只复用已解码条目，绝不触发解码/通知（垫底瓦片不允许引发重绘风暴）。
+  /// 只读查询（不触发解码/通知）。
   _TileEntry? lookupRetained(int z, int x, int y) {
     final entry = _entries['$z/$x/$y'];
     if (entry != null) {
@@ -619,7 +722,7 @@ class _TileCache extends ChangeNotifier {
       existing.lastUsed = ++_frame;
       return existing;
     }
-    if (_missing.contains(key) || _pending.contains(key)) return null;
+    if (_isMissing(key) || _pending.contains(key)) return null;
     _pending.add(key);
     unawaited(_decode(key, z, x, y));
     return null;
@@ -651,7 +754,7 @@ class _TileCache extends ChangeNotifier {
       // 父级解码完成后必须 notify：否则停止缩放后没有任何重绘，
       // 回退图会一直留在屏幕上（黑块不消失）。可见瓦片的父级数量有限
       // （几十个），不会重演当初 840 键的通知风暴。
-      if (dz == 1 && !_missing.contains(key) && !_pending.contains(key)) {
+      if (dz == 1 && !_isMissing(key) && !_pending.contains(key)) {
         _pending.add(key);
         unawaited(_decode(key, z - 1, px, py));
       }
@@ -666,10 +769,11 @@ class _TileCache extends ChangeNotifier {
     int y, {
     bool notify = true,
   }) async {
+    _requested.add(key);
     try {
       final bytes = await source.fetch(z, x, y);
       if (bytes == null || bytes.isEmpty) {
-        _missing.add(key);
+        _missing[key] = DateTime.now().millisecondsSinceEpoch;
         return;
       }
 
@@ -697,8 +801,9 @@ class _TileCache extends ChangeNotifier {
       // 本级瓦片完成才通知重绘（渐进细化）；祖先的静默解码由下一次
       // 自然重绘拾取 —— 否则几十上百次 notify 会把主线程塞死。
       if (notify) notifyListeners();
-    } catch (_) {
-      _missing.add(key);
+    } catch (e) {
+      debugPrint('[geo_map:tile] decode ERROR $key: $e');
+      _missing[key] = DateTime.now().millisecondsSinceEpoch;
     } finally {
       _pending.remove(key);
     }

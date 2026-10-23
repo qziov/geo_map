@@ -12,7 +12,6 @@ import 'package:latlong2/latlong.dart';
 
 import '../camera/geo_map_controller.dart';
 import '../globe/flat_tile_layer.dart';
-import '../globe/globe_projection.dart';
 import '../globe/globe_tile_layer.dart';
 import '../globe/tile_source.dart';
 import '../gesture/globe_gesture_overlay.dart';
@@ -69,7 +68,7 @@ class _GeoMapState extends State<GeoMap> {
   GeoMapController get _controller =>
       widget.controller ??
       (_internal ??= GeoMapController(
-        projectionDelegate: GlobeProjectionDelegate(),
+        useGlobe: widget.options.useGlobe,
         initialCenter: widget.options.initialCenter,
         initialZoom: widget.options.initialZoom,
         minZoom: widget.options.minZoom,
