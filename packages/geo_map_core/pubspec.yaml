@@ -1,0 +1,14 @@
+name: geo_map_core
+description: Pure-Dart core for geo_map — projection, camera math, tile selection, mesh, style model. No Flutter dependency.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+dependencies:
+  latlong2: ^0.9.1
+
+dev_dependencies:
+  test: ^1.24.0
+  lints: ^5.0.0

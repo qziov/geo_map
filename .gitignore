@@ -1,0 +1,8 @@
+.dart_tool/
+build/
+.packages
+pubspec.lock
+example/.dart_tool/
+*.iml
+.idea/
+docs/visual/*.png
