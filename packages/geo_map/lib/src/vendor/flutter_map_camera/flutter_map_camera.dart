@@ -8,6 +8,7 @@ library;
 export 'bounds.dart';
 export 'camera.dart';
 export 'crs.dart';
+export 'flat_projection_delegate.dart';
 export 'inherited_model.dart';
 export 'latlng_bounds.dart';
 export 'map_options.dart';

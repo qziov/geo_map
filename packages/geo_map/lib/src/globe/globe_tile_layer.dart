@@ -142,9 +142,10 @@ class _GlobeTilePainter extends CustomPainter {
     }
 
     for (final key in _visibleTiles(zoom, grid, lng0, lat0, size, radius)) {
-      cache.addRenderTile(zoom, key.$1, key.$2);
       // 父瓦片回退：当前级瓦片未就绪（解码中/缺失）时，取最近的已加载祖先，
       // 把它的对应子区域放大铺在这里 —— 消除缩放过程中的透明黑块。
+      // ★ addRenderTile 必须在 hit 判定之后：全 miss 的空帧若也把 key 写入
+      //   渲染集，commitFrame 会把空集存为垫底集 → 上一帧垫底永久失效。
       final hit = cache.lookupWithFallback(
         zoom,
         key.$1,
@@ -152,6 +153,7 @@ class _GlobeTilePainter extends CustomPainter {
         cache.source.minZoom,
       );
       if (hit == null) continue;
+      cache.addRenderTile(zoom, key.$1, key.$2);
       final (entry, dz) = hit;
 
       final vertices = _buildVertices(

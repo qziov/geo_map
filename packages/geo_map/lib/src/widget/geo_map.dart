@@ -11,6 +11,7 @@ import 'package:flutter/widgets.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../camera/geo_map_controller.dart';
+import '../globe/flat_tile_layer.dart';
 import '../globe/globe_projection.dart';
 import '../globe/globe_tile_layer.dart';
 import '../globe/tile_source.dart';
@@ -23,6 +24,7 @@ class GeoMapOptions {
     this.initialZoom = 4.2,
     this.minZoom = 1,
     this.maxZoom = 8,
+    this.useGlobe = true,
     this.background = const Color(0xFF000000),
   });
 
@@ -30,6 +32,11 @@ class GeoMapOptions {
   final double initialZoom;
   final double minZoom;
   final double maxZoom;
+
+  /// true = 正交球面（3D）；false = Web Mercator 平面（2D）。
+  /// 切换时 center/zoom 连续（经 delegate 的 anchorCenter 各自实现）。
+  final bool useGlobe;
+
   final Color background;
 }
 
@@ -57,6 +64,7 @@ class GeoMap extends StatefulWidget {
 class _GeoMapState extends State<GeoMap> {
   GeoMapController? _internal;
   bool _viewportScheduled = false;
+  late bool _globe = widget.options.useGlobe;
 
   GeoMapController get _controller =>
       widget.controller ??
@@ -67,6 +75,17 @@ class _GeoMapState extends State<GeoMap> {
         minZoom: widget.options.minZoom,
         maxZoom: widget.options.maxZoom,
       ));
+
+  @override
+  void didUpdateWidget(covariant GeoMap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.options.useGlobe != _globe) {
+      setState(() {
+        _globe = widget.options.useGlobe;
+        _controller.setMode(_globe);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -95,7 +114,10 @@ class _GeoMapState extends State<GeoMap> {
               fit: StackFit.expand,
               children: [
                 ColoredBox(color: widget.options.background),
-                GlobeTileLayer(source: widget.source),
+                if (_globe)
+                  GlobeTileLayer(source: widget.source)
+                else
+                  FlatTileLayer(source: widget.source),
                 ...widget.children,
                 GlobeGestureOverlay(
                   controller: _controller,

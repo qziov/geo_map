@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:ui' show Offset;
+
 import 'package:flutter/widgets.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -33,4 +36,21 @@ abstract class MapProjectionDelegate {
 
   /// New camera centre after dragging by [pixelDelta].
   LatLng panBy(Offset pixelDelta);
+
+  /// Content-follows-finger pan with projection-specific compensation
+  /// (globe: 1/cos(lat); flat: affine). [delta] is the finger movement.
+  LatLng panCenter(LatLng from, Offset delta, double zoom);
+
+  /// Unit view vector of [point] (x right, y up, z towards camera).
+  /// Consumed by the default [anchorCenter]; flat implementations return a
+  /// constant since the base formula does not apply.
+  (double, double, double) viewDirection(LatLng point);
+
+  /// Keep the map point under [anchor] fixed while zooming
+  /// `fromZoom → toZoom`.
+  ///
+  /// Globe: radius correction via [viewDirection]/[panCenter] (lab-verified).
+  /// Flat: normalized-world slippy formula `n(c1) = n(a) − (n(a) − n(c0))/s`.
+  LatLng anchorCenter(
+      LatLng center, LatLng anchor, double fromZoom, double toZoom);
 }

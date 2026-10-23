@@ -9,6 +9,7 @@ export 'src/camera/geo_map_controller.dart';
 export 'src/gesture/globe_gesture_overlay.dart';
 export 'src/globe/globe_image_layer.dart';
 export 'src/globe/globe_projection.dart';
+export 'src/globe/flat_tile_layer.dart';
 export 'src/globe/globe_tile_layer.dart';
 export 'src/globe/globe_vector_layer.dart'
     show

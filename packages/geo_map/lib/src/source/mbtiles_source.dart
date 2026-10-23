@@ -121,19 +121,41 @@ class MbtilesTileSource implements GlobeRasterSource {
   }
 
   static (int?, int?) _readZoomRange(Database db) {
+    // ★ 数据真值优先：metadata 常谎报（本库声称 z1 起，实际 z1 层 0 块），
+    //   clamp 到谎报层级会让 under-zoom 全 miss → 黑瓦。取 tiles 表实际层级。
+    int? minZ;
+    int? maxZ;
     try {
-      final rows = db
-          .select("SELECT name, value FROM metadata WHERE name IN ('minzoom','maxzoom')");
-      int? minZ, maxZ;
+      final rows = db.select(
+        'SELECT DISTINCT zoom_level FROM tiles ORDER BY zoom_level ASC');
+      final levels = [
+        for (final row in rows)
+          if (row['zoom_level'] is int) row['zoom_level'] as int,
+      ];
+      if (levels.isNotEmpty) {
+        minZ = levels.first;
+        maxZ = levels.last;
+        debugPrint('[geo_map:mbtiles] real tile levels: z$minZ..z$maxZ '
+            '(${levels.length} levels)');
+      }
+    } catch (e) {
+      debugPrint('[geo_map:mbtiles] real zoom scan failed: $e');
+    }
+    // metadata 作为回退/对照
+    try {
+      final rows = db.select(
+          "SELECT name, value FROM metadata WHERE name IN ('minzoom','maxzoom')");
       for (final row in rows) {
         final v = int.tryParse(row['value'] as String? ?? '');
-        if (row['name'] == 'minzoom') minZ = v;
-        if (row['name'] == 'maxzoom') maxZ = v;
+        if (v == null) continue;
+        if (row['name'] == 'minzoom') {
+          minZ ??= v;
+        } else if (row['name'] == 'maxzoom') {
+          maxZ ??= v;
+        }
       }
-      return (minZ, maxZ);
-    } catch (_) {
-      return (null, null);
-    }
+    } catch (_) {}
+    return (minZ, maxZ);
   }
 
   @override

@@ -1,35 +1,78 @@
 # geo_map
 
-A self-contained 2D/3D Flutter map engine — **no flutter_map dependency**.
+A self-contained 2D/3D Flutter map engine — **zero flutter_map dependency**.
 
-- `packages/geo_map_core` — pure Dart: projections, camera math, tile selection, mesh, cache policy. Runs under `dart test` (no `dart:ui`).
-- `packages/geo_map` — Flutter shell: `GeoMap` widget, layers, gesture layer, tile sources.
+- **2D**：Web Mercator 平面（仿射瓦片）
+- **3D**：正交球面（globe），含极帽填充、地平线剔除、父级瓦片回退
+- **一键切换**：`GeoMapOptions(useGlobe: false)`，center/zoom 连续
+- **可插拔投影**：所有渲染通过 `MapProjectionDelegate` 接口，新增投影只需一个类
+- **MBTiles 离线底图**：WAL 自愈、真实层级探测（不信任 metadata）
+- **over/under-zoom**：数据层级不足时自动钳制到最近有瓦层级并缩放绘制
+  （MapLibre overscale 语义），缺失瓦片自动回退父级（UV 子矩形）
 
-## Why two packages
+## 包结构
 
-`flutter_tester` is unreliable in this environment, so every guarantee that can be
-automated lives in the pure-Dart core. The Flutter shell only wires `dart:ui`
-(Canvas / Vertices / ImageShader) to the core's geometry.
+| 包 | 内容 |
+| --- | --- |
+| `packages/geo_map` | Flutter 壳：`GeoMap` widget、图层、手势、MBTiles 源、vendored camera |
+| `packages/geo_map_core` | 纯 Dart 数学核心（投影/相机/网格），82+ 测试，无 `dart:ui` |
 
-## Design contracts
+`lib/src/vendor/flutter_map_camera/` 内含从 flutter_map（12 补丁 fork）提取的
+`MapCamera` + 投影委托层 —— 冻结快照，**零上游依赖**（flutter_map/proj4dart 均
+不出现在依赖中）。BSD-3-Clause，上游版权声明保留。
 
-| Contract | Where | Test |
-| --- | --- | --- |
-| Projector is stateless | `projection/geo_projector.dart` | `projection_test.dart` |
-| 2D/3D differ only by projector | `projection/*.dart` | `projection_test.dart` (limit consistency) |
-| Styles are screen-space | `tuning/geo_engine_tuning.dart` | `hud_and_tuning_test.dart` |
-| Tile window is O(visible) | `tiles/tile_selector.dart` | `tile_selector_test.dart` |
-| Cache is byte-budgeted and protects the render set | `tiles/tile_cache_policy.dart` | `cache_and_scheduler_test.dart` |
-| Geometry is cached on the unit sphere | `tiles/tile_mesh.dart` | `tile_mesh_test.dart` |
+## Quick start
+
+```dart
+import 'package:geo_map/geo_map.dart';
+
+final source = await MbtilesTileSource.open(
+  id: 'base',
+  assetPath: 'assets/tiles/base.mbtiles',
+);
+
+GeoMap(
+  options: const GeoMapOptions(
+    initialCenter: LatLng(30, 105),
+    initialZoom: 4.2,
+    minZoom: 2,
+    maxZoom: 8,
+    useGlobe: true,          // false = 2D 平面
+  ),
+  source: source,
+  onTap: (latLng) => debugPrint('$latLng'),
+  children: [
+    GlobeVectorLayer(lines: buildGraticule()),   // 经纬网
+    GlobeVectorLayer(lines: buildTissot()),      // 投影变形指示圈
+  ],
+)
+```
+
+宿主依赖：`sqlite3_flutter_libs`（原生 SQLite）+ `path_provider`。
+完整可运行示例见 [`example/`](example/)。
+
+## 文档
+
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — 分层与数据流
+- [MAPLIBRE_ALIGNMENT.md](docs/MAPLIBRE_ALIGNMENT.md) — 与 MapLibre 的接口对齐表与演进路线
+- API 文档：`dart doc`（TODO: CI）
+
+## 路线图
+
+- [x] 3D globe + 2D mercator + 一键切换
+- [x] MBTiles 离线 + over/under-zoom + 父级回退
+- [ ] M1: style spec JSON + 表达式求值器（参照 maplibre-gl-js）
+- [ ] M2: 矢量瓦片 MVT + fill/line bucket（参照 maplibre-native）
+- [ ] M3: symbol 碰撞检测与标注避让
+- [ ] 三端（Android/iOS/鸿蒙）打包验证
 
 ## Development
 
 ```bash
-cd packages/geo_map_core
-dart pub get
-dart analyze
-dart test
+cd packages/geo_map_core && dart pub get && dart analyze && dart test
+cd packages/geo_map   && flutter pub get && dart analyze
 ```
 
-Tags: `p0-core` (core + tests), `p1-render` (host + raster), `p2-style` (style
-system + vector/symbol/image + hit testing).
+## License
+
+BSD-3-Clause（含 flutter_map 派生代码声明，见 [LICENSE](LICENSE)）。

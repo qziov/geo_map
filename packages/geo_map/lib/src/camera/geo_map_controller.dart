@@ -13,16 +13,26 @@ import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../globe/globe_projection.dart';
-import '../vendor/flutter_map_camera/flutter_map_camera.dart';
+import '../vendor/flutter_map_camera/flutter_map_camera.dart'
+    show
+        Epsg3857,
+        FlatProjectionDelegate,
+        MapCamera,
+        MapOptions,
+        MapProjectionDelegate;
 
 class GeoMapController extends ChangeNotifier {
   GeoMapController({
+    bool useGlobe = true,
     GlobeProjectionDelegate? projectionDelegate,
     LatLng initialCenter = const LatLng(30, 105),
     double initialZoom = 4.2,
     this.minZoom = 1,
     this.maxZoom = 8,
-  }) : delegate = projectionDelegate ?? GlobeProjectionDelegate() {
+  }) : delegate = projectionDelegate ??
+            (useGlobe
+                ? GlobeProjectionDelegate()
+                : FlatProjectionDelegate()) {
     _center = initialCenter;
     _zoom = initialZoom.clamp(minZoom, maxZoom);
     delegate.updateCamera(_center, _zoom, Size.zero);
@@ -36,9 +46,29 @@ class GeoMapController extends ChangeNotifier {
     ));
   }
 
-  final GlobeProjectionDelegate delegate;
+  MapProjectionDelegate delegate;
+  bool _isGlobe = true;
   final double minZoom;
   final double maxZoom;
+
+  bool get isGlobe => _isGlobe;
+
+  /// 2D/3D 切换：替换投影 delegate 并重建 vendored camera（center/zoom 连续）。
+  void setMode(bool globe) {
+    if (_isGlobe == globe) return;
+    _isGlobe = globe;
+    delegate = globe
+        ? GlobeProjectionDelegate()
+        : FlatProjectionDelegate();
+    delegate.updateCamera(_center, _zoom, viewport);
+    _camera = _camera.withOptions(MapOptions(
+      crs: const Epsg3857(),
+      projectionDelegate: delegate,
+      minZoom: minZoom,
+      maxZoom: maxZoom,
+    ));
+    notifyListeners();
+  }
 
   late MapCamera _camera;
   late LatLng _center;
@@ -76,7 +106,7 @@ class GeoMapController extends ChangeNotifier {
     final anchor = delegate.unproject(focal);
     var center = _center;
     if (anchor != null) {
-      center = _anchorCenter(center, anchor, _zoom, toZoom);
+      center = delegate.anchorCenter(center, anchor, _zoom, toZoom);
     }
     move(center, toZoom);
   }
@@ -98,28 +128,5 @@ class GeoMapController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Public wrapper — used by the gesture overlay for anchor zoom.
-  LatLng anchorCenter(LatLng center, LatLng anchor, double fromZoom, double toZoom) =>
-      _anchorCenter(center, anchor, fromZoom, toZoom);
-
-  /// First-order correction for the radius change during a zoom — verbatim
-  /// port of lab `main.dart::_anchorCenter`.
-  LatLng _anchorCenter(
-    LatLng center,
-    LatLng anchor,
-    double fromZoom,
-    double toZoom,
-  ) {
-    if (fromZoom == toZoom) return center;
-    final rOld = GeoEngineGlobe.tileSize * math.pow(2, fromZoom) / (2 * math.pi);
-    final rNew = GeoEngineGlobe.tileSize * math.pow(2, toZoom) / (2 * math.pi);
-    final v = delegate.viewDirection(anchor);
-    final shift = Offset((rOld - rNew) * v.$1, -(rOld - rNew) * v.$2);
-    return delegate.panCenter(center, shift, toZoom);
-  }
 }
 
-/// Shared constants for the globe delegate / controller pair.
-abstract class GeoEngineGlobe {
-  static const double tileSize = 256;
-}

@@ -218,7 +218,7 @@ class _GlobeGestureOverlayState extends State<GlobeGestureOverlay> {
       // Anchor the point under the focal point while zooming.
       final anchor = controller.delegate.unproject(focal);
       if (anchor != null) {
-        center = controller.anchorCenter(center, anchor, controller.zoom, zoom);
+        center = controller.delegate.anchorCenter(center, anchor, controller.zoom, zoom);
       }
     }
 

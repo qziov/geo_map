@@ -112,7 +112,21 @@ class GlobeProjectionDelegate implements MapProjectionDelegate {
   @override
   LatLng panBy(Offset pixelDelta) => panCenter(_center, pixelDelta, _zoom);
 
+  /// Keep the map point under [anchor] fixed while zooming — first-order
+  /// radius correction (lab `main.dart::_anchorCenter`, verbatim).
+  @override
+  LatLng anchorCenter(
+      LatLng center, LatLng anchor, double fromZoom, double toZoom) {
+    if (fromZoom == toZoom) return center;
+    final rOld = tileSize * math.pow(2, fromZoom) / (2 * math.pi);
+    final rNew = tileSize * math.pow(2, toZoom) / (2 * math.pi);
+    final v = viewDirection(anchor);
+    final shift = Offset((rOld - rNew) * v.$1, -(rOld - rNew) * v.$2);
+    return panCenter(center, shift, toZoom);
+  }
+
   /// Drag: content follows the finger, longitude compensated by 1/cos(lat).
+  @override
   LatLng panCenter(LatLng from, Offset delta, double zoom) {
     final r = tileSize * math.pow(2, zoom) / (2 * math.pi);
     // Horizontal drag sensitivity still grows towards the poles: the same pixel
@@ -127,6 +141,7 @@ class GlobeProjectionDelegate implements MapProjectionDelegate {
 
   /// Unit vector of [point] in view space (x right, y up, z towards camera).
   /// Used by the page for things like pinch-to-zoom anchored at the fingers.
+  @override
   (double, double, double) viewDirection(LatLng point) => _toView(point);
 
   /// World → view space (unit sphere, camera centred).
