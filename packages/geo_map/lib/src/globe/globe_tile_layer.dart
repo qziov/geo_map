@@ -279,7 +279,7 @@ class _GlobeTilePainter extends CustomPainter {
             break;
           }
           if (requested && !cache.wasRequested(pk)) {
-            cache.request(zoom - dz, px, py);
+            cache.requestDeferred(zoom - dz, px, py);
           }
           requested = cache.wasRequested(pk);
         }
@@ -312,9 +312,11 @@ class _GlobeTilePainter extends CustomPainter {
       subdivisions: subdivisions,
       cache: cache,
       paint: paint,
+      viewport: Offset.zero & size,
     );
 
     canvas.restore();
+    cache.flushDeferredRequests();
   }
 
   /// 极帽填充：对可见的每一列，把行 0（北）/末行（南）瓦片的边缘 1px
@@ -331,11 +333,21 @@ class _GlobeTilePainter extends CustomPainter {
     required int subdivisions,
     required _TileCache cache,
     required Paint paint,
+    required Rect viewport,
   }) {
     if (_scheme != TileScheme.webMercator) return;
     final sinLat0 = math.sin(lat0);
     if (sinLat0.abs() <= _eps) return; // 相机在赤道附近：极帽在轮廓上，无需画
     final north = sinLat0 > 0;
+
+    // ★ 极帽离屏跳过：极点投影位置超出屏幕（含帽高余量）时，整圈 64 列的
+    //   lookupWithFallback 会白白请求 row-0 整行 + z5 父级（96 请求风暴）。
+    final poleVy = math.cos(lat0) * (north ? 1 : -1);
+    final poleScreen = Offset(center.dx, center.dy - poleVy * radius);
+    final capSpanPx = (math.pi / 2 - 85.0511 * math.pi / 180).abs() * radius;
+    final capRect = Rect.fromCircle(
+        center: poleScreen, radius: capSpanPx + 2 * math.pi * radius / 64);
+    if (!capRect.overlaps(viewport)) return;
     final capLat = 85.0511 * math.pi / 180.0;
     final poleLat = math.pi / 2.0;
 
@@ -712,7 +724,30 @@ class _TileCache extends ChangeNotifier {
   }
 
   bool wasRequested(String key) =>
-      _requested.contains(key) || _pending.contains(key);
+      _requested.contains(key) ||
+      _pending.contains(key) ||
+      _deferredKeys.contains(key);
+
+  /// 帧内暂存的父级请求（ideal 优先：帧末统一开火，避免与 ideal 解码抢队列）。
+  final List<(int, int, int)> _deferredRequests = [];
+  final Set<String> _deferredKeys = {};
+
+  void requestDeferred(int z, int x, int y) {
+    final key = '$z/$x/$y';
+    if (_deferredKeys.add(key)) {
+      _deferredRequests.add((z, x, y));
+    }
+  }
+
+  void flushDeferredRequests() {
+    if (_deferredRequests.isEmpty) return;
+    final batch = List.of(_deferredRequests);
+    _deferredRequests.clear();
+    for (final (z, x, y) in batch) {
+      _deferredKeys.remove('$z/$x/$y');
+      request(z, x, y);
+    }
+  }
 
   int get pendingCount => _pending.length;
   int get entryCount => _entries.length;
