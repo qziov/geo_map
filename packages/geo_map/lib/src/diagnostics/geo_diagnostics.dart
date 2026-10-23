@@ -15,6 +15,22 @@ class GeoDiagnostics {
   static int frameIntervalMs = 500;
   static int missDetailIntervalMs = 2000;
 
+  /// 逐瓦片 trace（key + 屏幕位置）。定位选片洞/覆盖缺口时打开；
+  /// 每帧限量 + 500ms 限速，避免刷屏。
+  static bool trace = false;
+  static int tracePerFrame = 40;
+  static int _lastTrace = 0;
+
+  static bool get traceOn => enabled && kDebugMode && trace;
+
+  static void traceLine(String message) {
+    if (!traceOn) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastTrace < frameIntervalMs) return;
+    _lastTrace = now;
+    debugPrint(message);
+  }
+
   /// MapLibre TileManager 同款常量（tile_manager.ts L102-103）。
   static const int maxUnderzooming = 10;
   static const int maxOverzooming = 3;

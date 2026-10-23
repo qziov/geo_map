@@ -78,6 +78,14 @@ class _GeoMapState extends State<GeoMap> {
   @override
   void didUpdateWidget(covariant GeoMap oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.controller != null &&
+        (widget.options.minZoom != _controller.minZoom ||
+            widget.options.maxZoom != _controller.maxZoom)) {
+      _controller.applyConstraints(
+        minZoom: widget.options.minZoom,
+        maxZoom: widget.options.maxZoom,
+      );
+    }
     if (widget.options.useGlobe != _globe) {
       setState(() {
         _globe = widget.options.useGlobe;

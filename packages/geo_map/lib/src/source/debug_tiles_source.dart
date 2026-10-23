@@ -15,6 +15,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
+import '../diagnostics/geo_diagnostics.dart';
 import '../globe/tile_source.dart' show GlobeRasterSource, TileScheme;
 
 enum DebugTilesMode { maplibreNumber, labeled }
@@ -52,7 +53,12 @@ class DebugTilesSource implements GlobeRasterSource {
 
   @override
   Future<Uint8List?> fetch(int z, int x, int y) async {
-    if (mode == DebugTilesMode.labeled) return _labeledPng(z, x, y);
+    if (mode == DebugTilesMode.labeled) {
+      if (GeoDiagnostics.traceOn) {
+        debugPrint('[geo_map:debug] gen z=$z x=$x y=$y');
+      }
+      return _labeledPng(z, x, y);
+    }
 
     final sheet = await _numberSheet(z);
     if (sheet == null) return null;
@@ -107,6 +113,15 @@ class DebugTilesSource implements GlobeRasterSource {
 
   /// 本地生成 z/x/y 标注瓦片：四象限底色 + 网格边框 + 大字坐标。
   Future<Uint8List?> _labeledPng(int z, int x, int y) async {
+    try {
+      return await _labeledPngInner(z, x, y);
+    } catch (e) {
+      debugPrint('[geo_map:debug] labeled $z/$x/$y FAILED: $e');
+      return null;
+    }
+  }
+
+  Future<Uint8List?> _labeledPngInner(int z, int x, int y) async {
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(recorder, const Rect.fromLTWH(0, 0, 256, 256));
     const quadColors = [
@@ -131,7 +146,7 @@ class DebugTilesSource implements GlobeRasterSource {
           ..strokeWidth = 4
           ..color = const Color(0xFFFFFFFF));
 
-    ui.Paragraph _para(String text, double size) {
+    ui.Paragraph para(String text, double size) {
       final builder = ui.ParagraphBuilder(
         ui.ParagraphStyle(textAlign: TextAlign.center),
       )
@@ -141,9 +156,9 @@ class DebugTilesSource implements GlobeRasterSource {
       return para;
     }
 
-    canvas.drawParagraph(_para('z$z', 44), const Offset(0, 58));
-    canvas.drawParagraph(_para('x$x', 34), const Offset(0, 118));
-    canvas.drawParagraph(_para('y$y', 34), const Offset(0, 162));
+    canvas.drawParagraph(para('z$z', 44), const Offset(0, 58));
+    canvas.drawParagraph(para('x$x', 34), const Offset(0, 118));
+    canvas.drawParagraph(para('y$y', 34), const Offset(0, 162));
     final picture = recorder.endRecording();
     final image = await picture.toImage(256, 256);
     final data = await image.toByteData(format: ui.ImageByteFormat.png);

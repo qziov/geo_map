@@ -48,10 +48,17 @@ class GeoMapController extends ChangeNotifier {
 
   MapProjectionDelegate delegate;
   bool _isGlobe = true;
-  final double minZoom;
-  final double maxZoom;
+  double minZoom;
+  double maxZoom;
 
   bool get isGlobe => _isGlobe;
+
+  /// 外部宿主同步缩放约束（防 options 与 controller 脱节）。
+  void applyConstraints({required double minZoom, required double maxZoom}) {
+    minZoom = minZoom;
+    maxZoom = maxZoom;
+    move(_center, _zoom); // 触发 clamp + notify
+  }
 
   /// 2D/3D 切换：替换投影 delegate 并重建 vendored camera（center/zoom 连续）。
   void setMode(bool globe) {

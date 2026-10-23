@@ -97,10 +97,8 @@ class _GlobeTilePainter extends CustomPainter {
     if (radius <= 0) return;
 
     final center = Offset(size.width / 2, size.height / 2);
-    final zoom = _pickZoom(
-      radius,
-      lat0,
-    ).clamp(cache.source.minZoom, cache.source.maxZoom);
+    final zoom = _pickZoom(radius)
+        .clamp(cache.source.minZoom, cache.source.maxZoom);
 
     final grid = TileGrid.of(_scheme, zoom);
     final tileScreenPx = 2 * math.pi * radius / grid.cols;
@@ -127,6 +125,22 @@ class _GlobeTilePainter extends CustomPainter {
     var fallbackTiles = 0;
     final missDetails = <String>[];
 
+    // 选片行/列范围（定位选片洞）
+    var minRow = 1 << 30;
+    var maxRow = -1;
+    var minCol = 1 << 30;
+    var maxCol = -1;
+    for (final (sx, sy) in visible) {
+      if (sy < minRow) minRow = sy;
+      if (sy > maxRow) maxRow = sy;
+      if (sx < minCol) minCol = sx;
+      if (sx > maxCol) maxCol = sx;
+    }
+
+    var traceBudget = GeoDiagnostics.tracePerFrame;
+    String traceTag(int tz, int tx, int ty, String kind) =>
+        '[geo_map:trace] $tz/$tx/$ty kind=$kind screen=$center r=$radius';
+
     for (final (tx, ty) in visible) {
       var covered = false;
 
@@ -151,11 +165,20 @@ class _GlobeTilePainter extends CustomPainter {
         }
         drawn++;
         covered = true;
+        if (traceBudget > 0) {
+          traceBudget--;
+          GeoDiagnostics.traceLine(traceTag(zoom, tx, ty, 'hit'));
+        }
       } else {
         missed++;
         // ★ MapLibre `_addTile(idealID)`：ideal 瓦片无条件请求（这是加载的
         //   唯一入口）。漏掉它 = 永远没有瓦片可解码（首帧日志实锤）。
         cache.request(zoom, tx, ty);
+        if (traceBudget > 0) {
+          traceBudget--;
+          GeoDiagnostics.traceLine(
+              traceTag(zoom, tx, ty, 'miss ${cache.explainMiss(zoom, tx, ty)}'));
+        }
         if (missDetails.length < 5) {
           missDetails.add('$zoom/$tx/$ty=${cache.explainMiss(zoom, tx, ty)}');
         }
@@ -204,6 +227,11 @@ class _GlobeTilePainter extends CustomPainter {
             kidTiles++;
           }
           covered = true;
+          if (traceBudget > 0) {
+            traceBudget--;
+            GeoDiagnostics.traceLine(
+                traceTag(zoom + d, tx, ty, 'kids x$d'));
+          }
           break;
         }
       }
@@ -243,6 +271,11 @@ class _GlobeTilePainter extends CustomPainter {
             drawn++;
             fallbackTiles++;
             covered = true;
+            if (traceBudget > 0) {
+              traceBudget--;
+              GeoDiagnostics.traceLine(
+                  traceTag(zoom - dz, px, py, 'fallback dz=$dz'));
+            }
             break;
           }
           if (requested && !cache.wasRequested(pk)) {
@@ -256,6 +289,7 @@ class _GlobeTilePainter extends CustomPainter {
     GeoDiagnostics.frame(
         '[geo_map:frame] dataZ=$zoom visible=${visible.length} drawn=$drawn '
         'missed=$missed fallback=$fallbackTiles kids=$kidTiles '
+        'rows=$minRow..$maxRow cols=$minCol..$maxCol '
         'img=${cache.entryCount} pend=${cache.pendingCount} '
         'c=${camera.center.latitude.toStringAsFixed(1)},'
         '${camera.center.longitude.toStringAsFixed(1)} '
@@ -371,15 +405,14 @@ class _GlobeTilePainter extends CustomPainter {
   static int _subdivisionsFor(double tileScreenPx) =>
       (tileScreenPx / 20).ceil().clamp(6, 16);
 
-  /// Geodetic grids cover 360° regardless of latitude; mercator additionally
-  /// scales with `cos(lat)` because its world height is `2πR·cos(lat)`.
-  int _pickZoom(double radius, double lat0) {
-    // Near the poles Web Mercator's scale factor explodes; without a floor the
-    // chosen level jumps to absurd values (and we have no tiles past z5 anyway).
-    final cosLat = math.max(math.cos(lat0).abs(), 0.2);
-    final worldPx = _scheme == TileScheme.geodetic
-        ? 2 * math.pi * radius
-        : 2 * math.pi * radius * cosLat;
+  /// dataZ = round(log2(2πR/256))，与纬度无关。
+  ///
+  /// ★ 不带 cosLat 因子：那是平面墨卡托的概念。球面（正交）下 mercator 瓦片
+  ///   是保形的——高纬瓦片在屏幕上仍是近方形，dataZ = round(cameraZoom)。
+  ///   带 cosLat 会导致"拖动视角到极点时缩放级被同步压低"（高纬黑瓦/模糊的
+  ///   根因之一），maplibre globe 的 coveringZoomLevel 同样不带纬度因子。
+  int _pickZoom(double radius) {
+    final worldPx = 2 * math.pi * radius;
     return (math.log(worldPx / 256) / math.ln2).round();
   }
 
