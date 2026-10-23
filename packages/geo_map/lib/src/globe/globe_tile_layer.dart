@@ -153,6 +153,9 @@ class _GlobeTilePainter extends CustomPainter {
         covered = true;
       } else {
         missed++;
+        // ★ MapLibre `_addTile(idealID)`：ideal 瓦片无条件请求（这是加载的
+        //   唯一入口）。漏掉它 = 永远没有瓦片可解码（首帧日志实锤）。
+        cache.request(zoom, tx, ty);
         if (missDetails.length < 5) {
           missDetails.add('$zoom/$tx/$ty=${cache.explainMiss(zoom, tx, ty)}');
         }
