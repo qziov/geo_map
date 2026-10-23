@@ -82,12 +82,19 @@ class TileMeshBuilder {
   ///
   /// Hidden vertices are clamped onto the limb (never NaN) so partial tiles keep
   /// their silhouette; [cullIndices] then drops only fully-hidden triangles.
+  ///
+  /// [uvOriginX]/[uvOriginY]/[uvSpan] re-map the tile's `[0,tileSize]` UV space
+  /// into a parent image's pixel space (parent-tile fallback). The common path
+  /// (origin 0, full span) reuses the cached UV array without allocating.
   MeshBuffers project(
     UnitMesh mesh,
     GeoProjector projector,
     CameraState camera, {
     Float32List? positionBuffer,
     Float32List? depthBuffer,
+    double uvOriginX = 0,
+    double uvOriginY = 0,
+    double uvSpan = GeoEngineTuning.tileSizeD,
   }) {
     final count = mesh.vertexCount;
     final positions =
@@ -139,8 +146,21 @@ class TileMeshBuilder {
       }
     }
 
+    final fullBand = uvOriginX == 0 &&
+        uvOriginY == 0 &&
+        uvSpan == GeoEngineTuning.tileSize;
+    Float32List outUv = mesh.uv;
+    if (!fullBand) {
+      outUv = Float32List(count * 2);
+      final k = uvSpan / GeoEngineTuning.tileSize;
+      for (var i = 0; i < count; i++) {
+        outUv[i * 2] = uvOriginX + mesh.uv[i * 2] * k;
+        outUv[i * 2 + 1] = uvOriginY + mesh.uv[i * 2 + 1] * k;
+      }
+    }
+
     return MeshBuffers(
-        positions, mesh.uv, depths, cullIndices(mesh.indices, depths));
+        positions, outUv, depths, cullIndices(mesh.indices, depths));
   }
 
   /// Drop triangles whose three corners are all behind the horizon.

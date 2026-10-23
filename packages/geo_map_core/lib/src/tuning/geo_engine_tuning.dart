@@ -18,6 +18,9 @@ class GeoEngineTuning {
   /// Raster tile edge in pixels. Single source of truth.
   static const int tileSize = 256;
 
+  /// [tileSize] as a double (const-usable default parameter).
+  static const double tileSizeD = tileSize * 1.0;
+
   /// Maximum chord error allowed when densifying great circles (screen px).
   static const double densifyPixelError = 0.5;
 

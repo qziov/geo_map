@@ -16,7 +16,7 @@ class HudSnapshot {
     required this.radiusPx,
     required this.projectorKind,
     required this.schemeName,
-    required this.visibleTiles,
+    this.visibleTiles,
     this.cameraSource = 'delegate',
     this.tap,
     this.fallbackLevel = 0,
@@ -28,7 +28,9 @@ class HudSnapshot {
   final double radiusPx;
   final String projectorKind; // 'mercator' | 'orthographic'
   final String schemeName; // 'webMercator' | 'epsg4326'
-  final int visibleTiles;
+
+  /// `null` → the HUD omits the tile-count segment entirely.
+  final int? visibleTiles;
   final String cameraSource;
   final LatLng? tap;
   final int fallbackLevel;
@@ -48,7 +50,10 @@ class HudSnapshot {
           '${center.longitude.toStringAsFixed(1)}   '
           'zoom ${zoom.toStringAsFixed(2)}   '
           'R ${radiusPx.round()}px',
-      '相机: $cameraSource · 网格: $schemeName · 可见瓦片 $visibleTiles',
+      if (visibleTiles != null)
+        '相机: $cameraSource · 网格: $schemeName · 可见瓦片 $visibleTiles'
+      else
+        '相机: $cameraSource · 网格: $schemeName',
     ];
     if (!sourceReady) {
       lines.add('底图源未就绪${fallbackLevel > 0 ? '（回退层级 $fallbackLevel）' : ''}');
@@ -69,7 +74,7 @@ class HudSnapshot {
     required double zoom,
     required String projectorKind,
     required String schemeName,
-    required int visibleTiles,
+    int? visibleTiles,
     String cameraSource = 'delegate',
     LatLng? tap,
     int fallbackLevel = 0,
