@@ -3,7 +3,9 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import '../vendor/flutter_map_camera/flutter_map_camera.dart';
+import 'package:latlong2/latlong.dart';
+import '../vendor/flutter_map_camera/flutter_map_camera.dart'
+    show FlatProjectionDelegate, MapCamera, LatLngBounds;
 
 /// Image overlay (weather radar, satellite swath, …) drawn on the globe.
 ///
@@ -119,10 +121,11 @@ class _ImagePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
 
+    final flat = camera.projectionDelegate is FlatProjectionDelegate;
     final lat0 = camera.center.latitude * math.pi / 180;
     final lng0 = camera.center.longitude * math.pi / 180;
     final radius = 256 * math.pow(2, camera.zoom) / (2 * math.pi);
-    if (radius <= 0) return;
+    if (!flat && radius <= 0) return;
 
     final center = Offset(size.width / 2, size.height / 2);
     final n = subdivisions.clamp(4, 64);
@@ -147,29 +150,36 @@ class _ImagePainter extends CustomPainter {
       for (var i = 0; i <= n; i++) {
         final fx = i / n;
         final lng = west + (east - west) * fx;
-        final v = _view(lng * math.pi / 180, lat * math.pi / 180, lat0, lng0);
         final index = j * (n + 1) + i;
 
-        depths[index] = v.$3;
-
-        var vx = v.$1;
-        var vy = v.$2;
-        if (v.$3 <= _eps) {
-          allFront = false;
-          final len = math.sqrt(vx * vx + vy * vy);
-          if (len < 1e-6) {
-            vx = 0;
-            vy = 0;
-          } else {
-            vx /= len;
-            vy /= len;
-          }
-        } else {
+        if (flat) {
+          // 2D：bounds 格点走 delegate 仿射，无视深度/圆盘。
+          final pt = camera.projectClamped(LatLng(lat, lng));
+          positions[index * 2] = pt.x;
+          positions[index * 2 + 1] = pt.y;
+          depths[index] = 1;
           anyFront = true;
+        } else {
+          final v = _view(lng * math.pi / 180, lat * math.pi / 180, lat0, lng0);
+          depths[index] = v.$3;
+          var vx = v.$1;
+          var vy = v.$2;
+          if (v.$3 <= _eps) {
+            allFront = false;
+            final len = math.sqrt(vx * vx + vy * vy);
+            if (len < 1e-6) {
+              vx = 0;
+              vy = 0;
+            } else {
+              vx /= len;
+              vy /= len;
+            }
+          } else {
+            anyFront = true;
+          }
+          positions[index * 2] = center.dx + vx * radius;
+          positions[index * 2 + 1] = center.dy - vy * radius;
         }
-
-        positions[index * 2] = center.dx + vx * radius;
-        positions[index * 2 + 1] = center.dy - vy * radius;
         uvs[index * 2] = fx * imageWidth;
         uvs[index * 2 + 1] = fy * imageHeight;
       }
@@ -188,6 +198,10 @@ class _ImagePainter extends CustomPainter {
 
     final paint = Paint()
       ..isAntiAlias = true
+      // ★ 不透明度直接乘进 color（shader 纹理 × color alpha，srcOver 语义等价）。
+      //   不能用 saveLayer(Paint()..color=黑×opacity)：Impeller 的层合成会把
+      //   saveLayer paint 的黑色带进层内容 → 整个 bounds 变实心黑块（黑瓦真凶）。
+      ..color = Color.fromRGBO(255, 255, 255, opacity)
       ..shader = ui.ImageShader(
         image,
         ui.TileMode.clamp,
@@ -196,19 +210,13 @@ class _ImagePainter extends CustomPainter {
         filterQuality: ui.FilterQuality.low,
       );
 
-    // Opacity via a layer so it applies to the whole mesh uniformly.
     canvas.save();
-    canvas.clipPath(
-      ui.Path()..addOval(Rect.fromCircle(center: center, radius: radius)),
-    );
-    if (opacity < 1) {
-      canvas.saveLayer(
-        Offset.zero & size,
-        Paint()..color = Color.fromRGBO(0, 0, 0, opacity),
+    if (!flat) {
+      canvas.clipPath(
+        ui.Path()..addOval(Rect.fromCircle(center: center, radius: radius)),
       );
     }
     canvas.drawVertices(vertices, BlendMode.srcOver, paint);
-    if (opacity < 1) canvas.restore();
     canvas.restore();
 
     vertices.dispose();

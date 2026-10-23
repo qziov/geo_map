@@ -135,23 +135,119 @@ class _VectorPainter extends CustomPainter {
   static const double _eps = 0.01;
 
   @override
+  bool shouldRepaint(covariant _VectorPainter oldDelegate) =>
+      oldDelegate.camera != camera ||
+      oldDelegate.lines != lines ||
+      oldDelegate.polygons != polygons ||
+      oldDelegate.dots != dots ||
+      oldDelegate.labels != labels ||
+      oldDelegate.dotRadius != dotRadius ||
+      oldDelegate.dotColor != dotColor ||
+      oldDelegate.opacity != opacity;
+
+  @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
 
+    // ★ 投影多态：flat 走 delegate 仿射（antimeridian 最近副本），globe 走正交。
+    final flat = camera.projectionDelegate is FlatProjectionDelegate;
     final lat0 = camera.center.latitude * math.pi / 180;
     final lng0 = camera.center.longitude * math.pi / 180;
-    // Same formula as the delegate: zoom only, no latitude factor.
-    final radius = 256 * math.pow(2, camera.zoom) / (2 * math.pi);
-    if (radius <= 0) return;
+    final radius = flat
+        ? double.infinity
+        : 256 * math.pow(2, camera.zoom) / (2 * math.pi);
+    if (!flat && radius <= 0) return;
 
     final center = Offset(size.width / 2, size.height / 2);
+    final worldSize = camera.crs.scale(camera.zoom);
+
+    Offset screenOf(LatLng p) {
+      if (flat) {
+        final pt = camera.projectClamped(p);
+        return Offset(pt.x, pt.y);
+      }
+      final v = _view(
+        p.longitude * math.pi / 180,
+        p.latitude * math.pi / 180,
+        lat0,
+        lng0,
+      );
+      return Offset(center.dx + v.$1 * radius, center.dy - v.$2 * radius);
+    }
+
+    bool hidden(LatLng p) {
+      if (flat) return false;
+      return _view(
+              p.longitude * math.pi / 180,
+              p.latitude * math.pi / 180,
+              lat0,
+              lng0)
+          .$3 <= _eps;
+    }
+
+    /// flat 的 antimeridian 处理：逐点相对前一点取最近 world copy。
+    List<Offset> unwrap(List<Offset> raw) {
+      if (raw.isEmpty) return raw;
+      final out = <Offset>[raw.first];
+      final half = worldSize / 2;
+      for (var i = 1; i < raw.length; i++) {
+        final prev = out.last;
+        var dx = raw[i].dx - prev.dx;
+        while (dx > half) {
+          dx -= worldSize;
+        }
+        while (dx < -half) {
+          dx += worldSize;
+        }
+        out.add(Offset(prev.dx + dx, raw[i].dy));
+      }
+      return out;
+    }
 
     canvas.save();
-    canvas.clipPath(
-      ui.Path()..addOval(Rect.fromCircle(center: center, radius: radius)),
-    );
+    if (!flat) {
+      canvas.clipPath(
+        ui.Path()..addOval(Rect.fromCircle(center: center, radius: radius)),
+      );
+    }
 
     for (final shape in polygons) {
+      if (flat) {
+        final pts = unwrap(
+            [for (final p in shape.points) screenOf(p)]);
+        if (pts.length < 3) continue;
+        final fillPath = ui.Path()..addPolygon(pts, true);
+        final strokePath = ui.Path()
+          ..addPolygon(pts, true)
+          ..close();
+        canvas.drawPath(
+          fillPath,
+          Paint()
+            ..style = PaintingStyle.fill
+            ..isAntiAlias = true
+            ..color = shape.fill.withValues(alpha: shape.fill.a * opacity),
+        );
+        canvas.drawPath(
+          strokePath,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = shape.strokeWidth
+            ..strokeJoin = StrokeJoin.round
+            ..isAntiAlias = true
+            ..color = shape.stroke.withValues(alpha: shape.stroke.a * opacity),
+        );
+        final anchor = _centroid(shape.points);
+        if (anchor == null) continue;
+        final painter = _labelPainter(shapeLabelText(shape), shape.labelStyle);
+        painter.paint(
+          canvas,
+          Offset(
+            _flatAnchorX(pts, painter.width),
+            _flatAnchorY(pts, painter.height),
+          ),
+        );
+        continue;
+      }
       final paths = _polygonPaths(shape.points, lat0, lng0, radius, center);
       if (paths == null) continue;
       final (fillPath, strokePath) = paths;
@@ -199,18 +295,8 @@ class _VectorPainter extends CustomPainter {
         ..isAntiAlias = true
         ..color = dotColor.withValues(alpha: dotColor.a * opacity);
       for (final p in dots) {
-        final v = _view(
-          p.longitude * math.pi / 180,
-          p.latitude * math.pi / 180,
-          lat0,
-          lng0,
-        );
-        if (v.$3 <= _eps) continue;
-        canvas.drawCircle(
-          Offset(center.dx + v.$1 * radius, center.dy - v.$2 * radius),
-          dotRadius,
-          painter,
-        );
+        if (hidden(p)) continue;
+        canvas.drawCircle(screenOf(p), dotRadius, painter);
       }
     }
 
@@ -220,20 +306,9 @@ class _VectorPainter extends CustomPainter {
     // limb cuts the text in half. They are still hidden when their anchor is
     // behind the horizon (the z check below).
     for (final label in labels) {
-      final v = _view(
-        label.point.longitude * math.pi / 180,
-        label.point.latitude * math.pi / 180,
-        lat0,
-        lng0,
-      );
-      if (v.$3 <= _eps) continue;
-
+      if (hidden(label.point)) continue;
       final painter = _labelPainter(label.text, label.style);
-
-      final anchor = Offset(
-        center.dx + v.$1 * radius,
-        center.dy - v.$2 * radius,
-      );
+      final anchor = screenOf(label.point);
       final topLeft =
           anchor + label.offset - Offset(painter.width / 2, painter.height / 2);
       final rect = Rect.fromLTWH(
@@ -261,32 +336,54 @@ class _VectorPainter extends CustomPainter {
       final path = ui.Path();
       var started = false;
 
-      for (final p in _cachedDensify(line.points, closed: line.closed)) {
-        final v = _view(
-          p.longitude * math.pi / 180,
-          p.latitude * math.pi / 180,
-          lat0,
-          lng0,
-        );
-        if (v.$3 <= _eps) {
+      final raw = [
+        for (final p in _cachedDensify(line.points, closed: line.closed))
+          screenOf(p)
+      ];
+      final pts = flat ? unwrap(raw) : raw;
+
+      for (var i = 0; i < pts.length; i++) {
+        final p = _cachedDensify(line.points, closed: line.closed)[i];
+        if (!flat && hidden(p)) {
           // Behind the horizon: break the subpath so we never draw across the
           // disc (the same rule the tile layer uses).
           started = false;
           continue;
         }
-        final dx = center.dx + v.$1 * radius;
-        final dy = center.dy - v.$2 * radius;
+        final pt = pts[i];
         if (!started) {
-          path.moveTo(dx, dy);
+          path.moveTo(pt.dx, pt.dy);
           started = true;
         } else {
-          path.lineTo(dx, dy);
+          path.lineTo(pt.dx, pt.dy);
         }
       }
 
       if (line.closed && started) path.close();
       canvas.drawPath(path, paint);
     }
+  }
+
+  String shapeLabelText(GlobePolygonShape shape) => shape.label ?? '';
+
+  double _flatAnchorX(List<Offset> pts, double labelWidth) {
+    var minX = double.infinity;
+    var maxX = -double.infinity;
+    for (final p in pts) {
+      minX = math.min(minX, p.dx);
+      maxX = math.max(maxX, p.dx);
+    }
+    return (minX + maxX) / 2 - labelWidth / 2;
+  }
+
+  double _flatAnchorY(List<Offset> pts, double labelHeight) {
+    var minY = double.infinity;
+    var maxY = -double.infinity;
+    for (final p in pts) {
+      minY = math.min(minY, p.dy);
+      maxY = math.max(maxY, p.dy);
+    }
+    return (minY + maxY) / 2 - labelHeight / 2;
   }
 
   /// Builds a fill path for a ring, clipped against the horizon.
@@ -539,15 +636,6 @@ class _VectorPainter extends CustomPainter {
       math.sin(lat0) * math.sin(lat) + math.cos(lat0) * cosLat * math.cos(dLng),
     );
   }
-
-  @override
-  bool shouldRepaint(covariant _VectorPainter oldDelegate) =>
-      oldDelegate.camera != camera ||
-      oldDelegate.lines != lines ||
-      oldDelegate.polygons != polygons ||
-      oldDelegate.dots != dots ||
-      oldDelegate.labels != labels ||
-      oldDelegate.opacity != opacity;
 }
 
 /// Labels are laid out once per (text, style) pair instead of every frame.

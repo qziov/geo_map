@@ -22,6 +22,7 @@ export 'src/globe/globe_vector_layer.dart'
         buildTissot,
         densifyPath;
 export 'src/globe/tile_source.dart';
+export 'src/source/debug_tiles_source.dart';
 export 'src/source/mbtiles_source.dart';
 export 'src/vendor/flutter_map_camera/flutter_map_camera.dart'
     hide CrsWithStaticTransformation, Projection;
