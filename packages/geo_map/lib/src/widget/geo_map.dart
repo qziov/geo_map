@@ -66,7 +66,7 @@ class GeoMap extends StatefulWidget {
 
 class _GeoMapState extends State<GeoMap> {
   GeoMapController? _internal;
-  late final GeoTileEngine _engine;
+  late GeoTileEngine _engine; // NOT final: rebuilt when the source changes
   bool _viewportScheduled = false;
 
   GeoMapController get _controller =>
