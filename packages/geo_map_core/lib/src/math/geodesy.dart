@@ -108,6 +108,22 @@ double densifyStepForPixelError(double radiusPx, double pixelError) {
   return step.clamp(1e-6, math.pi);
 }
 
+/// Destination point: from [from], travel [angularDistanceRad] along [bearingRad].
+LatLng destinationPoint(LatLng from, double bearingRad, double angularDistanceRad) {
+  final phi1 = rad(from.latitude);
+  final lambda1 = rad(from.longitude);
+  final sinPhi2 =
+      math.sin(phi1) * math.cos(angularDistanceRad) +
+      math.cos(phi1) * math.sin(angularDistanceRad) * math.cos(bearingRad);
+  final phi2 = math.asin(sinPhi2.clamp(-1.0, 1.0));
+  final lambda2 = lambda1 +
+      math.atan2(
+        math.sin(bearingRad) * math.sin(angularDistanceRad) * math.cos(phi1),
+        math.cos(angularDistanceRad) - math.sin(phi1) * sinPhi2,
+      );
+  return LatLng(degreesOf(phi2), degreesOf(lambda2));
+}
+
 /// Area-weighted Cartesian centroid, then re-projected to the sphere.
 LatLng sphericalCentroid(List<LatLng> ring) {
   if (ring.isEmpty) return const LatLng(0, 0);

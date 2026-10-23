@@ -4,6 +4,8 @@ library;
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart'
+    show PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/widgets.dart';
 
 import 'package:geo_map_core/geo_map_core.dart';
@@ -57,6 +59,16 @@ class _MapGestureLayerState extends State<MapGestureLayer> {
     _downTime = DateTime.now();
   }
 
+  /// Mouse wheel zoom, anchored at the cursor (Windows/desktop testing).
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    // One notch (dy=120) ≈ one zoom level; smooth for trackpads.
+    final factor = math.pow(1.0015, -event.scrollDelta.dy).toDouble();
+    if (!factor.isFinite || factor <= 0 || factor == 1.0) return;
+    _flingTimer?.cancel();
+    widget.controller.zoomBy(factor, _vec(event.localPosition));
+  }
+
   void _handleTap(Offset position) {
     final now = DateTime.now();
     final controller = widget.controller;
@@ -99,6 +111,7 @@ class _MapGestureLayerState extends State<MapGestureLayer> {
   Widget build(BuildContext context) {
     return Listener(
       onPointerDown: _onPointerDown,
+      onPointerSignal: _onPointerSignal,
       onPointerUp: (event) {
         final down = _downPos;
         final downTime = _downTime;

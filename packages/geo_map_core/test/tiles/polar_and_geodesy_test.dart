@@ -130,6 +130,21 @@ void main() {
       expect(d, closeTo(111195, 500));
     });
 
+    test('destinationPoint: north/east bearings land on the axes', () {
+      final north = destinationPoint(const LatLng(0, 0), 0, rad(1));
+      expect(north.latitude, closeTo(1, 1e-9));
+      expect(north.longitude, closeTo(0, 1e-9));
+      final east = destinationPoint(const LatLng(0, 0), math.pi / 2, rad(1));
+      expect(east.latitude, closeTo(0, 1e-9));
+      expect(east.longitude, closeTo(1, 1e-9));
+    });
+
+    test('destinationPoint at lat 60 keeps geodesic distance', () {
+      final d = destinationPoint(const LatLng(60, 0), 0, rad(5));
+      expect(angleBetween(const LatLng(60, 0), d) * 180 / math.pi,
+          closeTo(5, 1e-9));
+    });
+
     test('centroid of a small ring is inside the ring', () {
       final c = sphericalCentroid(const [
         LatLng(0, 0),
