@@ -6,12 +6,15 @@ library;
 
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:geo_map_core/geo_map_core.dart';
 import 'package:latlong2/latlong.dart' hide Path; // latlong2 has its own generic Path
 
 import '../camera/geo_map_controller.dart';
+
+int? _gridDiagTick;
 
 /// 经纬网：赤道/本初子午线加粗，其余 15°（可配）间隔。
 class GraticuleLayer extends StatelessWidget {
@@ -92,12 +95,15 @@ class _GraticulePainter extends CustomPainter {
       }
     }
 
-    // Parallels (horizontal): clamp to the mercator-safe band on the globe.
+    // Parallels: the globe CAN show the polar band (±85.05..±90) — clamping the
+    // graticule to the mercator limit made parallels vanish near the poles.
     final latStart = (bounds.south / spacingDeg).ceil() * spacingDeg;
-    final latLimit = projector.hasDepth ? mercatorMaxLatitude : 90.0;
+    final latLimit = 90.0;
+    var parallels = 0;
     for (var lat = math.max(latStart, -latLimit);
         lat <= math.min(bounds.north, latLimit);
         lat += spacingDeg) {
+      parallels++;
       final isEquator = lat.abs() < 1e-9;
       final path = _parallelPath(projector, camera, lat, bounds.west, bounds.east);
       if (path != null) {
@@ -106,6 +112,14 @@ class _GraticulePainter extends CustomPainter {
           final anchorLng = controller.value.center.longitude;
           _label(canvas, _latLabel(lat), projector.project(LatLng(lat, anchorLng), camera));
         }
+      }
+    }
+    if (kDebugMode && parallels == 0) {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      if (_gridDiagTick == null || nowMs - _gridDiagTick! > 3000) {
+        _gridDiagTick = nowMs;
+        debugPrint('[geo_map:grid] 0 parallels — bounds=$bounds '
+            'latStart=$latStart projector=${projector.kind}');
       }
     }
   }

@@ -42,11 +42,12 @@ class GeoTileEngine {
   final TileCachePolicy<String> _cache = TileCachePolicy();
   final Map<String, _TileEntry> _entries = {};
   final Set<String> _pending = {};
-  final Set<String> _missing = {};
+  final Map<String, int> _failCounts = {};
   final TileScheduler _scheduler = TileScheduler();
 
   List<TileKey> _previousKeys = const [];
   int? _diagTick;
+  bool _ok = false;
 
   bool _disposed = false;
 
@@ -55,6 +56,20 @@ class GeoTileEngine {
 
   int get cachedTiles => _cache.length;
   int get pendingRequests => _pending.length;
+
+  /// Tiles selected in the most recent completed frame.
+  int get lastVisibleTiles => _previousKeys.length;
+  int get blacklistedTiles => _failCounts.values.where((c) => c >= 2).length;
+
+  bool _isBlacklisted(String k) => (_failCounts[k] ?? 0) >= 2;
+
+  void _markFail(String k) {
+    final n = (_failCounts[k] ?? 0) + 1;
+    _failCounts[k] = n;
+    if (n == 2) {
+      debugPrint('[geo_map:tile] blacklisted after 2 failures: $k');
+    }
+  }
 
   void dispose() {
     _disposed = true;
@@ -73,77 +88,97 @@ class GeoTileEngine {
     GeoProjector projector,
     double opacity,
   ) {
-    final zoom = _pickZoom(camera).round();
-    final grid = TileGrid.of(source.scheme, zoom);
-    final keys = TileSelector.visible(
-      projector: projector,
-      camera: camera,
-      grid: grid,
-    );
-
-    _cache.beginFrame();
-    if (kDebugMode && _diagTick == null || (kDebugMode && (_diagTick ?? 0) < DateTime.now().millisecondsSinceEpoch - 3000)) {
-      _diagTick = DateTime.now().millisecondsSinceEpoch;
-      debugPrint('[geo_map:diag] zoom=$zoom keys=${keys.length} entries=${_entries.length} missing=${_missing.length} pending=${_pending.length} lat=${camera.center.latitude.toStringAsFixed(1)}');
-    }
-
-    canvas.save();
-    final clip = projector.clipCircle(camera);
-    if (clip != null) {
-      canvas.clipPath(
-        Path()
-          ..addOval(Rect.fromCircle(
-              center: Offset(clip.center.x, clip.center.y), radius: clip.radius)),
+    var saved = false;
+    _ok = false;
+    var drawn = 0;
+    var capsDrawn = 0;
+    List<TileKey> keys = const [];
+    var zoom = -1;
+    try {
+      zoom = _pickZoom(camera).round();
+      final grid = TileGrid.of(source.scheme, zoom);
+      keys = TileSelector.visible(
+        projector: projector,
+        camera: camera,
+        grid: grid,
       );
-    } else {
-      canvas.clipRect(
-          Rect.fromLTWH(0, 0, camera.size.width, camera.size.height));
+
+      _cache.beginFrame();
+
+      canvas.save();
+      saved = true;
+      final clip = projector.clipCircle(camera);
+      if (clip != null) {
+        canvas.clipPath(
+          Path()
+            ..addOval(Rect.fromCircle(
+                center: Offset(clip.center.x, clip.center.y), radius: clip.radius)),
+        );
+      } else {
+        canvas.clipRect(
+            Rect.fromLTWH(0, 0, camera.size.width, camera.size.height));
+      }
+
+      final paint = Paint()..isAntiAlias = true;
+
+      // ① Underlay: the previous zoom level's tiles, drawn with the current camera.
+      for (final key in _previousKeys) {
+        if (key.z == zoom) continue;
+        final entry = _entries['$key'];
+        if (entry == null) continue;
+        final pGrid = TileGrid.of(source.scheme, key.z);
+        final unit = _mesh.unitMesh(pGrid, key.x, key.y, _subdiv(camera, pGrid));
+        final buffers = _mesh.project(unit, projector, camera);
+        _draw(canvas, buffers, entry.shader, opacity);
+      }
+
+      // ② Current level with parent fallback.
+      for (final key in keys) {
+        _cache.addRenderTile('$key');
+        final hit = _lookupWithFallback(key, zoom, grid);
+        if (hit == null) continue;
+        final (entry, dz) = hit;
+
+        final unit = _mesh.unitMesh(grid, key.x, key.y, _subdiv(camera, grid));
+        final scale = 1 << dz;
+        final buffers = _mesh.project(
+          unit,
+          projector,
+          camera,
+          uvOriginX: dz == 0
+              ? 0
+              : (key.x % scale) / scale * entry.image.width,
+          uvOriginY: dz == 0 ? 0 : (key.y % scale) / scale * entry.image.height,
+          uvSpan: entry.image.width / scale,
+        );
+        _draw(canvas, buffers, entry.shader, opacity);
+        drawn++;
+      }
+
+      // ③ Polar caps (mercator only).
+      if (source.scheme == TileSchemeKind.webMercator) {
+        capsDrawn += _paintPolarCaps(
+            canvas, camera, grid, keys, projector, projector.clipCircle(camera), paint, opacity);
+      }
+      _ok = true;
+    } catch (e, st) {
+      debugPrint('[geo_map:paint] EXCEPTION: $e\n$st');
+    } finally {
+      if (saved) canvas.restore();
+      _cache.commitFrame();
+      if (_ok) _previousKeys = keys;
     }
 
-    final paint = Paint()..isAntiAlias = true;
-
-    // ① Underlay: the previous zoom level's tiles, drawn with the current camera.
-    for (final key in _previousKeys) {
-      if (key.z == zoom) continue;
-      final entry = _entries['$key'];
-      if (entry == null) continue;
-      final pGrid = TileGrid.of(source.scheme, key.z);
-      final unit = _mesh.unitMesh(pGrid, key.x, key.y, _subdiv(camera, pGrid));
-      final buffers = _mesh.project(unit, projector, camera);
-      _draw(canvas, buffers, entry.shader, opacity);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (kDebugMode && (_diagTick == null || nowMs - _diagTick! > 3000)) {
+      _diagTick = nowMs;
+      debugPrint('[geo_map:diag] z=$zoom keys=${keys.length} img=${_entries.length} '
+          'blk=$blacklistedTiles pend=${_pending.length} und=${_previousKeys.length} '
+          'drawn=$drawn caps=$capsDrawn proj=${projector.kind} '
+          'c=${camera.center.latitude.toStringAsFixed(1)},'
+          '${camera.center.longitude.toStringAsFixed(1)} '
+          'z${camera.zoom.toStringAsFixed(2)}');
     }
-
-    // ② Current level with parent fallback.
-    for (final key in keys) {
-      _cache.addRenderTile('$key');
-      final hit = _lookupWithFallback(key, zoom.round(), grid);
-      if (hit == null) continue;
-      final (entry, dz) = hit;
-
-      final unit = _mesh.unitMesh(grid, key.x, key.y, _subdiv(camera, grid));
-      final scale = 1 << dz;
-      final buffers = _mesh.project(
-        unit,
-        projector,
-        camera,
-        uvOriginX: dz == 0
-            ? 0
-            : (key.x % scale) / scale * entry.image.width,
-        uvOriginY: dz == 0 ? 0 : (key.y % scale) / scale * entry.image.height,
-        uvSpan: entry.image.width / scale,
-      );
-      _draw(canvas, buffers, entry.shader, opacity);
-    }
-
-    // ③ Polar caps (mercator only).
-    if (source.scheme == TileSchemeKind.webMercator) {
-      _paintPolarCaps(
-          canvas, camera, grid, keys, projector, projector.clipCircle(camera), paint, opacity);
-    }
-
-    canvas.restore();
-    _cache.commitFrame();
-    _previousKeys = keys;
   }
 
   // --- internals ---------------------------------------------------------------
@@ -176,7 +211,7 @@ class GeoTileEngine {
       _cache.touch(k);
       return (exact, 0);
     }
-    if (_missing.contains(k) || _pending.contains(k)) return null;
+    if (_isBlacklisted(k) || _pending.contains(k)) return null;
     _request(key);
 
     for (var dz = 1; zoom - dz >= source.minZoom; dz++) {
@@ -189,7 +224,7 @@ class GeoTileEngine {
       }
       // Only the direct parent is fetched (silently): bounded request count.
       if (dz == 1 &&
-          !_missing.contains('$ancestor') &&
+          !_isBlacklisted('$ancestor') &&
           !_pending.contains('$ancestor')) {
         _request(ancestor);
       }
@@ -199,43 +234,58 @@ class GeoTileEngine {
 
   void _request(TileKey key) {
     final k = '$key';
-    if (_disposed || _pending.contains(k) || _missing.contains(k)) return;
+    if (_disposed || _pending.contains(k) || _isBlacklisted(k)) return;
     _pending.add(k);
     final gen = _scheduler.generation;
     () async {
-      final bytes = await source.fetch(key.z, key.x, key.y);
-      if (_disposed) return;
-      if (bytes == null || bytes.isEmpty) {
-        _missing.add(k);
-        return;
+      try {
+        Uint8List? bytes;
+        try {
+          bytes = await source.fetch(key.z, key.x, key.y);
+        } catch (e) {
+          debugPrint('[geo_map:tile] fetch ERROR $k: $e');
+          bytes = null;
+        }
+        if (_disposed) return;
+        if (bytes == null || bytes.isEmpty) {
+          _markFail(k);
+          return;
+        }
+        if (_scheduler.isStale(gen)) return;
+        try {
+          final codec = await ui.instantiateImageCodec(bytes);
+          final frame = await codec.getNextFrame();
+          codec.dispose();
+          if (_disposed) {
+            frame.image.dispose();
+            return;
+          }
+          final matrix = Float64List(16)
+            ..[0] = 1
+            ..[5] = 1
+            ..[10] = 1
+            ..[15] = 1;
+          final shader = ui.ImageShader(
+            frame.image,
+            ui.TileMode.clamp,
+            ui.TileMode.clamp,
+            matrix,
+            filterQuality: ui.FilterQuality.low,
+          );
+          _entries[k] = _TileEntry(frame.image, shader);
+          _cache.put(k, frame.image.width * frame.image.height * 4);
+          for (final evicted in _cache.trim()) {
+            _entries.remove(evicted)?.dispose();
+          }
+          onNeedsPaint?.call();
+        } catch (e) {
+          debugPrint('[geo_map:tile] decode ERROR $k: $e');
+          _markFail(k);
+        }
+      } finally {
+        _pending.remove(k);
       }
-      if (_scheduler.isStale(gen)) return;
-      final codec = await ui.instantiateImageCodec(bytes);
-      final frame = await codec.getNextFrame();
-      codec.dispose();
-      if (_disposed) {
-        frame.image.dispose();
-        return;
-      }
-      final matrix = Float64List(16)
-        ..[0] = 1
-        ..[5] = 1
-        ..[10] = 1
-        ..[15] = 1;
-      final shader = ui.ImageShader(
-        frame.image,
-        ui.TileMode.clamp,
-        ui.TileMode.clamp,
-        matrix,
-        filterQuality: ui.FilterQuality.low,
-      );
-      _entries[k] = _TileEntry(frame.image, shader);
-      _cache.put(k, frame.image.width * frame.image.height * 4);
-      for (final evicted in _cache.trim()) {
-        _entries.remove(evicted)?.dispose();
-      }
-      onNeedsPaint?.call();
-    }().whenComplete(() => _pending.remove(k));
+    }();
   }
 
   void _draw(
@@ -243,7 +293,8 @@ class GeoTileEngine {
     if (buffers.indices.isEmpty) return;
     final paint = Paint()
       ..isAntiAlias = true
-      ..color = Color.fromRGBO(255, 255, 255, opacity.clamp(0.0, 1.0));
+      ..color = Color.fromRGBO(255, 255, 255, opacity.clamp(0.0, 1.0))
+      ..shader = shader; // ★ 纹理必须绑定：缺它 drawVertices 退化为白色填充
     canvas.drawVertices(
       ui.Vertices.raw(
         ui.VertexMode.triangles,
@@ -256,7 +307,7 @@ class GeoTileEngine {
     );
   }
 
-  void _paintPolarCaps(
+  int _paintPolarCaps(
     Canvas canvas,
     CameraState camera,
     TileGrid grid,
@@ -266,11 +317,12 @@ class GeoTileEngine {
     Paint paint,
     double opacity,
   ) {
-    if (keys.isEmpty) return;
+    if (keys.isEmpty) return 0;
     final zoom = keys.first.z;
     final columns = <int>{for (final k in keys) k.x};
     final cx = camera.size.width / 2;
     final cy = camera.size.height / 2;
+    var drawnCaps = 0;
 
     for (final north in [true, false]) {
       if (!PolarCapBuilder.isVisible(camera: camera, north: north)) continue;
@@ -318,9 +370,11 @@ class GeoTileEngine {
 
         final indices = TileMeshBuilder.cullIndices(cap.indices, depths);
         if (indices.isEmpty) continue;
+        drawnCaps++;
         final capPaint = Paint()
           ..isAntiAlias = true
-          ..color = Color.fromRGBO(255, 255, 255, opacity.clamp(0.0, 1.0));
+          ..color = Color.fromRGBO(255, 255, 255, opacity.clamp(0.0, 1.0))
+          ..shader = entry.shader; // ★ 极帽同样必须绑定纹理
         canvas.drawVertices(
           ui.Vertices.raw(
             ui.VertexMode.triangles,
@@ -331,8 +385,10 @@ class GeoTileEngine {
           BlendMode.srcOver,
           capPaint,
         );
+        drawnCaps++;
       }
     }
+    return drawnCaps;
   }
 }
 

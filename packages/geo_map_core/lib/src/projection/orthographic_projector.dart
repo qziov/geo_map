@@ -91,8 +91,11 @@ class OrthographicProjector extends GeoProjector {
     var north = lat0 + alpha * rad2deg;
     // One tile of slack so a tile straddling the edge is not dropped.
     final slackDeg = rad2deg * math.max(8 / r, 0.0) + 0.02;
-    south = (south - slackDeg).clamp(-mercatorMaxLatitude, mercatorMaxLatitude);
-    north = (north + slackDeg).clamp(-mercatorMaxLatitude, mercatorMaxLatitude);
+    // Clamp to the sphere, NOT the mercator limit: the visible band may lie
+    // entirely inside the polar cap, and clamping here made the graticule and
+    // selector agree on an empty band.
+    south = (south - slackDeg).clamp(-90.0, 90.0);
+    north = (north + slackDeg).clamp(-90.0, 90.0);
 
     // Max |Δlng| of a point within `alpha` of the centre, taken over the lat band.
     final phi0 = rad(lat0);

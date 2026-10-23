@@ -47,6 +47,7 @@ class GeoMap extends StatefulWidget {
     this.onTap,
     this.rasterOpacity = 1.0,
     this.controller,
+    this.engine,
     super.key,
   });
 
@@ -60,17 +61,24 @@ class GeoMap extends StatefulWidget {
   /// (HUD, buttons). If null, an internal controller is created.
   final GeoMapController? controller;
 
+  /// Optional external engine — pass one to read tile stats from outside.
+  /// If null, an internal engine is created (and disposed with the widget).
+  final GeoTileEngine? engine;
+
   @override
   State<GeoMap> createState() => _GeoMapState();
 }
 
 class _GeoMapState extends State<GeoMap> {
   GeoMapController? _internal;
-  late GeoTileEngine _engine; // NOT final: rebuilt when the source changes
+  GeoTileEngine? _internalEngine;
   bool _viewportScheduled = false;
 
   GeoMapController get _controller =>
       widget.controller ?? (_internal ??= _createController());
+
+  GeoTileEngine get _engine =>
+      widget.engine ?? (_internalEngine ??= GeoTileEngine(source: widget.source));
 
   GeoMapController _createController() {
     final c = GeoMapController(
@@ -89,7 +97,6 @@ class _GeoMapState extends State<GeoMap> {
   @override
   void initState() {
     super.initState();
-    _engine = GeoTileEngine(source: widget.source);
     _engine.onNeedsPaint = _controller.repaint;
   }
 
@@ -97,8 +104,11 @@ class _GeoMapState extends State<GeoMap> {
   void didUpdateWidget(covariant GeoMap oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.source != oldWidget.source) {
-      _engine.dispose();
-      _engine = GeoTileEngine(source: widget.source);
+      // External engines are managed by their owner; only internal ones follow.
+      if (widget.engine == null) {
+        _internalEngine?.dispose();
+        _internalEngine = GeoTileEngine(source: widget.source);
+      }
       _engine.onNeedsPaint = _controller.repaint;
     }
     if (widget.options.projector.kind != _controller.projector.kind) {
@@ -108,7 +118,7 @@ class _GeoMapState extends State<GeoMap> {
 
   @override
   void dispose() {
-    _engine.dispose();
+    _internalEngine?.dispose();
     _internal?.dispose();
     super.dispose();
   }

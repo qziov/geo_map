@@ -9,6 +9,7 @@ library;
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -45,6 +46,7 @@ class MbtilesTileSource implements GeoTileSource {
     if (!dir.existsSync()) dir.createSync(recursive: true);
     final target = File(p.join(dir.path, p.basename(assetPath)));
 
+    debugPrint('[geo_map:mbtiles] open: $assetPath');
     if (!target.existsSync()) {
       final bytes = await rootBundle.load(assetPath);
       await target.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
@@ -53,19 +55,29 @@ class MbtilesTileSource implements GeoTileSource {
         throw StateError('MBTiles copy incomplete: $assetPath');
       }
       _toRollbackJournal(target.path);
+      debugPrint('[geo_map:mbtiles] copied ${target.lengthSync()} bytes');
     }
 
     if (!_hasTilesTable(target.path)) {
       // Corrupt cache copy (historical interrupted copy / stale sidecars):
       // delete the trio and re-copy once.
+      debugPrint('[geo_map:mbtiles] cache copy corrupt — self-healing');
       _deleteTrio(target);
       final bytes = await rootBundle.load(assetPath);
       await target.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
       _toRollbackJournal(target.path);
+      if (!_hasTilesTable(target.path)) {
+        throw StateError('MBTiles re-copy still has no tiles table: $assetPath');
+      }
     }
 
     final db = sqlite3.open(target.path, mode: OpenMode.readOnly);
     final meta = _readZoomRange(db);
+    if (meta.$1 == null || meta.$2 == null) {
+      debugPrint('[geo_map:mbtiles] WARNING: metadata zoom range missing '
+          '(${meta.$1}, ${meta.$2}) — using 0..${GeoTileDefaults.maxZoom}');
+    }
+    debugPrint('[geo_map:mbtiles] ready z${meta.$1 ?? 0}-${meta.$2 ?? GeoTileDefaults.maxZoom}');
     return MbtilesTileSource._(
         id, db, meta.$1 ?? 0, meta.$2 ?? GeoTileDefaults.maxZoom);
   }
@@ -96,8 +108,10 @@ class MbtilesTileSource implements GeoTileSource {
     Database? db;
     try {
       db = sqlite3.open(path, mode: OpenMode.readOnly);
+      // mbtiles spec allows `tiles` to be a VIEW, not just a TABLE.
       final rows = db.select(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='tiles'",
+        "SELECT name FROM sqlite_master "
+        "WHERE name='tiles' AND type IN ('table','view')",
       );
       return rows.isNotEmpty;
     } catch (_) {
@@ -136,7 +150,8 @@ class MbtilesTileSource implements GeoTileSource {
       if (rows.isEmpty) return null;
       final data = rows.first['tile_data'];
       return data is Uint8List ? data : null;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[geo_map:mbtiles] fetch error $z/$x/$y: $e');
       return null;
     }
   }
