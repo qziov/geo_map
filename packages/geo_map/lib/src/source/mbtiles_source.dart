@@ -7,7 +7,6 @@
 library;
 
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -15,16 +14,13 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-import 'package:geo_map_core/geo_map_core.dart' show TileSchemeKind;
+import '../globe/tile_source.dart' show GlobeRasterSource, TileScheme;
 
-import 'tile_source.dart';
-
-class MbtilesTileSource implements GeoTileSource {
+class MbtilesTileSource implements GlobeRasterSource {
   MbtilesTileSource._(this.id, this._db, this.minZoom, this.maxZoom);
 
   final Database _db;
 
-  @override
   final String id;
 
   @override
@@ -34,7 +30,10 @@ class MbtilesTileSource implements GeoTileSource {
   final int maxZoom;
 
   @override
-  TileSchemeKind get scheme => TileSchemeKind.webMercator;
+  TileScheme get scheme => TileScheme.webMercator;
+
+  @override
+  String get attribution => 'MBTiles: $id';
 
   /// Open (and lazily copy) an MBTiles asset.
   static Future<MbtilesTileSource> open({
@@ -156,7 +155,6 @@ class MbtilesTileSource implements GeoTileSource {
     }
   }
 
-  @override
   void dispose() => _db.dispose();
 }
 

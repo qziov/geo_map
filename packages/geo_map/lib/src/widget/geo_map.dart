@@ -1,23 +1,28 @@
-/// The map host: camera + projector + layers + gestures.
+/// The map host: vendored (fork) camera + lab-verified globe layers + gestures.
+///
+/// This is geo_map 1.0 — the rendering stack is the lab-proven one
+/// (`globe_tile_layer` / `globe_vector_layer` / `globe_image_layer` on the
+/// vendored `MapCamera` + `GlobeProjectionDelegate`). The self-built Vertices
+/// pipeline lives in `experimental/` and is not exported.
 library;
 
 import 'package:flutter/widgets.dart';
 
-import 'package:geo_map_core/geo_map_core.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../camera/geo_map_controller.dart';
-import '../gesture/map_gesture_layer.dart';
-import '../layer/raster_tile_layer.dart';
-import '../source/tile_source.dart';
+import '../globe/globe_projection.dart';
+import '../globe/globe_tile_layer.dart';
+import '../globe/tile_source.dart';
+import '../gesture/globe_gesture_overlay.dart';
+import '../vendor/flutter_map_camera/flutter_map_camera.dart';
 
 class GeoMapOptions {
   const GeoMapOptions({
     this.initialCenter = const LatLng(30, 105),
-    this.initialZoom = 4,
-    this.minZoom = 0,
-    this.maxZoom = 18,
-    this.projector = const OrthographicProjector(),
+    this.initialZoom = 4.2,
+    this.minZoom = 1,
+    this.maxZoom = 8,
     this.background = const Color(0xFF000000),
   });
 
@@ -25,45 +30,25 @@ class GeoMapOptions {
   final double initialZoom;
   final double minZoom;
   final double maxZoom;
-  final GeoProjector projector;
   final Color background;
 }
 
 /// `GeoMap` — the host widget. Children stack on top of the raster layer.
-///
-/// ```dart
-/// GeoMap(
-///   options: GeoMapOptions(),
-///   source: MbtilesTileSource(...),
-///   children: [ /* any widgets; use GeoMapScope.of(context) for the camera */ ],
-///   onTap: (latLng) { ... },
-/// )
-/// ```
 class GeoMap extends StatefulWidget {
   const GeoMap({
     required this.options,
     required this.source,
+    this.controller,
     this.children = const [],
     this.onTap,
-    this.rasterOpacity = 1.0,
-    this.controller,
-    this.engine,
     super.key,
   });
 
   final GeoMapOptions options;
-  final GeoTileSource source;
+  final GlobeRasterSource source;
+  final GeoMapController? controller;
   final List<Widget> children;
   final void Function(LatLng latLng)? onTap;
-  final double rasterOpacity;
-
-  /// Optional external controller — pass one to read the camera from outside
-  /// (HUD, buttons). If null, an internal controller is created.
-  final GeoMapController? controller;
-
-  /// Optional external engine — pass one to read tile stats from outside.
-  /// If null, an internal engine is created (and disposed with the widget).
-  final GeoTileEngine? engine;
 
   @override
   State<GeoMap> createState() => _GeoMapState();
@@ -71,54 +56,20 @@ class GeoMap extends StatefulWidget {
 
 class _GeoMapState extends State<GeoMap> {
   GeoMapController? _internal;
-  GeoTileEngine? _internalEngine;
   bool _viewportScheduled = false;
 
   GeoMapController get _controller =>
-      widget.controller ?? (_internal ??= _createController());
-
-  GeoTileEngine get _engine =>
-      widget.engine ?? (_internalEngine ??= GeoTileEngine(source: widget.source));
-
-  GeoMapController _createController() {
-    final c = GeoMapController(
-      projector: widget.options.projector,
-      initial: CameraState(
-        center: widget.options.initialCenter,
-        zoom: widget.options.initialZoom,
-        size: const ViewportSize(1, 1),
+      widget.controller ??
+      (_internal ??= GeoMapController(
+        projectionDelegate: GlobeProjectionDelegate(),
+        initialCenter: widget.options.initialCenter,
+        initialZoom: widget.options.initialZoom,
         minZoom: widget.options.minZoom,
         maxZoom: widget.options.maxZoom,
-      ),
-    );
-    return c;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _engine.onNeedsPaint = _controller.repaint;
-  }
-
-  @override
-  void didUpdateWidget(covariant GeoMap oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.source != oldWidget.source) {
-      // External engines are managed by their owner; only internal ones follow.
-      if (widget.engine == null) {
-        _internalEngine?.dispose();
-        _internalEngine = GeoTileEngine(source: widget.source);
-      }
-      _engine.onNeedsPaint = _controller.repaint;
-    }
-    if (widget.options.projector.kind != _controller.projector.kind) {
-      _controller.setProjector(widget.options.projector);
-    }
-  }
+      ));
 
   @override
   void dispose() {
-    _internalEngine?.dispose();
     _internal?.dispose();
     super.dispose();
   }
@@ -126,36 +77,32 @@ class _GeoMapState extends State<GeoMap> {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
-      final size = ViewportSize(
-        constraints.maxWidth,
-        constraints.maxHeight,
-      );
       if (!_viewportScheduled) {
         _viewportScheduled = true;
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _viewportScheduled = false;
           if (mounted) _controller.setViewport(size);
         });
       }
 
-      return GeoMapScope(
-        controller: _controller,
-        child: ClipRect(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              ColoredBox(color: widget.options.background),
-              RasterTileLayer(
-                controller: _controller,
-                engine: _engine,
-                opacity: widget.rasterOpacity,
-              ),
-              ...widget.children,
-              MapGestureLayer(
-                controller: _controller,
-                onTap: widget.onTap,
-              ),
-            ],
+      return ClipRect(
+        child: ListenableBuilder(
+          listenable: _controller,
+          builder: (context, _) => MapInheritedModel(
+            camera: _controller.camera,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ColoredBox(color: widget.options.background),
+                GlobeTileLayer(source: widget.source),
+                ...widget.children,
+                GlobeGestureOverlay(
+                  controller: _controller,
+                  onTap: widget.onTap,
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -163,18 +110,16 @@ class _GeoMapState extends State<GeoMap> {
   }
 }
 
-/// Read-only camera access for children: `GeoMapScope.of(context).value`.
-class GeoMapScope extends InheritedNotifier<GeoMapController> {
-  const GeoMapScope({
-    required GeoMapController controller,
-    required super.child,
-    super.key,
-  }) : super(notifier: controller);
+/// Read-only camera access for children: `GeoMapScope.of(context).camera`.
+class GeoMapScope extends StatelessWidget {
+  const GeoMapScope({required this.controller, required this.child, super.key});
 
-  static GeoMapController of(BuildContext context) {
-    final scope =
-        context.dependOnInheritedWidgetOfExactType<GeoMapScope>();
-    assert(scope != null, 'GeoMapScope not found — use it inside GeoMap');
-    return scope!.notifier!;
-  }
+  final GeoMapController controller;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => MapInheritedModel(
+        camera: controller.camera,
+        child: child,
+      );
 }

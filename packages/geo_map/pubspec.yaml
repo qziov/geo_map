@@ -11,6 +11,9 @@ dependencies:
   flutter:
     sdk: flutter
   latlong2: ^0.9.1
+  vector_math: ^2.1.4
+  meta: ^1.10.0
+  path: ^1.9.0
   sqlite3: ^2.9.4
   path_provider: ^2.1.0
   geo_map_core:
