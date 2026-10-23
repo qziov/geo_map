@@ -6,6 +6,7 @@
 library;
 
 export 'src/camera/geo_map_controller.dart';
+export 'src/diagnostics/geo_diagnostics.dart';
 export 'src/gesture/globe_gesture_overlay.dart';
 export 'src/globe/globe_image_layer.dart';
 export 'src/globe/geojson_vector_source.dart';
