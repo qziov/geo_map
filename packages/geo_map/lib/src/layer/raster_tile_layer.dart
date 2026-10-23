@@ -10,6 +10,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:geo_map_core/geo_map_core.dart';
@@ -45,6 +46,7 @@ class GeoTileEngine {
   final TileScheduler _scheduler = TileScheduler();
 
   List<TileKey> _previousKeys = const [];
+  int? _diagTick;
 
   bool _disposed = false;
 
@@ -80,6 +82,10 @@ class GeoTileEngine {
     );
 
     _cache.beginFrame();
+    if (kDebugMode && _diagTick == null || (kDebugMode && (_diagTick ?? 0) < DateTime.now().millisecondsSinceEpoch - 3000)) {
+      _diagTick = DateTime.now().millisecondsSinceEpoch;
+      debugPrint('[geo_map:diag] zoom=$zoom keys=${keys.length} entries=${_entries.length} missing=${_missing.length} pending=${_pending.length} lat=${camera.center.latitude.toStringAsFixed(1)}');
+    }
 
     canvas.save();
     final clip = projector.clipCircle(camera);
