@@ -139,7 +139,7 @@ geometry.drawTile(canvas, draw, camera: state, opacity: opacity);
 
 ## 五、未来可以怎么优化
 
-调度器优先级队列与 pending 超时 —— 已实现（`TileScheduler.enqueue/take/reclaim`，同级 FIFO、超时回收）。**仍差一步**：引擎请求路径还没接这个队列（仍是立即 fetch + slot gate），队列目前未被消费；接线后优先级才真正生效。
+调度器优先级队列与 pending 超时 —— 已实现并接入引擎：`request` 先 `enqueue` 再 `_pump` 派发（并发闸门放行多少派发多少），`beginFrame` 每帧回收超时项，`dataZoom` 跨级时清队（旧层级请求作废），槽位释放后自动 `_pump` 续派。同级 FIFO，配合选片的中心向外顺序即为中心优先。
 
 URL 构建下沉到 core —— 已实现（core `TileUrlBuilder`：`{prefix}{ratio}{quadkey}{bbox}{bbox-epsg-3857}`、TMS 翻转、多模板轮询；`HttpTileSource` 已委托，`GeoTileSource` 契约也在 core）。
 

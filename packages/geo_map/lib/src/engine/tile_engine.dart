@@ -223,6 +223,7 @@ class TileEngine extends ChangeNotifier {
   int get imageCount => _images.length;
   int get pendingCount => _pending.length;
   int get inFlight => _policy.inFlight;
+  int get queuedCount => _scheduler.pendingCount;
   int get requestedCount => _requested.length;
   int get previousDrawCount => _previousDraws.length;
 
@@ -239,18 +240,48 @@ class TileEngine extends ChangeNotifier {
 
   // --- requesting ---------------------------------------------------------------
 
+  /// How long a queued (not yet dispatched) request may wait before it is
+  /// reclaimed, so a starved slot can never pin a tile in the queue forever.
+  static const int _queueTimeoutMs = 5000;
+
   /// Request a tile (idempotent; failures are graded, never blacklisted).
+  ///
+  /// The tile is **enqueued** on the [TileScheduler] priority queue and a pump
+  /// dispatches as many as the concurrency gate allows. A tile that finds every
+  /// slot busy is no longer silently dropped (and re-requested next frame) — it
+  /// waits its turn and is dispatched the moment a slot frees.
   void request(TileKey key) {
     if (_disposed) return;
     final k = keyOf(key);
-    if (_pending.contains(k) || _images.containsKey(k)) return;
+    if (_pending.contains(k) ||
+        _images.containsKey(k) ||
+        _scheduler.isQueued(key)) {
+      return;
+    }
     final now = DateTime.now().millisecondsSinceEpoch;
     // A failed tile is retried only after its TTL / backoff window.
     final retryAfter = _policy.retryAfter(k);
     if (retryAfter != null && now < retryAfter) return;
-    // Concurrency gate (MapLibre caps the number of parallel image requests).
-    if (!_policy.tryAcquireSlot()) return;
 
+    _scheduler.enqueue(key, now);
+    _pump();
+  }
+
+  /// Dispatch queued tiles while the concurrency gate allows.
+  void _pump() {
+    while (!_disposed && _policy.tryAcquireSlot()) {
+      final key = _scheduler.takeNext();
+      if (key == null) {
+        _policy.releaseSlot();
+        break;
+      }
+      _dispatch(key);
+    }
+  }
+
+  /// Start one fetch. The caller already holds a concurrency slot.
+  void _dispatch(TileKey key) {
+    final k = keyOf(key);
     _pending.add(k);
     _requested.add(k);
 
@@ -278,6 +309,8 @@ class TileEngine extends ChangeNotifier {
       } finally {
         _pending.remove(k);
         _policy.releaseSlot();
+        // A slot just freed — dispatch the next queued tile.
+        if (!_disposed) _pump();
       }
     }();
   }
@@ -683,6 +716,9 @@ class TileEngine extends ChangeNotifier {
     if (prev != null && prev != dataZoom) {
       _crossFadeFrom = prev;
       _crossFadeStartMs = now;
+      // Queued tiles belong to the old level; drop them so the new level's
+      // requests (enqueued later this frame) are not stuck behind stale ones.
+      _scheduler.clearQueue();
       onCrossFadeStart?.call();
       return true;
     }
@@ -732,8 +768,12 @@ class TileEngine extends ChangeNotifier {
   // --- frame bookkeeping --------------------------------------------------------
 
   /// Start a frame: the *previous* render set stays protected, the current one
-  /// is rebuilt.
-  void beginFrame() => _policy.beginFrame();
+  /// is rebuilt. Also reclaims stuck queue entries and pumps the queue once.
+  void beginFrame() {
+    _policy.beginFrame();
+    _scheduler.reclaim(DateTime.now().millisecondsSinceEpoch, _queueTimeoutMs);
+    _pump();
+  }
 
   /// Mark a tile as drawn this frame (protects it from eviction).
   void markRendered(TileKey key) => _policy.addRenderTile(keyOf(key));
@@ -760,8 +800,12 @@ class TileEngine extends ChangeNotifier {
     );
   }
 
-  /// Drop in-flight results of an older camera generation.
-  void invalidate() => _scheduler.invalidate();
+  /// Drop in-flight results of an older camera generation, and clear queued
+  /// requests that belong to the old view.
+  void invalidate() {
+    _scheduler.invalidate();
+    _scheduler.clearQueue();
+  }
 
   static Float64List _identity() {
     final m = Float64List(16);
@@ -775,6 +819,7 @@ class TileEngine extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _scheduler.clearQueue();
     for (final image in _images.values) {
       image.dispose();
     }

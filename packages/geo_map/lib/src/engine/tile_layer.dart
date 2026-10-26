@@ -443,7 +443,7 @@ class _TilePainter extends CustomPainter {
       '[geo_map:frame] mode=${mode.name} dataZ=$dataZoom '
       'renderZ=$desiredZ visible=${selection.tiles.length} drawn=$drawn '
       'missed=$missed img=${engine.imageCount} pend=${engine.pendingCount} '
-      'inflight=${engine.inFlight} '
+      'q=${engine.queuedCount} inflight=${engine.inFlight} '
       'c=${camera.center.latitude.toStringAsFixed(1)},'
       '${camera.center.longitude.toStringAsFixed(1)} '
       'z${camera.zoom.toStringAsFixed(2)}',
