@@ -98,19 +98,19 @@ jobs:
             <h2>快速开始</h2>
             <pre><code>import 'package:geo_map/geo_map.dart';
 
-final source = await MbtilesTileSource.open(
-  id: 'base',
-  assetPath: 'assets/tiles/base.mbtiles',
-);
+          final source = await MbtilesTileSource.open(
+            id: 'base',
+            assetPath: 'assets/tiles/base.mbtiles',
+          );
 
-GeoMap(
-  options: const GeoMapOptions(
-    initialCenter: LatLng(30, 105),
-    initialZoom: 4.2,
-    useGlobe: true, // false = 2D 平面
-  ),
-  source: source,
-);</code></pre>
+          GeoMap(
+            options: const GeoMapOptions(
+              initialCenter: LatLng(30, 105),
+              initialZoom: 4.2,
+              useGlobe: true, // false = 2D 平面
+            ),
+            source: source,
+          );</code></pre>
 
             <h2>说明</h2>
             <p class="note">API 参考的正文与界面标签（Classes / Methods 等）由 dartdoc 生成，目前为英文；
