@@ -16,7 +16,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
 import '../diagnostics/geo_diagnostics.dart';
-import '../globe/tile_source.dart' show GlobeRasterSource, TileScheme;
+import '../globe/tile_source.dart' show GlobeRasterSource, TileFetchResult;
+import 'package:geo_map_core/geo_map_core.dart'
+    show GeoEngineTuning, TileFailureKind, TileRowOrder, TileSchemeKind;
 
 enum DebugTilesMode { maplibreNumber, labeled }
 
@@ -43,7 +45,14 @@ class DebugTilesSource implements GlobeRasterSource {
   final int maxZoom;
 
   @override
-  TileScheme get scheme => TileScheme.webMercator;
+  TileSchemeKind get scheme => TileSchemeKind.webMercator;
+
+  /// The debug sheets are stored north-up (row 0 = northern edge).
+  @override
+  TileRowOrder get rowOrder => TileRowOrder.xyzTopDown;
+
+  @override
+  int get maxConcurrentRequests => GeoEngineTuning.maxParallelRequests;
 
   @override
   String get attribution =>
@@ -52,20 +61,28 @@ class DebugTilesSource implements GlobeRasterSource {
           : 'generated debug tiles';
 
   @override
-  Future<Uint8List?> fetch(int z, int x, int y) async {
+  Future<TileFetchResult> fetch(int z, int x, int y) async {
     if (mode == DebugTilesMode.labeled) {
       if (GeoDiagnostics.traceOn) {
         debugPrint('[geo_map:debug] gen z=$z x=$x y=$y');
       }
-      return _labeledPng(z, x, y);
+      final png = await _labeledPng(z, x, y);
+      return png == null
+          ? const TileFetchResult.failed(TileFailureKind.decode)
+          : TileFetchResult.ok(png);
     }
 
     final sheet = await _numberSheet(z);
-    if (sheet == null) return null;
+    if (sheet == null) {
+      return const TileFetchResult.failed(TileFailureKind.network);
+    }
     final cols = 1 << z;
     final sw = sheet.width / cols;
     final sh = sheet.height / cols;
-    return _cropPng(sheet, Rect.fromLTWH(x * sw, y * sh, sw, sh));
+    final png = await _cropPng(sheet, Rect.fromLTWH(x * sw, y * sh, sw, sh));
+    return png == null
+        ? const TileFetchResult.failed(TileFailureKind.decode)
+        : TileFetchResult.ok(png);
   }
 
   Future<ui.Image?> _numberSheet(int z) async {
@@ -167,6 +184,7 @@ class DebugTilesSource implements GlobeRasterSource {
     return data?.buffer.asUint8List();
   }
 
+  @override
   void dispose() {
     for (final sheet in _sheets.values) {
       sheet.dispose();

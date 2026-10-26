@@ -10,11 +10,18 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:geo_map_core/geo_map_core.dart'
+    show
+        GeoEngineTuning,
+        TileFailureKind,
+        TileGrid,
+        TileRowOrder,
+        TileSchemeKind;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-import '../globe/tile_source.dart' show GlobeRasterSource, TileScheme;
+import '../globe/tile_source.dart' show GlobeRasterSource, TileFetchResult;
 
 class MbtilesTileSource implements GlobeRasterSource {
   MbtilesTileSource._(this.id, this._db, this.minZoom, this.maxZoom);
@@ -30,7 +37,15 @@ class MbtilesTileSource implements GlobeRasterSource {
   final int maxZoom;
 
   @override
-  TileScheme get scheme => TileScheme.webMercator;
+  TileSchemeKind get scheme => TileSchemeKind.webMercator;
+
+  /// MBTiles stores rows bottom-up (TMS convention).
+  @override
+  TileRowOrder get rowOrder => TileRowOrder.tmsBottomUp;
+
+  /// One sqlite file handle — parallel reads do not help.
+  @override
+  int get maxConcurrentRequests => GeoEngineTuning.sqliteParallelRequests;
 
   @override
   String get attribution => 'MBTiles: $id';
@@ -159,24 +174,35 @@ class MbtilesTileSource implements GlobeRasterSource {
   }
 
   @override
-  Future<Uint8List?> fetch(int z, int x, int y) async {
-    if (z < minZoom || z > maxZoom) return null;
-    final tms = (1 << z) - 1 - y; // XYZ → TMS
+  Future<TileFetchResult> fetch(int z, int x, int y) async {
+    if (z < minZoom || z > maxZoom) {
+      return const TileFetchResult.failed(TileFailureKind.notFound);
+    }
+    // 行序统一由 core TileGrid.rowForFetch 处理（MBTiles = TMS 自下而上）。
+    final wireRow = TileGrid.of(TileSchemeKind.webMercator, z,
+            order: TileRowOrder.tmsBottomUp)
+        .rowForFetch(y);
     try {
       final rows = _db.select(
         'SELECT tile_data FROM tiles '
         'WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?',
-        [z, x, tms],
+        [z, x, wireRow],
       );
-      if (rows.isEmpty) return null;
+      if (rows.isEmpty) {
+        return const TileFetchResult.failed(TileFailureKind.notFound);
+      }
       final data = rows.first['tile_data'];
-      return data is Uint8List ? data : null;
+      if (data is! Uint8List || data.isEmpty) {
+        return const TileFetchResult.failed(TileFailureKind.empty);
+      }
+      return TileFetchResult.ok(data);
     } catch (e) {
       debugPrint('[geo_map:mbtiles] fetch error $z/$x/$y: $e');
-      return null;
+      return const TileFetchResult.failed(TileFailureKind.network);
     }
   }
 
+  @override
   void dispose() => _db.dispose();
 }
 

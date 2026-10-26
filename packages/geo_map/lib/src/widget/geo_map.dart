@@ -1,9 +1,8 @@
-/// The map host: vendored (fork) camera + lab-verified globe layers + gestures.
+/// The map host: vendored (fork) camera + the shared tile engine + gestures.
 ///
-/// This is geo_map 1.0 — the rendering stack is the lab-proven one
-/// (`globe_tile_layer` / `globe_vector_layer` / `globe_image_layer` on the
-/// vendored `MapCamera` + `GlobeProjectionDelegate`). The self-built Vertices
-/// pipeline lives in `experimental/` and is not exported.
+/// The rendering stack is the lab-proven one: a single [TileLayer] driven by
+/// a [TileEngine]; 2D and 3D differ only in the projection and the geometry
+/// backend, so both modes share one tile cache.
 library;
 
 import 'package:flutter/widgets.dart';
@@ -11,8 +10,8 @@ import 'package:flutter/widgets.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../camera/geo_map_controller.dart';
-import '../globe/flat_tile_layer.dart';
-import '../globe/globe_tile_layer.dart';
+import '../engine/tile_engine.dart';
+import '../engine/tile_layer.dart';
 import '../globe/tile_source.dart';
 import '../gesture/globe_gesture_overlay.dart';
 import '../vendor/flutter_map_camera/flutter_map_camera.dart';
@@ -65,6 +64,14 @@ class _GeoMapState extends State<GeoMap> {
   bool _viewportScheduled = false;
   late bool _globe = widget.options.useGlobe;
 
+  /// One engine for both modes: switching between 2D and 3D then reuses the
+  /// decoded tiles instead of downloading them again.
+  ///
+  /// This state owns it, and only this state disposes it. The tile layers are
+  /// told to *borrow* it — a layer that disposed it while being unmounted for
+  /// the 2D/3D switch would kill every in-flight decode.
+  late TileEngine _engine;
+
   GeoMapController get _controller =>
       widget.controller ??
       (_internal ??= GeoMapController(
@@ -76,8 +83,21 @@ class _GeoMapState extends State<GeoMap> {
       ));
 
   @override
+  void initState() {
+    super.initState();
+    _engine = TileEngine(source: widget.source);
+  }
+
+  @override
   void didUpdateWidget(covariant GeoMap oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.source, widget.source)) {
+      // A different source cannot share the cache: retire the old engine after
+      // the frame (it may still be listened to while the tree rebuilds).
+      final old = _engine;
+      _engine = TileEngine(source: widget.source);
+      WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    }
     if (widget.controller != null &&
         (widget.options.minZoom != _controller.minZoom ||
             widget.options.maxZoom != _controller.maxZoom)) {
@@ -97,6 +117,7 @@ class _GeoMapState extends State<GeoMap> {
   @override
   void dispose() {
     _internal?.dispose();
+    _engine.dispose();
     super.dispose();
   }
 
@@ -121,10 +142,16 @@ class _GeoMapState extends State<GeoMap> {
               fit: StackFit.expand,
               children: [
                 ColoredBox(color: widget.options.background),
-                if (_globe)
-                  GlobeTileLayer(source: widget.source)
-                else
-                  FlatTileLayer(source: widget.source),
+                // One widget type for both modes: switching 2D/3D then updates
+                // this element instead of unmounting it, so the mesh cache and
+                // the decoded tiles survive the switch.
+                TileLayer(
+                  source: widget.source,
+                  engine: _engine,
+                  mode: _globe
+                      ? TileLayerMode.globe
+                      : TileLayerMode.mercator,
+                ),
                 ...widget.children,
                 GlobeGestureOverlay(
                   controller: _controller,

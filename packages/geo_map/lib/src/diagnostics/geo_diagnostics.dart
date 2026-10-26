@@ -31,10 +31,6 @@ class GeoDiagnostics {
     debugPrint(message);
   }
 
-  /// MapLibre TileManager 同款常量（tile_manager.ts L102-103）。
-  static const int maxUnderzooming = 10;
-  static const int maxOverzooming = 3;
-
   static int _lastFrame = 0;
   static int _lastMiss = 0;
 

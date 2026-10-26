@@ -1,12 +1,17 @@
 /// geo_map — a self-contained 2D/3D Flutter map engine.
 ///
-/// 1.0 rendering stack: vendored flutter_map camera (12-patch fork extraction)
-/// + the lab-proven globe layers. The self-built Vertices pipeline is kept in
-/// `src/experimental/` (not exported) pending P4.
+/// The rendering stack is a single pipeline shared by both modes: the
+/// [TileEngine] owns requests, the decode cache and the fallback chain, while
+/// the geometry backend ([SphericalGeometry] / [AffineGeometry]) only decides
+/// *where the pixels land*. A fix in one mode therefore cannot leave the
+/// other broken.
 library;
 
 export 'src/camera/geo_map_controller.dart';
 export 'src/diagnostics/geo_diagnostics.dart';
+export 'src/engine/tile_engine.dart';
+export 'src/engine/tile_geometry.dart';
+export 'src/engine/tile_layer.dart';
 export 'src/gesture/globe_gesture_overlay.dart';
 export 'src/globe/globe_image_layer.dart';
 export 'src/globe/geojson_vector_source.dart';
