@@ -2,22 +2,26 @@ name: API docs
 
 # Build `dart doc` for both packages and publish to GitHub Pages.
 #
-# One-time setup: in the repository Settings → Pages, set the source to the
-# `gh-pages` branch (this workflow pushes there with `force_orphan`).
+# Requires: repository Settings → Pages → Source = "GitHub Actions".
+# This workflow deploys with the official Pages actions (upload-pages-artifact +
+# deploy-pages). It does NOT push a `gh-pages` branch, so do not mix it with the
+# "Deploy from a branch" source.
 on:
   push:
     branches: [master]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
-  group: api-docs
-  cancel-in-progress: true
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,10 +73,21 @@ jobs:
           </html>
           HTML
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./doc
-          publish_branch: gh-pages
-          force_orphan: true
+          path: ./doc
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
