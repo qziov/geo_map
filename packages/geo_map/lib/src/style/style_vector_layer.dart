@@ -14,32 +14,48 @@ import 'package:geo_map_core/geo_map_core.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../vendor/flutter_map_camera/flutter_map_camera.dart';
+import 'style_controller.dart';
 
 class StyleVectorLayer extends StatelessWidget {
   const StyleVectorLayer({
     super.key,
-    required this.style,
+    this.style,
+    this.controller,
     required this.features,
     this.opacity = 1.0,
-  });
+  }) : assert(style != null || controller != null,
+            'provide either style or controller');
 
-  final StyleSpec style;
+  /// A static style. Ignored when [controller] is provided.
+  final StyleSpec? style;
+
+  /// A runtime style controller (M1.4); the layer rebuilds on notify.
+  final GeoStyleController? controller;
+
   final List<GeoJsonFeature> features;
   final double opacity;
 
   @override
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
-    return RepaintBoundary(
-      child: CustomPaint(
-        painter: _StyleVectorPainter(
-          style: style,
-          features: features,
-          camera: camera,
-          opacity: opacity,
-        ),
-        child: const SizedBox.expand(),
-      ),
+
+    Widget paintWith(StyleSpec spec) => RepaintBoundary(
+          child: CustomPaint(
+            painter: _StyleVectorPainter(
+              style: spec,
+              features: features,
+              camera: camera,
+              opacity: opacity,
+            ),
+            child: const SizedBox.expand(),
+          ),
+        );
+
+    final c = controller;
+    if (c == null) return paintWith(style!);
+    return AnimatedBuilder(
+      animation: c,
+      builder: (_, __) => paintWith(c.document.toSpec()),
     );
   }
 }

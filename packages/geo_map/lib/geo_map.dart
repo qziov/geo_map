@@ -17,6 +17,7 @@ export 'src/gesture/globe_gesture_overlay.dart';
 export 'package:geo_map_core/geo_map_core.dart'
     show
         StyleSpec,
+        StyleDocument,
         StyleLayer,
         StyleColor,
         PropertyValue,
@@ -27,6 +28,7 @@ export 'package:geo_map_core/geo_map_core.dart'
         parseGeoJsonFeatures,
         compileFilter,
         FeaturePredicate;
+export 'src/style/style_controller.dart';
 export 'src/style/style_vector_layer.dart';
 export 'src/globe/globe_image_layer.dart';
 export 'src/globe/geojson_vector_source.dart';

@@ -157,6 +157,25 @@ class StyleLayer {
     }
     return true;
   }
+
+  StyleLayer copyWith({
+    Map<String, PropertyValue>? paint,
+    Map<String, PropertyValue>? layout,
+    num? minZoom,
+    num? maxZoom,
+    FeaturePredicate? filter,
+  }) =>
+      StyleLayer(
+        id: id,
+        type: type,
+        source: source,
+        sourceLayer: sourceLayer,
+        minZoom: minZoom ?? this.minZoom,
+        maxZoom: maxZoom ?? this.maxZoom,
+        paint: paint ?? this.paint,
+        layout: layout ?? this.layout,
+        filter: filter ?? this.filter,
+      );
 }
 
 /// A paint/layout value: a constant, or an expression evaluated per draw.
