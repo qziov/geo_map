@@ -3,6 +3,9 @@ build/
 .packages
 pubspec.lock
 example/.dart_tool/
+example/.flutter-plugins-dependencies
+packages/geo_map/.flutter-plugins-dependencies
+example/assets/tiles/*.mbtiles
 *.iml
 .idea/
 docs/visual/*.png

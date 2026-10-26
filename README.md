@@ -4,18 +4,25 @@ A self-contained 2D/3D Flutter map engine — **zero flutter_map dependency**.
 
 - **2D**：Web Mercator 平面（仿射瓦片）
 - **3D**：正交球面（globe），含极帽填充、地平线剔除、父级瓦片回退
-- **一键切换**：`GeoMapOptions(useGlobe: false)`，center/zoom 连续
+- **一键切换**：`GeoMapOptions(useGlobe: false)`，center/zoom 连续，
+  且 2D/3D **共用同一份瓦片缓存**（切换零成本）
 - **可插拔投影**：所有渲染通过 `MapProjectionDelegate` 接口，新增投影只需一个类
 - **MBTiles 离线底图**：WAL 自愈、真实层级探测（不信任 metadata）
 - **over/under-zoom**：数据层级不足时自动钳制到最近有瓦层级并缩放绘制
   （MapLibre overscale 语义），缺失瓦片自动回退父级（UV 子矩形）
+- **404 不拉黑**：失败分级 + 退避重试，缺瓦只会变模糊，不会变黑
 
 ## 包结构
 
 | 包 | 内容 |
 | --- | --- |
-| `packages/geo_map` | Flutter 壳：`GeoMap` widget、图层、手势、MBTiles 源、vendored camera |
-| `packages/geo_map_core` | 纯 Dart 数学核心（投影/相机/网格），82+ 测试，无 `dart:ui` |
+| `packages/geo_map` | Flutter 壳：`GeoMap` widget、统一渲染栈、手势、MBTiles 源、vendored camera |
+| `packages/geo_map_core` | 纯 Dart 数学核心（投影/相机/网格/选片/极帽/请求计划），157 项测试，无 `dart:ui` |
+
+`packages/geo_map_core` 里的投影、网格与选片是**唯一的真相源**：2D 与 3D
+共用同一条 `TileDraw` 管线，只有"像素落在哪里"由几何后端决定
+（`SphericalGeometry` / `AffineGeometry`）—— 一个模式的修复不可能让另一个模式
+继续坏着。
 
 `lib/src/vendor/flutter_map_camera/` 内含从 flutter_map（12 补丁 fork）提取的
 `MapCamera` + 投影委托层 —— 冻结快照，**零上游依赖**（flutter_map/proj4dart 均

@@ -8,7 +8,7 @@ Future<void> main() async {
   final source = await MbtilesTileSource.open(
     id: 'base',
     // 把你的 MBTiles 放进 assets/tiles/base.mbtiles（真实层级自动探测）
-    assetPath: 'assets/tiles/base.mbtiles',
+    assetPath: '/assets/tiles/esri_satellite_z1-8.mbtiles',
   );
   runApp(GeoMapExampleApp(source: source));
 }
@@ -26,8 +26,8 @@ class _GeoMapExampleAppState extends State<GeoMapExampleApp> {
   late final GeoMapController _controller = GeoMapController(
     initialCenter: const LatLng(30, 105),
     initialZoom: 4.2,
-    minZoom: source.minZoom.toDouble(),
-    maxZoom: source.maxZoom.toDouble(),
+    minZoom: widget.source.minZoom.toDouble(),
+    maxZoom: widget.source.maxZoom.toDouble(),
   );
   bool _useGlobe = true;
   bool _graticule = true;
