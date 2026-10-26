@@ -264,8 +264,9 @@ class TileMeshBuilder {
 /// parent footprint and is the classic source of "mosaic blocks" during a zoom
 /// transition.
 ///
-/// [uvSpan] is expressed in the parent image's own pixel space, so the caller
-/// must pass the *actual* decoded image size, not the nominal tile size.
+/// The UV span is expressed in the parent image's own pixel space, so the caller
+/// must pass the *actual* decoded image size ([parentWidth] / [parentHeight]),
+/// not the nominal tile size.
 MeshBuffers projectChildWithParentUv({
   required UnitMesh childMesh,
   required GeoProjector projector,

@@ -15,7 +15,7 @@ import 'package:vector_math/vector_math_64.dart';
 /// Describes the view of a map. This includes the size/zoom/position/crs as
 /// well as the minimum/maximum zoom. This class is mostly immutable but has
 /// some fields that get calculated lazily, changes to the map view may occur
-/// via the [MapController] or user interactions which will result in a
+/// via the MapController or user interactions which will result in a
 /// new [MapCamera] value.
 class MapCamera {
   /// During Flutter startup the native platform resolution is not immediately
@@ -98,13 +98,13 @@ class MapCamera {
       ? const Point<double>(0, 0)
       : project(center, zoom) - size / 2.0;
 
-  /// The camera of the closest [FlutterMap] ancestor. If this is called from a
-  /// context with no [FlutterMap] ancestor null, is returned.
+  /// The camera of the closest FlutterMap ancestor. If this is called from a
+  /// context with no FlutterMap ancestor null, is returned.
   static MapCamera? maybeOf(BuildContext context) =>
       MapInheritedModel.maybeCameraOf(context);
 
-  /// The camera of the closest [FlutterMap] ancestor. If this is called from a
-  /// context with no [FlutterMap] ancestor a [StateError] will be thrown.
+  /// The camera of the closest FlutterMap ancestor. If this is called from a
+  /// context with no FlutterMap ancestor a [StateError] will be thrown.
   static MapCamera of(BuildContext context) =>
       maybeOf(context) ??
       (throw StateError(
