@@ -141,7 +141,7 @@ void _onEngineChanged() {
 
 交叉淡入已落地（本轮实现）—— 过渡期同时绘制旧层级（from，opacity 1）与新层级（to，opacity = selfFade × t），t 由 `crossFadeProgress` 从 0 升到 1。仍可精进：现在 from 层是按"旧层级 + 当前相机"每帧重新选片，若缩放很快、层级连跳，会反复重建 from 层。可改为缓存上一帧的 draw 命令直接复用，省一次选片，代价是要处理缓存淘汰与相机差异。
 
-缩放途中暂停父请求 —— 现在 geo_map 已用"理想瓦片无条件请求、祖先链只作加载期回退"的思路节流，但没在缩放中显式挂起"无数据父瓦片"的请求。补上能进一步压低请求风暴，代价是缩放中边缘可能更久用占位。
+缩放途中暂停父请求 —— 已落地：`planTileRequest` 增加 `suspendAncestors`，引擎按渲染缩放变化维护 `isZooming`（`zoomSettleMs=250`），缩放中只请求理想瓦片、不请求父链；绘制仍用已加载父瓦片兜底，相机停下后自动恢复。MapLibre 更细的"只挂从未请求过的父瓦片"可在接入调度器队列时一并做。
 
 验证手段 —— `flutter test` 在本机被安全策略拦截，纯逻辑要用 `dart test`。淡入是逐帧时间动画，无法在纯逻辑层断言，只能在真机或模拟器肉眼确认。本次改动**未做端到端动眼验证**，仅通过 `dart analyze`。
 
@@ -152,4 +152,4 @@ void _onEngineChanged() {
 - 拖动刷新靠"每帧重算理想覆盖"，不是靠专门的结束事件。
 - geo_map 已移植自身淡入：时间戳 + `fadeOpacity` + 淡入期逐帧重绘。
 - geo_map 已移植交叉淡入：旧层级（from，opacity 1）+ 新层级（to，selfFade × t），t 从 0 升到 1。
-- 缩放期父请求挂起仍待做，是下一步。
+- 缩放期父请求挂起已实现（`suspendAncestors` + `isZooming`）。

@@ -17,7 +17,7 @@ A self-contained 2D/3D Flutter map engine — **zero flutter_map dependency**.
 | 包 | 内容 |
 | --- | --- |
 | `packages/geo_map` | Flutter 壳：`GeoMap` widget、统一渲染栈、手势、MBTiles 源、vendored camera |
-| `packages/geo_map_core` | 纯 Dart 数学核心（投影/相机/网格/选片/极帽/请求计划），157 项测试，无 `dart:ui` |
+| `packages/geo_map_core` | 纯 Dart 数学核心（投影/相机/网格/选片/极帽/请求计划/回退/URL），189 项测试，无 `dart:ui` |
 
 `packages/geo_map_core` 里的投影、网格与选片是**唯一的真相源**：2D 与 3D
 共用同一条 `TileDraw` 管线，只有"像素落在哪里"由几何后端决定

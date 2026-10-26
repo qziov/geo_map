@@ -25,7 +25,7 @@ GeoMap (widget/geo_map.dart)          组装：InheritedModel(camera) + 图层 +
 ```
 
 `packages/geo_map_core/` 是纯 Dart 核心（无 `dart:ui`），负责投影、相机数学、
-瓦片网格、选片、网格构建、极帽、请求计划与缓存策略 —— 157 项 `dart test` 覆盖。
+瓦片网格、选片、网格构建、极帽、请求计划、回退决策、URL 构建与缓存策略 —— 189 项 `dart test` 覆盖。
 
 > 凡是"该不该请求 / 该回退到哪一级"这类决策，一律下沉到 core 的纯函数
 > （如 `planTileRequest`），因为引擎本身依赖 `dart:ui`、在 `dart test` 下跑不起来。

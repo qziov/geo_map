@@ -139,11 +139,11 @@ geometry.drawTile(canvas, draw, camera: state, opacity: opacity);
 
 ## 五、未来可以怎么优化
 
-调度器加优先级队列与 pending 超时 —— 现在是 debounce + generation，够用但不精细。加优先级能让屏幕中心的瓦片先到，加超时能回收卡死的 pending。代价是要维护一个有序队列和计时器。
+调度器优先级队列与 pending 超时 —— 已实现（`TileScheduler.enqueue/take/reclaim`，同级 FIFO、超时回收）。**仍差一步**：引擎请求路径还没接这个队列（仍是立即 fetch + slot gate），队列目前未被消费；接线后优先级才真正生效。
 
-URL 构建下沉到 core —— 现在拼接逻辑在 `geo_map` 的 `HttpTileSource.urlFor`。下沉后 core 可统一支持 quadkey / bbox / 多模板轮询，代价是 `geo_map` 要做一次迁移。
+URL 构建下沉到 core —— 已实现（core `TileUrlBuilder`：`{prefix}{ratio}{quadkey}{bbox}{bbox-epsg-3857}`、TMS 翻转、多模板轮询；`HttpTileSource` 已委托，`GeoTileSource` 契约也在 core）。
 
-回退的 children/none 判定也纯化 —— 目前只有"请求计划"是纯函数，"画哪个"里 children/none 还在引擎内。纯化后覆盖更全，代价是多一层抽象。
+回退的 children/none 判定纯化 —— 已实现（`planTileResolution`：exact/children/ancestor/none，引擎 `resolve` 直接消费）。
 
 验证 —— 淡入和交叉淡入是逐帧动画，`flutter test` 本机被拦截，只能在真机/模拟器肉眼确认。选片、缓存、请求这些纯逻辑都有 `dart test`。
 
