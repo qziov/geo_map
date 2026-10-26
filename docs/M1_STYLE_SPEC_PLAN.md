@@ -107,7 +107,84 @@ GeoMap
 
 **A → C → B**。先用 A 把 style 语义与表达式跑通（不碰易碎的引擎所有权）；再把"逐要素投影/裁剪"抽成 C，替掉 `GlobeVectorLayer` 里手写的投影数学；最后 B 让 `GeoMap` 支持图层列表与多个 source。
 
-## 五、分阶段（每阶段可交付、可验证）
+### 渲染后端：能不能用 GLSL / OpenGL？
+
+先纠正一个常见预期：**Flutter 没有"直接写 OpenGL"的 API**。`dart:ui` 背后是 Skia / Impeller（都做 GPU 光栅化），但不把 GL 上下文、program、buffer 交给你。
+
+能用的"类 GPU"能力只有两个：
+
+- **`ui.Vertices` + `Canvas.drawVertices`** —— 顶点缓冲 + 索引，GPU 批处理。光栅瓦片现在就走这条（球面网格、极帽）。
+- **`ui.FragmentProgram`（配 `.frag` 的 GLSL 风格着色器）** —— 逐像素 fragment shader，用 `Paint.shader` 喂给 `drawRect` / `drawVertices`。适合 fill 的 pattern、heatmap、渐变这类像素级效果。
+
+所以"能不能用 GLSL/OpenGL"的准确回答是：
+
+- **能写 GLSL 风格的 fragment shader**（`FragmentProgram`），但**不能像 MapLibre 的 WebGL 那样自己掌管整条 OpenGL 管线**（VBO/VAO/program/uniform 全手管）。Flutter 只给 `Vertices` + `FragmentShader` 两块乐高。
+- 想更接近裸 GL，只有实验性的 `flutter_gpu`（Impeller）或社区 plugin（ANGLE 等），生态与稳定性都不足，**不适合作为核心渲染依赖**。
+- 对 geo_map：光栅已经 GPU；矢量的性能上限，取决于能否把"逐要素 `Path`"换成"**顶点批 + shader**"——这正是 M2/M3 的方向，也是和 MapLibre 缩小性能差距的唯一路径。
+- 额外约束：Impeller 下 `saveLayer` 等操作有已知行为差异（项目里踩过），写 shader / 合成时要按 Impeller 调整。
+
+## 五、应用侧 API 对照（多源 / 多图层 / 单渲染器）
+
+**一句话**：MapLibre 的"多个数据源、多个图层"不是多个对象/多个 widget，而是同一份 style 里的 `sources`（一张表）与 `layers`（一条有序数组）。geo_map 照搬这个形状——`GeoMap` 只吃**一份 style**。
+
+对应关系：
+
+```
+map.setStyle(json)          ↔  GeoMap(style: StyleSpec.parse(json))   // 整份，声明式
+map.addSource/addLayer      ↔  style.addSource/addLayer                // 动态，命令式
+map.setPaintProperty …      ↔  style.setPaintProperty …                // 单图层操作
+```
+
+（`map.addSource/addLayer` 本身就是 `map.style` 的方法，所以这里把 `GeoStyleController` 视作 `map.style`。）
+
+### 多数据源 + 多图层（声明式）
+
+```json
+{
+  "version": 8,
+  "sources": {
+    "satellite": { "type": "raster",  "tiles": ["https://…/{z}/{x}/{y}.jpg"] },
+    "parcels":   { "type": "geojson", "data": "assets/parcels.geojson" },
+    "roads":     { "type": "vector",  "url": "https://…/roads.json" }
+  },
+  "layers": [
+    { "id": "satellite",    "type": "raster", "source": "satellite" },
+    { "id": "parcels-fill", "type": "fill",   "source": "parcels", "paint": { "fill-color": "#cfe8ff" } },
+    { "id": "roads-line",   "type": "line",   "source": "roads",  "source-layer": "road" }
+  ]
+}
+```
+
+```dart
+GeoMap(
+  options: const GeoMapOptions(initialCenter: LatLng(30, 105), useGlobe: true),
+  style: StyleSpec.parse(styleJson), // 一份 style，内含 N 个 source + M 个 layer
+);
+```
+
+### 多图层管理与单图层操作（命令式）
+
+```dart
+final style = GeoStyleController(StyleSpec.parse(styleJson));
+GeoMap(options: ..., style: style);
+
+// 顺序 / 增删
+style.addLayer(LineLayer(id: 'flow', source: 'roads', paint: {'line-color': '#0af'}), before: 'roads-line');
+style.moveLayer('parcels-fill', before: 'roads-line');
+style.setLayoutProperty('parcels-fill', 'visibility', 'none'); // 隐藏某层
+style.removeLayer('flow');
+
+// 单层属性 / 过滤 / 可见范围
+style.setPaintProperty('parcels-fill', 'fill-opacity', 0.6);
+style.setFilter('parcels-fill', ['==', ['get', 'use'], 'park']);
+style.setLayerZoomRange('parcels-fill', 12, 20);
+```
+
+### 关键差异（也是效率来源）
+
+所有 style 图层由**同一个渲染器**按 `layers` 顺序画在**一个画布**里——**不是一个图层一个 widget**。MapLibre 是单个 WebGL 画布，geo_map 是单个 `CustomPainter` 遍历有序列表；`GeoMap.children` 只留给非样式的覆盖物。
+
+## 六、分阶段（每阶段可交付、可验证）
 
 - **M1.0（本轮）** 方案 + 技术验证 + 源码对齐 + 管线梳理。
   验收：`docs/M1_STYLE_SPEC_PLAN.md`；`core/src/style/*` 存在且 `dart test` 全过。
@@ -117,8 +194,10 @@ GeoMap
   验收：常量分析四类正确；错误用例抛 `FormatException`。
 - **M1.3** 接线渲染：`StyleVectorLayer`（A）读 style + GeoJSON 源，按 `PropertyValue` 求值绘制 fill/line；出示例（读一份 style JSON 渲染）。
   验收：示例可运行；同一份 style 在 2D/3D 都能画；补一份技术总结。
+- **M1.4** 运行时 API：`GeoStyleController`（ChangeNotifier + 命令 API：addSource/addLayer/moveLayer/removeLayer/setPaintProperty/setLayoutProperty/setFilter/setLayerZoomRange/setFeatureState），按 `id+revision` diff 重绘；`GeoMap(style: controller)`。
+  验收：动态增删/改图层生效；示例演示运行时切换。
 
-## 六、风险与未决
+## 七、风险与未决
 
 - **表达式语义坑**：`zoom` 只能顶层、`camera` 每帧重算、颜色停靠点解析——三条都已踩过/对齐。
 - **投影数学**：新矢量层必须复用 core `GeoProjector`，不要重演 `GlobeVectorLayer` 手写 `_view` 的老路。
@@ -126,7 +205,7 @@ GeoMap
 - **spec 版本漂移**：对齐的是 v26（外部包）；升级时要重新核对 `v8.json` 与 `expression/`。
 - **数据源缺口**：M1 先用 GeoJSON（一次性全量）；真正的 MVT 在 M2。
 
-## 七、小结
+## 八、小结
 
 - M1 的本质是"把样式求值从绘制里拆出来"：`PropertyValue`（常量/表达式）→ 每次绘制用 `ExpressionContext` 求值。
 - 技术验证已完成：纯 Dart 的解析 + 求值 + 常量分析可跑、可测（20 例）。
