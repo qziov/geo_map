@@ -77,8 +77,14 @@ class OrthographicProjector extends GeoProjector {
   double densifyStepRad(CameraState camera) => densifyStepForPixelError(
       camera.radiusPx, GeoEngineTuning.densifyPixelError);
 
+  /// The globe's bounds are sampled at the rectangle's corners/edges, which can
+  /// under-cover the projection's curvature; pad the window by one row.
   @override
-  GeoBounds approximateVisibleBounds(CameraState camera) {
+  int get windowPadTiles => 1;
+
+  @override
+  GeoBounds approximateVisibleBounds(CameraState camera, [double? marginPx]) {
+    final m = marginPx ?? 0;
     // Exact visible footprint from the viewport, not an analytic angular
     // radius. The old formula used `asin(halfDiag / r)` — the viewport's angle
     // as seen from the *globe centre* — which, for an orthographic globe, is
@@ -107,7 +113,9 @@ class OrthographicProjector extends GeoProjector {
     ];
 
     LatLng? unprojectClamped(double fx, double fy) {
-      final p = Vec2(fx * w, fy * h);
+      // Sample the viewport rectangle **inflated** by the pixel margin, so the
+      // bounds already reach the same margin the per-tile test uses.
+      final p = Vec2(-m + fx * (w + 2 * m), -m + fy * (h + 2 * m));
       var geo = unproject(p, camera);
       if (geo == null) {
         // Off the disc: snap to the nearest point on the limb (horizon ring),
@@ -139,7 +147,8 @@ class OrthographicProjector extends GeoProjector {
     // A pole on screen means the meridians converge there and the visible
     // longitude span opens to the full ±180 — the same case MapLibre's
     // `getBounds` patches after sampling the corners.
-    final poleMargin = math.min(w, h) * 0.05;
+    // The pole test uses the same inflated window as the samples.
+    final poleMargin = m + math.min(w, h) * 0.05;
     void checkPole(double lat, double setNorthFromCenter, double setSouthFromCenter) {
       final p = project(LatLng(lat, center.longitude), camera);
       if (p == null) return;

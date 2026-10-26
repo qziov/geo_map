@@ -62,16 +62,19 @@ class MercatorProjector extends GeoProjector {
   double densifyStepRad(CameraState camera) => 0;
 
   @override
-  GeoBounds approximateVisibleBounds(CameraState camera) {
+  GeoBounds approximateVisibleBounds(CameraState camera, [double? marginPx]) {
     final world = camera.worldSize;
     final halfW = camera.size.width / 2;
     final halfH = camera.size.height / 2;
     final yc = mercatorTAt(camera.center.latitude) * world;
+    final m = marginPx ?? 0;
+    final w = camera.size.width;
+    final h = camera.size.height;
     final samples = [
-      Vec2(0, 0),
-      Vec2(camera.size.width, 0),
-      Vec2(0, camera.size.height),
-      Vec2(camera.size.width, camera.size.height),
+      Vec2(-m, -m),
+      Vec2(w + m, -m),
+      Vec2(-m, h + m),
+      Vec2(w + m, h + m),
       camera.size.center,
     ];
 

@@ -670,15 +670,10 @@ class TileEngine extends ChangeNotifier {
   /// A `null` [TileImage.loadedAt] (e.g. a pre-cached image) is always 1. This
   /// is the raster-only "load fade" of MapLibre — a tile is blended in from
   /// transparent to opaque instead of popping in (see `draw_raster.ts`
-  /// `getSelfFadeValues`).
-  double fadeOpacity(TileImage image, int now) {
-    final loadedAt = image.loadedAt;
-    if (loadedAt == null) return 1.0;
-    final t = (now - loadedAt) / fadeDurationMs;
-    if (t <= 0) return 0.0;
-    if (t >= 1) return 1.0;
-    return t;
-  }
+  /// `getSelfFadeValues`). The math lives in `geo_map_core` so it is
+  /// unit-testable without `dart:ui`.
+  double fadeOpacity(TileImage image, int now) =>
+      selfFadeOpacity(image.loadedAt, now, fadeDurationMs);
 
   /// Whether any cached tile is still inside its fade window at [now].
   ///
@@ -693,6 +688,53 @@ class TileEngine extends ChangeNotifier {
     }
     return false;
   }
+
+  // --- cross-fade (MapLibre zoom transition) ------------------------------------
+
+  /// Duration of a zoom-level cross-fade (ms). Mirrors MapLibre's
+  /// `fadeDuration`-based zoom transition between a parent and its child.
+  static const int crossFadeDurationMs = 300;
+
+  /// The data level shown on the previous frame. Drives the cross-fade.
+  int? _prevDataZoom;
+
+  /// The level we are fading *from* during a zoom step (null = not fading).
+  int? _crossFadeFrom;
+
+  /// Wall-clock time (ms) the current zoom transition began.
+  int _crossFadeStartMs = 0;
+
+  /// Notifies the host when a new zoom transition starts, so it can begin the
+  /// per-frame repaint loop even while the camera is otherwise stationary.
+  VoidCallback? onCrossFadeStart;
+
+  /// Record the data level of this frame. When it differs from the previous
+  /// frame a cross-fade begins; returns true on the first frame of a transition.
+  bool noteDataZoom(int dataZoom, int now) {
+    final prev = _prevDataZoom;
+    _prevDataZoom = dataZoom;
+    if (prev != null && prev != dataZoom) {
+      _crossFadeFrom = prev;
+      _crossFadeStartMs = now;
+      onCrossFadeStart?.call();
+      return true;
+    }
+    return false;
+  }
+
+  /// The level currently being faded *from*, or null when not cross-fading.
+  int? get crossFadeFromZoom => _crossFadeFrom;
+
+  /// Cross-fade progress (0→1) at [now]; 1 means the transition is complete.
+  double crossFadeProgressAt(int now) {
+    if (_crossFadeFrom == null) return 1.0;
+    return crossFadeProgress(_crossFadeStartMs, now, crossFadeDurationMs);
+  }
+
+  /// Whether a zoom cross-fade is still animating at [now].
+  bool isCrossFading(int now) =>
+      _crossFadeFrom != null &&
+      isWithinFade(_crossFadeStartMs, now, crossFadeDurationMs);
 
   // --- frame bookkeeping --------------------------------------------------------
 

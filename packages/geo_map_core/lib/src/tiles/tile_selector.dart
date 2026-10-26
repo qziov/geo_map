@@ -149,15 +149,20 @@ class TileSelector {
     bool verify = true,
   }) {
     final m = margin ?? adaptiveMargin(camera, grid);
-    final bounds = projector.approximateVisibleBounds(camera);
+    // The bounds are sampled on the viewport **inflated** by the pixel margin,
+    // so they already cover the margin the per-tile test below uses. That is
+    // the only reliable way on a globe: a fixed pixel margin spans more than
+    // one tile row near the poles, so converting `m` to a tile count drops
+    // tiles that only reach into the margin.
+    final bounds = projector.approximateVisibleBounds(camera, m);
     // A window wider than the world (common on the globe near the limb) must
     // cover every column — otherwise the wrap-around leaves a hole near ±180.
     final worldSpan = bounds.east - bounds.west;
     final coversAllColumns = worldSpan >= 360;
-    // The margin is expressed in pixels; the window must be widened by the same
-    // amount in tiles, otherwise tiles that only reach into the margin are
-    // never even tested.
-    final extra = (m / tileScreenPx(camera, grid)).ceil();
+    // The bounds already include the pixel margin; the projector decides how
+    // many extra rows/cols the sampling imprecision needs (globe = 1, plane =
+    // 0). The `±1` in the x/y range below covers `rawXOf`/`rawYOf` rounding.
+    final extra = projector.windowPadTiles;
     final x0 = coversAllColumns ? 0 : grid.rawXOf(bounds.west) - 1 - extra;
     final x1 =
         coversAllColumns ? grid.cols - 1 : grid.rawXOf(bounds.east) + 1 + extra;

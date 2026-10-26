@@ -120,6 +120,7 @@ class _TileLayerState extends State<TileLayer>
     _attachedEngine?.removeListener(_onEngineChanged);
     _attachedEngine = engine;
     engine.addListener(_onEngineChanged);
+    engine.onCrossFadeStart = _startFade;
   }
 
   @override
@@ -144,20 +145,29 @@ class _TileLayerState extends State<TileLayer>
     }
   }
 
-  /// A tile just decoded: if it (or anything else) is still fading in, start
-  /// the repaint loop. This also covers the stationary-load case — without a
-  /// camera move the only thing that changes is the fade clock.
-  void _onEngineChanged() {
-    if (!_fadeActive && _engine.hasFadingTiles()) {
+  /// Begin the per-frame repaint loop used by both self-fade and cross-fade.
+  void _startFade() {
+    if (!_fadeActive) {
       _fadeActive = true;
       _fadeTicker.start();
     }
   }
 
-  /// One tick of the fade loop: repaint, and stop once every tile has settled.
+  /// A tile just decoded (or a transition just started): if anything is still
+  /// animating, start the repaint loop. This also covers the stationary-load
+  /// case — without a camera move the only thing that changes is the fade clock.
+  void _onEngineChanged() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (!_fadeActive &&
+        (_engine.hasFadingTiles(now) || _engine.isCrossFading(now))) {
+      _startFade();
+    }
+  }
+
+  /// One tick of the fade loop: repaint, and stop once everything has settled.
   void _onFadeTick(Duration _) {
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (!_engine.hasFadingTiles(now)) {
+    if (!_engine.hasFadingTiles(now) && !_engine.isCrossFading(now)) {
       _fadeActive = false;
       _fadeTicker.stop();
       // One last repaint to land every tile at full opacity.
@@ -289,6 +299,14 @@ class _TilePainter extends CustomPainter {
       scheme: scheme,
     );
 
+    // ── Cross-fade bookkeeping ───────────────────────────────────────────────
+    // Record the data level of this frame. When it steps to a new level a
+    // cross-fade begins, and the engine asks us (via `onCrossFadeStart`) to
+    // keep repainting through the transition.
+    engine.noteDataZoom(dataZoom, now);
+    final crossFading = engine.isCrossFading(now);
+    final fromZoom = engine.crossFadeFromZoom;
+
     // ── Draw ────────────────────────────────────────────────────────────────
     canvas.save();
     if (mode == TileLayerMode.globe) {
@@ -316,48 +334,102 @@ class _TilePainter extends CustomPainter {
     final missDetails = <String>[];
     final frameDraws = <TileDraw>[];
 
-    // The previous frame is painted underneath, so a zoom transition never
-    // flashes black. Only tiles of the *current* data level are reused: a
-    // different level would carry a different magnification. The underlay is
-    // kept at full opacity — it is the "previous frame", not a fresh load.
-    for (final draw in engine.previousDraws) {
-      if (draw.geoKey.z != dataZoom) continue;
-      geometry.drawTile(canvas, draw, camera: state, opacity: 1);
-    }
-
-    for (final key in selection.tiles) {
-      final draws = engine.drawsFor(key, dataZoom);
-      if (draws.isEmpty) {
-        missed++;
-        if (missDetails.length < 5) {
-          missDetails.add('${key.z}/${key.x}/${key.y}');
-        }
-        continue;
-      }
-      for (final draw in draws) {
-        // Self fade-in: a freshly decoded tile rises 0→1 over
-        // [TileEngine.fadeDurationMs] while the underlay shows through.
-        final opacity = engine.fadeOpacity(draw.image, now);
-        geometry.drawTile(canvas, draw, camera: state, opacity: opacity);
-        engine.markRendered(draw.sourceKey);
-        frameDraws.add(draw);
-        drawn++;
-      }
-    }
-
-    // ── Polar caps ──────────────────────────────────────────────────────────
-    // Web Mercator stops at ±85.05°; the cap fills the remaining wedge up to
-    // the pole. Only the globe has a pole, and only mercator has a blind spot.
-    if (mode == TileLayerMode.globe) {
-      for (final cap in engine.capDraws(
+    if (crossFading &&
+        fromZoom != null &&
+        fromZoom >= source.minZoom &&
+        fromZoom <= source.maxZoom) {
+      // ── Cross-fade: old level (parent) under the new level (child) ────────
+      // Draw the *previous* data level first at full opacity — it is the
+      // settled view the user just saw. Then draw the current level on top,
+      // rising 0→1 over the transition, so the parent→child swap blends
+      // instead of hard-popping (MapLibre's `u_fade_t`).
+      final fromSelection = TileSelector.select(
+        projector: projector,
         camera: state,
-        dataZoom: dataZoom,
-      )) {
-        final opacity = engine.fadeOpacity(cap.image, now);
-        geometry.drawCap(canvas, cap, camera: state, opacity: opacity);
-        // The cap samples a real tile: protect it from eviction like any other
-        // tile that was on screen this frame.
-        engine.markRendered(cap.sourceKey);
+        desiredZ: fromZoom,
+        sourceMinZoom: source.minZoom,
+        sourceMaxZoom: source.maxZoom,
+        scheme: scheme,
+      );
+      for (final key in fromSelection.tiles) {
+        for (final draw in engine.drawsFor(key, fromZoom)) {
+          geometry.drawTile(canvas, draw, camera: state, opacity: 1);
+          engine.markRendered(draw.sourceKey);
+        }
+      }
+
+      final t = engine.crossFadeProgressAt(now);
+      for (final key in selection.tiles) {
+        final draws = engine.drawsFor(key, dataZoom);
+        if (draws.isEmpty) {
+          missed++;
+          if (missDetails.length < 5) {
+            missDetails.add('${key.z}/${key.x}/${key.y}');
+          }
+          continue;
+        }
+        for (final draw in draws) {
+          // Self fade-in × cross-fade progress.
+          final opacity = engine.fadeOpacity(draw.image, now) * t;
+          geometry.drawTile(canvas, draw, camera: state, opacity: opacity);
+          engine.markRendered(draw.sourceKey);
+          frameDraws.add(draw);
+          drawn++;
+        }
+      }
+
+      if (mode == TileLayerMode.globe) {
+        for (final cap in engine.capDraws(camera: state, dataZoom: dataZoom)) {
+          final opacity = engine.fadeOpacity(cap.image, now) * t;
+          geometry.drawCap(canvas, cap, camera: state, opacity: opacity);
+          engine.markRendered(cap.sourceKey);
+        }
+      }
+    } else {
+      // ── Same level: previous frame as underlay, current with self-fade ────
+      // The previous frame is painted underneath, so a pan never flashes
+      // black. Only tiles of the *current* data level are reused: a different
+      // level would carry a different magnification. The underlay is kept at
+      // full opacity — it is the "previous frame", not a fresh load.
+      for (final draw in engine.previousDraws) {
+        if (draw.geoKey.z != dataZoom) continue;
+        geometry.drawTile(canvas, draw, camera: state, opacity: 1);
+      }
+
+      for (final key in selection.tiles) {
+        final draws = engine.drawsFor(key, dataZoom);
+        if (draws.isEmpty) {
+          missed++;
+          if (missDetails.length < 5) {
+            missDetails.add('${key.z}/${key.x}/${key.y}');
+          }
+          continue;
+        }
+        for (final draw in draws) {
+          // Self fade-in: a freshly decoded tile rises 0→1 over
+          // [TileEngine.fadeDurationMs] while the underlay shows through.
+          final opacity = engine.fadeOpacity(draw.image, now);
+          geometry.drawTile(canvas, draw, camera: state, opacity: opacity);
+          engine.markRendered(draw.sourceKey);
+          frameDraws.add(draw);
+          drawn++;
+        }
+      }
+
+      // ── Polar caps ────────────────────────────────────────────────────────
+      // Web Mercator stops at ±85.05°; the cap fills the remaining wedge up to
+      // the pole. Only the globe has a pole, and only mercator has a blind spot.
+      if (mode == TileLayerMode.globe) {
+        for (final cap in engine.capDraws(
+          camera: state,
+          dataZoom: dataZoom,
+        )) {
+          final opacity = engine.fadeOpacity(cap.image, now);
+          geometry.drawCap(canvas, cap, camera: state, opacity: opacity);
+          // The cap samples a real tile: protect it from eviction like any other
+          // tile that was on screen this frame.
+          engine.markRendered(cap.sourceKey);
+        }
       }
     }
 

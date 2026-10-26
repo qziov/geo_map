@@ -43,9 +43,24 @@ abstract class GeoProjector {
   /// affine (Mercator) and densification is unnecessary.
   double densifyStepRad(CameraState camera);
 
+  /// Extra tile rows/columns the tile selector should pad the window by beyond
+  /// [approximateVisibleBounds].
+  ///
+  /// The globe's bounds are sampled at the inflated rectangle's corners and
+  /// edge midpoints, which can under-cover the projection's curvature; one
+  /// extra row guarantees the window stays a superset of the per-tile test.
+  /// An affine projection (Mercator) needs none.
+  int get windowPadTiles => 0;
+
   /// Generous geographic window currently visible — the starting window used by
   /// the tile selector before per-tile verification.
-  GeoBounds approximateVisibleBounds(CameraState camera);
+  ///
+  /// [marginPx] inflates the viewport rectangle by that many screen pixels
+  /// before sampling, so the returned bounds already cover the margin the
+  /// per-tile verification uses. On a globe a fixed pixel margin spans more
+  /// than one tile row near the poles, so a plain bounds + row-count pad can
+  /// drop a tile that only reaches into the margin.
+  GeoBounds approximateVisibleBounds(CameraState camera, [double? marginPx]);
 }
 
 class CircleClip {

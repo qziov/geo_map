@@ -84,10 +84,10 @@ geo_map 之前只有"占位防黑屏"，没有"淡入"。
 ──────────────────────────────────────────────────────────
 geo_map 旧版      有          有           无             无
 MapLibre         已消除      有           有             有
-geo_map 新版     无          有           有(已移植)     无(未做)
+geo_map 新版     无(已消除)  有           有(已移植)     有(已移植)
 ```
 
-一句话：占位解决"黑屏"，淡入解决"闪烁"。两者互补，不冲突。
+一句话：占位解决"黑屏"，自身淡入解决"新瓦片硬弹出"，交叉淡入解决"缩放跨层级瞬换"。三者互补，不冲突。geo_map 新版已无缩放瞬换。
 
 geo_map 的占位已经很强——上一帧作为底图（underlay）一直画在下面，缩放不会黑。缺的只是"新瓦片从透明浮上来"那一下。
 
@@ -107,6 +107,8 @@ geo_map 移植（自身淡入，本次新增）：
 - 时间戳：`packages/geo_map/lib/src/engine/tile_engine.dart` 的 `TileImage.loadedAt`，在 `_decode` 解码成功时写入。
 - 透明度过场：`tile_engine.dart` 的 `fadeDurationMs`（300ms）、`fadeOpacity(image, now)`、`hasFadingTiles()`。
 - 逐帧驱动：`packages/geo_map/lib/src/engine/tile_layer.dart` 的 `_TilePainter.fadeClock` 与 `_TileLayerState` 的 `_fadeTicker` / `_onFadeTick` / `_onEngineChanged`。
+- 交叉淡入（本次新增）：`tile_engine.dart` 的 `noteDataZoom` / `crossFadeFromZoom` / `crossFadeProgressAt` / `isCrossFading` / `onCrossFadeStart`；`tile_layer.dart` 的 `paint` 在过渡期先画旧层级（from，opacity 1）再画新层级（to，opacity = selfFade × t）。
+- 纯函数（可单测）：`geo_map_core/src/math/fade.dart` 的 `selfFadeOpacity` / `crossFadeProgress` / `isWithinFade`，已有 `geo_map_core/test/math/fade_test.dart`（5 例全过）。
 - 透传钩子（早已存在）：`tile_geometry.dart` 的 `drawTile` / `drawCap` 本来就收 `opacity` 参数，本次只是从上层传入随时间变化的值。
 
 最小片段——geo_map 如何算透明度：
@@ -137,7 +139,7 @@ void _onEngineChanged() {
 
 ## 五、未来可以怎么优化
 
-交叉淡入（缩放时父/子混合）—— 现在 geo_map 只做了自身淡入。要做交叉淡入，需要在缩放过渡期同时持有"细瓦片"和"被拉伸的粗父瓦片"两张纹理，按 `u_fade_t` 混合。收益是缩放更顺滑；代价是 draw 命令翻倍、要管理两组纹理与混合状态。MapLibre 的 `getFadeProperties`（`parentScaleBy` / `parentTopLeft`）是可对照的范本。
+交叉淡入已落地（本轮实现）—— 过渡期同时绘制旧层级（from，opacity 1）与新层级（to，opacity = selfFade × t），t 由 `crossFadeProgress` 从 0 升到 1。仍可精进：现在 from 层是按"旧层级 + 当前相机"每帧重新选片，若缩放很快、层级连跳，会反复重建 from 层。可改为缓存上一帧的 draw 命令直接复用，省一次选片，代价是要处理缓存淘汰与相机差异。
 
 缩放途中暂停父请求 —— 现在 geo_map 已用"理想瓦片无条件请求、祖先链只作加载期回退"的思路节流，但没在缩放中显式挂起"无数据父瓦片"的请求。补上能进一步压低请求风暴，代价是缩放中边缘可能更久用占位。
 
@@ -149,4 +151,5 @@ void _onEngineChanged() {
 - 淡入（fade）解决新瓦片"硬弹出"，每瓦片一个时间戳加线性透明度即可。
 - 拖动刷新靠"每帧重算理想覆盖"，不是靠专门的结束事件。
 - geo_map 已移植自身淡入：时间戳 + `fadeOpacity` + 淡入期逐帧重绘。
-- 交叉淡入和缩放期父请求挂起仍可做，是下一步。
+- geo_map 已移植交叉淡入：旧层级（from，opacity 1）+ 新层级（to，selfFade × t），t 从 0 升到 1。
+- 缩放期父请求挂起仍待做，是下一步。
