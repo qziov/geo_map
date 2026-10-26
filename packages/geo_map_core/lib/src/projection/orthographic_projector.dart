@@ -8,7 +8,6 @@ import 'package:latlong2/latlong.dart';
 import '../camera/camera_state.dart';
 import '../math/geo_geometry.dart';
 import '../math/geodesy.dart';
-import '../math/projections.dart';
 import '../tuning/geo_engine_tuning.dart';
 import 'geo_projector.dart';
 
@@ -96,7 +95,6 @@ class OrthographicProjector extends GeoProjector {
     // selector agree on an empty band.
     south = (south - slackDeg).clamp(-90.0, 90.0);
     north = (north + slackDeg).clamp(-90.0, 90.0);
-
     // Max |Δlng| of a point within `alpha` of the centre, taken over the lat band.
     final phi0 = rad(lat0);
     var maxDLng = 0.0;

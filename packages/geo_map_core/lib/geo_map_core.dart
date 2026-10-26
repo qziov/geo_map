@@ -13,6 +13,7 @@ export 'src/projection/orthographic_projector.dart';
 export 'src/tiles/polar_cap.dart';
 export 'src/tiles/tile_cache_policy.dart';
 export 'src/tiles/tile_mesh.dart';
+export 'src/tiles/tile_request_plan.dart';
 export 'src/tiles/tile_scheduler.dart';
 export 'src/tiles/tile_scheme.dart';
 export 'src/tiles/tile_selector.dart';

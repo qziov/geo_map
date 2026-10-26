@@ -23,12 +23,17 @@ class MercatorProjector extends GeoProjector {
   Vec2? project(LatLng geo, CameraState camera) {
     final world = camera.worldSize;
     final lat = clampMercatorLat(geo.latitude);
-    final x = (wrapLongitude(geo.longitude) + 180) / 360 * world;
+    // The longitude is taken **relative to the camera**, wrapped into
+    // [-180, 180). That makes the projection periodic: a point at -180° with
+    // the camera at 179° lands 1° east of the camera instead of jumping a
+    // whole world to the left — which is what the antimeridian needs, and what
+    // the renderer draws (the tile is repeated at every world copy).
+    final dx = wrapLongitude(geo.longitude - camera.center.longitude);
+    final x = dx / 360 * world;
     final y = mercatorTAt(lat) * world;
-    final xc = (camera.center.longitude + 180) / 360 * world;
     final yc = mercatorTAt(camera.center.latitude) * world;
     return Vec2(
-      x - xc + camera.size.width / 2,
+      x + camera.size.width / 2,
       y - yc + camera.size.height / 2,
     );
   }
@@ -39,11 +44,10 @@ class MercatorProjector extends GeoProjector {
   @override
   LatLng? unproject(Vec2 screen, CameraState camera) {
     final world = camera.worldSize;
-    final xc = (camera.center.longitude + 180) / 360 * world;
+    final dx = (screen.x - camera.size.width / 2) / world * 360;
     final yc = mercatorTAt(camera.center.latitude) * world;
-    final x = screen.x - camera.size.width / 2 + xc;
     final y = screen.y - camera.size.height / 2 + yc;
-    final lng = x / world * 360 - 180;
+    final lng = camera.center.longitude + dx;
     final t = (y / world).clamp(0.0, 1.0);
     return LatLng(mercatorLatitudeAt(t), wrapLongitude(lng));
   }
@@ -59,26 +63,36 @@ class MercatorProjector extends GeoProjector {
 
   @override
   GeoBounds approximateVisibleBounds(CameraState camera) {
-    final c = camera.size.center;
-    final corners = [
-      unproject(Vec2(0, 0), camera),
-      unproject(Vec2(camera.size.width, 0), camera),
-      unproject(Vec2(0, camera.size.height), camera),
-      unproject(Vec2(camera.size.width, camera.size.height), camera),
-      unproject(c, camera),
-    ].whereType<LatLng>().toList();
+    final world = camera.worldSize;
+    final halfW = camera.size.width / 2;
+    final halfH = camera.size.height / 2;
+    final yc = mercatorTAt(camera.center.latitude) * world;
+    final samples = [
+      Vec2(0, 0),
+      Vec2(camera.size.width, 0),
+      Vec2(0, camera.size.height),
+      Vec2(camera.size.width, camera.size.height),
+      camera.size.center,
+    ];
 
+    // The longitude is measured **relative to the camera** and is never
+    // wrapped here: the window must stay continuous across the antimeridian,
+    // otherwise the two tiles that straddle ±180° land in different worlds and
+    // one of them is dropped (a black stripe at the screen edge).
+    var minDx = double.infinity, maxDx = -double.infinity;
     var south = double.infinity, north = -double.infinity;
-    var west = double.infinity, east = -double.infinity;
-    for (final p in corners) {
-      south = south < p.latitude ? south : p.latitude;
-      north = north > p.latitude ? north : p.latitude;
-      west = west < p.longitude ? west : p.longitude;
-      east = east > p.longitude ? east : p.longitude;
+    for (final s in samples) {
+      final dx = (s.x - halfW) / world * 360;
+      if (dx < minDx) minDx = dx;
+      if (dx > maxDx) maxDx = dx;
+      final y = s.y - halfH + yc;
+      final lat = mercatorLatitudeAt((y / world).clamp(0.0, 1.0));
+      if (lat < south) south = lat;
+      if (lat > north) north = lat;
     }
+
     // Pad by exactly two tiles: enough to avoid edge flicker, small enough that
     // the candidate window stays O(visible tiles) even at z18.
-    final world = camera.worldSize;
     final padLng = 360 / world * GeoEngineTuning.tileSize * 2;
     final padT = GeoEngineTuning.tileSize * 2 / world;
     return GeoBounds(
@@ -86,8 +100,8 @@ class MercatorProjector extends GeoProjector {
           (mercatorTAt(south) + padT).clamp(0.0, 1.0)),
       north: mercatorLatitudeAt(
           (mercatorTAt(north) - padT).clamp(0.0, 1.0)),
-      west: west - padLng,
-      east: east + padLng,
+      west: camera.center.longitude + minDx - padLng,
+      east: camera.center.longitude + maxDx + padLng,
     );
   }
 }

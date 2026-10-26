@@ -17,6 +17,7 @@ CameraState _cam({
       maxZoom: 22,
     );
 
+
 void main() {
   const ortho = OrthographicProjector();
   const merc = MercatorProjector();
@@ -122,6 +123,182 @@ void main() {
       final source = Uint16List.fromList([0, 1, 2]);
       final depths = Float32List.fromList([-0.5, -0.4, 0.3]);
       expect(TileMeshBuilder.cullIndices(source, depths).length, 3);
+    });
+  });
+
+  group('parent uv rectangle', () {
+    test('the sub-rectangle is the exact quarter of the parent', () {
+      final r = parentUvRect(
+        childX: 1,
+        childY: 0,
+        dz: 1,
+        parentWidth: 256,
+        parentHeight: 256,
+      );
+      expect(r.u0, 128);
+      expect(r.v0, 0);
+      expect(r.spanU, 128);
+      expect(r.spanV, 128);
+    });
+
+    test('dz=2 splits the parent into sixteenths', () {
+      final r = parentUvRect(
+        childX: 2,
+        childY: 3,
+        dz: 2,
+        parentWidth: 256,
+        parentHeight: 256,
+      );
+      expect(r.u0, 128);
+      expect(r.v0, 192);
+      expect(r.spanU, 64);
+      expect(r.spanV, 64);
+    });
+
+    test('a 512 px parent scales accordingly', () {
+      final r = parentUvRect(
+        childX: 1,
+        childY: 1,
+        dz: 1,
+        parentWidth: 512,
+        parentHeight: 512,
+      );
+      expect(r.u0, 256);
+      expect(r.spanU, 256);
+    });
+
+    test('the four children tile the parent exactly', () {
+      final rects = [
+        for (var j = 0; j < 2; j++)
+          for (var i = 0; i < 2; i++)
+            parentUvRect(
+              childX: i,
+              childY: j,
+              dz: 1,
+              parentWidth: 256,
+              parentHeight: 256,
+            ),
+      ];
+      var covered = 0.0;
+      for (final r in rects) {
+        covered += r.spanU * r.spanV;
+      }
+      expect(covered, closeTo(256 * 256, 1e-6));
+    });
+  });
+
+  group('parent fallback projection', () {
+    test('geometry comes from the child, uv from the parent sub-rect', () {
+      final builder = TileMeshBuilder();
+      final camera = _cam(zoom: 5);
+      final parentGrid = TileGrid.of(TileSchemeKind.webMercator, 4);
+      final childGrid = TileGrid.of(TileSchemeKind.webMercator, 5);
+      final parent = builder.unitMesh(parentGrid, 8, 5, 8);
+      final child = builder.unitMesh(childGrid, 17, 11, 8);
+
+      final parentBuffers = TileMeshBuilder.projectMesh(
+        parent,
+        ortho,
+        camera,
+      );
+      final childBuffers = projectChildWithParentUv(
+        childMesh: child,
+        projector: ortho,
+        camera: camera,
+        parentWidth: 256,
+        parentHeight: 256,
+        childX: 17,
+        childY: 11,
+        dz: 1,
+      );
+
+      // The child's geometry must cover the same area as its own cell in the
+      // parent grid — i.e. it is *inside* the parent's footprint.
+      final parentMinX = parentBuffers.positions
+          .reduce(math.min);
+      final parentMaxX = parentBuffers.positions
+          .reduce(math.max);
+      final childMinX = childBuffers.positions
+          .reduce(math.min);
+      final childMaxX = childBuffers.positions
+          .reduce(math.max);
+      expect(childMinX, greaterThanOrEqualTo(parentMinX - 1e-3));
+      expect(childMaxX, lessThanOrEqualTo(parentMaxX + 1e-3));
+      expect(childMaxX - childMinX, lessThan(parentMaxX - parentMinX));
+    });
+
+    test('the sampled uv falls inside the parent sub-rectangle', () {
+      final builder = TileMeshBuilder();
+      final camera = _cam(zoom: 5);
+      final childGrid = TileGrid.of(TileSchemeKind.webMercator, 5);
+      final child = builder.unitMesh(childGrid, 17, 11, 8);
+      final rect = parentUvRect(
+        childX: 17,
+        childY: 11,
+        dz: 1,
+        parentWidth: 256,
+        parentHeight: 256,
+      );
+      final buffers = projectChildWithParentUv(
+        childMesh: child,
+        projector: ortho,
+        camera: camera,
+        parentWidth: 256,
+        parentHeight: 256,
+        childX: 17,
+        childY: 11,
+        dz: 1,
+      );
+      for (var i = 0; i < child.vertexCount; i++) {
+        final u = buffers.uvs[i * 2];
+        final v = buffers.uvs[i * 2 + 1];
+        expect(u, greaterThanOrEqualTo(rect.u0 - 1e-6));
+        expect(u, lessThanOrEqualTo(rect.u0 + rect.spanU + 1e-6));
+        expect(v, greaterThanOrEqualTo(rect.v0 - 1e-6));
+        expect(v, lessThanOrEqualTo(rect.v0 + rect.spanV + 1e-6));
+      }
+    });
+
+    test('uv equivalence: the child samples the same pixels as the parent', () {
+      // A 4x4 sample grid: the child's uv at parameter (s,t) must point at
+      // the same parent pixel as the parent's own uv at the matching point.
+      final builder = TileMeshBuilder();
+      final camera = _cam(zoom: 5);
+      final parentGrid = TileGrid.of(TileSchemeKind.webMercator, 4);
+      final childGrid = TileGrid.of(TileSchemeKind.webMercator, 5);
+      final child = builder.unitMesh(childGrid, 17, 11, 4);
+      expect(parentGrid.cols, lessThan(childGrid.cols));
+      final rect = parentUvRect(
+        childX: 17,
+        childY: 11,
+        dz: 1,
+        parentWidth: 256,
+        parentHeight: 256,
+      );
+      final buffers = projectChildWithParentUv(
+        childMesh: child,
+        projector: ortho,
+        camera: camera,
+        parentWidth: 256,
+        parentHeight: 256,
+        childX: 17,
+        childY: 11,
+        dz: 1,
+      );
+      final n = child.subdiv;
+      for (var j = 0; j <= n; j++) {
+        for (var i = 0; i <= n; i++) {
+          final idx = j * (n + 1) + i;
+          // Normalised position inside the child cell.
+          final su = i / n;
+          final sv = j / n;
+          // Expected parent pixel.
+          final expectedU = rect.u0 + su * rect.spanU;
+          final expectedV = rect.v0 + sv * rect.spanV;
+          expect(buffers.uvs[idx * 2], closeTo(expectedU, 1e-3));
+          expect(buffers.uvs[idx * 2 + 1], closeTo(expectedV, 1e-3));
+        }
+      }
     });
   });
 }

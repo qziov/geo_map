@@ -26,7 +26,10 @@ double _sinh(double x) => (math.exp(x) - math.exp(-x)) / 2;
 /// Normalized world-Y (`0` north → `1` south) of a latitude in degrees.
 double mercatorTAt(double latDeg) {
   final lat = clampMercatorLat(latDeg);
-  return (1 - mercatorY(rad(lat)) / math.pi) / 2;
+  final t = (1 - mercatorY(rad(lat)) / math.pi) / 2;
+  // Rounding at the projection limit can push t a hair outside [0,1]
+  // (e.g. -1e-16 at +90°), which would make `floor(t * rows)` return -1.
+  return t.clamp(0.0, 1.0);
 }
 
 double clampMercatorLat(double latDeg) =>

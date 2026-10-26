@@ -84,9 +84,32 @@ class TileMeshBuilder {
   /// their silhouette; [cullIndices] then drops only fully-hidden triangles.
   ///
   /// [uvOriginX]/[uvOriginY]/[uvSpan] re-map the tile's `[0,tileSize]` UV space
-  /// into a parent image's pixel space (parent-tile fallback). The common path
-  /// (origin 0, full span) reuses the cached UV array without allocating.
+  /// into a parent image's **pixel** space (parent-tile fallback and overzoom).
+  /// The common path (origin 0, full span) reuses the cached UV array without
+  /// allocating.
   MeshBuffers project(
+    UnitMesh mesh,
+    GeoProjector projector,
+    CameraState camera, {
+    Float32List? positionBuffer,
+    Float32List? depthBuffer,
+    double uvOriginX = 0,
+    double uvOriginY = 0,
+    double uvSpan = GeoEngineTuning.tileSizeD,
+  }) =>
+      projectMesh(
+        mesh,
+        projector,
+        camera,
+        positionBuffer: positionBuffer,
+        depthBuffer: depthBuffer,
+        uvOriginX: uvOriginX,
+        uvOriginY: uvOriginY,
+        uvSpan: uvSpan,
+      );
+
+  /// The projection core — stateless, so it can be used without a builder.
+  static MeshBuffers projectMesh(
     UnitMesh mesh,
     GeoProjector projector,
     CameraState camera, {
@@ -148,11 +171,13 @@ class TileMeshBuilder {
 
     final fullBand = uvOriginX == 0 &&
         uvOriginY == 0 &&
-        uvSpan == GeoEngineTuning.tileSize;
+        uvSpan == GeoEngineTuning.tileSizeD;
     Float32List outUv = mesh.uv;
     if (!fullBand) {
       outUv = Float32List(count * 2);
-      final k = uvSpan / GeoEngineTuning.tileSize;
+      // The mesh UVs run over `[0, tileSize]`; scale them into the parent's
+      // pixel space.
+      final k = uvSpan / GeoEngineTuning.tileSizeD;
       for (var i = 0; i < count; i++) {
         outUv[i * 2] = uvOriginX + mesh.uv[i * 2] * k;
         outUv[i * 2 + 1] = uvOriginY + mesh.uv[i * 2 + 1] * k;
@@ -196,4 +221,82 @@ class TileMeshBuilder {
     _cache.clear();
     buildCount = 0;
   }
+}
+
+/// The sub-rectangle of a parent image that holds one descendant tile.
+///
+/// Web Mercator rows are exact halves of their parent row (see
+/// `tile_scheme.dart`: `north(2y) == parent.north(y)`), so the descendant
+/// occupies an **axis-aligned** rectangle of the parent image:
+///
+/// ```text
+/// u0 = (childX mod 2^dz) / 2^dz * parentWidth
+/// v0 = (childY mod 2^dz) / 2^dz * parentHeight
+/// span = parentWidth / 2^dz
+/// ```
+///
+/// This is the maplibre `getFadeProperties` / parent-tile fade mechanism, and
+/// it is also how **overzoom** is expressed: the renderer draws the geometry
+/// of the deeper (render) cell but samples the shallower (data) image.
+({double u0, double v0, double spanU, double spanV}) parentUvRect({
+  required int childX,
+  required int childY,
+  required int dz,
+  required double parentWidth,
+  required double parentHeight,
+}) {
+  final n = 1 << dz;
+  final spanU = parentWidth / n;
+  final spanV = parentHeight / n;
+  return (
+    u0: (childX % n) * spanU,
+    v0: (childY % n) * spanV,
+    spanU: spanU,
+    spanV: spanV,
+  );
+}
+
+/// Project a descendant tile while sampling a **parent** image.
+///
+/// The geometry comes from [childMesh] (the deeper, finer grid) and the UV
+/// from the parent's sub-rectangle. Getting this backwards — parent geometry
+/// with a child UV — stretches a quarter of the parent image across the whole
+/// parent footprint and is the classic source of "mosaic blocks" during a zoom
+/// transition.
+///
+/// [uvSpan] is expressed in the parent image's own pixel space, so the caller
+/// must pass the *actual* decoded image size, not the nominal tile size.
+MeshBuffers projectChildWithParentUv({
+  required UnitMesh childMesh,
+  required GeoProjector projector,
+  required CameraState camera,
+  required double parentWidth,
+  required double parentHeight,
+  required int childX,
+  required int childY,
+  required int dz,
+  Float32List? positionBuffer,
+  Float32List? depthBuffer,
+}) {
+  final rect = parentUvRect(
+    childX: childX,
+    childY: childY,
+    dz: dz,
+    parentWidth: parentWidth,
+    parentHeight: parentHeight,
+  );
+  // The mesh UVs run over `[0, tileSize]`; `projectMesh` scales them into the
+  // parent's pixel space via `uvSpan / tileSize`. The child's own extent must
+  // cover exactly the parent's sub-rectangle, so `uvSpan` is that rectangle's
+  // width in parent pixels.
+  return TileMeshBuilder.projectMesh(
+    childMesh,
+    projector,
+    camera,
+    positionBuffer: positionBuffer,
+    depthBuffer: depthBuffer,
+    uvOriginX: rect.u0,
+    uvOriginY: rect.v0,
+    uvSpan: rect.spanU,
+  );
 }
