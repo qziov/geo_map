@@ -12,6 +12,7 @@ export 'src/projection/geo_projector.dart';
 export 'src/projection/mercator_projector.dart';
 export 'src/projection/orthographic_projector.dart';
 export 'src/style/expression.dart';
+export 'src/style/geojson.dart';
 export 'src/style/style_color.dart';
 export 'src/style/style_filter.dart';
 export 'src/style/style_properties.dart';

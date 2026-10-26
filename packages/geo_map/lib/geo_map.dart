@@ -13,6 +13,21 @@ export 'src/engine/tile_engine.dart';
 export 'src/engine/tile_geometry.dart';
 export 'src/engine/tile_layer.dart';
 export 'src/gesture/globe_gesture_overlay.dart';
+// Re-export the style-spec API so apps only need `package:geo_map/geo_map.dart`.
+export 'package:geo_map_core/geo_map_core.dart'
+    show
+        StyleSpec,
+        StyleLayer,
+        StyleColor,
+        PropertyValue,
+        Expr,
+        ExpressionContext,
+        GeoJsonFeature,
+        GeoJsonGeometry,
+        parseGeoJsonFeatures,
+        compileFilter,
+        FeaturePredicate;
+export 'src/style/style_vector_layer.dart';
 export 'src/globe/globe_image_layer.dart';
 export 'src/globe/geojson_vector_source.dart';
 export 'src/globe/globe_projection.dart';
