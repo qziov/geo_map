@@ -177,6 +177,23 @@ class TileSelector {
         }
       }
     }
+    // Request from the screen centre outward (MapLibre sorts by `distanceSq`),
+    // so the view fills in the middle first instead of marching north→south.
+    final cx = camera.size.width / 2;
+    final cy = camera.size.height / 2;
+    out.sort((a, b) {
+      final ca = grid.tileCenter(a.x, a.y);
+      final cb = grid.tileCenter(b.x, b.y);
+      final pa = projector.project(ca, camera);
+      final pb = projector.project(cb, camera);
+      final da = pa == null
+          ? double.infinity
+          : (pa.x - cx) * (pa.x - cx) + (pa.y - cy) * (pa.y - cy);
+      final db = pb == null
+          ? double.infinity
+          : (pb.x - cx) * (pb.x - cx) + (pb.y - cy) * (pb.y - cy);
+      return da.compareTo(db);
+    });
     return out;
   }
 

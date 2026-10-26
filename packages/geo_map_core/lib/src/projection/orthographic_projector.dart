@@ -79,48 +79,108 @@ class OrthographicProjector extends GeoProjector {
 
   @override
   GeoBounds approximateVisibleBounds(CameraState camera) {
-    // Analytic window. A sampled one misses the extreme longitudes that high
-    // latitudes sweep in near the limb (which is exactly where black tiles appear).
+    // Exact visible footprint from the viewport, not an analytic angular
+    // radius. The old formula used `asin(halfDiag / r)` — the viewport's angle
+    // as seen from the *globe centre* — which, for an orthographic globe, is
+    // only correct when the disc is larger than the viewport; once the disc is
+    // smaller it clamps to 90° and the window collapses to the whole front
+    // hemisphere regardless of zoom. MapLibre (`getBounds`) instead unprojects
+    // the viewport corners and takes the lat/lng extremes, snapping off-disc
+    // samples to the horizon ring.
+    final w = camera.size.width;
+    final h = camera.size.height;
+    final cx = w / 2;
+    final cy = h / 2;
     final r = math.max(camera.radiusPx, 1.0);
-    final halfDiag = camera.size.diagonal / 2;
-    final alpha = math.asin(math.min(1.0, halfDiag / r)); // angular screen radius
-    final lat0 = camera.clampedLatitude;
+    final center = camera.center;
 
-    var south = lat0 - alpha * rad2deg;
-    var north = lat0 + alpha * rad2deg;
-    // One tile of slack so a tile straddling the edge is not dropped.
-    final slackDeg = rad2deg * math.max(8 / r, 0.0) + 0.02;
-    // Clamp to the sphere, NOT the mercator limit: the visible band may lie
-    // entirely inside the polar cap, and clamping here made the graticule and
-    // selector agree on an empty band.
-    south = (south - slackDeg).clamp(-90.0, 90.0);
-    north = (north + slackDeg).clamp(-90.0, 90.0);
-    // Max |Δlng| of a point within `alpha` of the centre, taken over the lat band.
-    final phi0 = rad(lat0);
-    var maxDLng = 0.0;
-    for (var i = 0; i <= 16; i++) {
-      final phi = rad(south + (north - south) * i / 16);
-      final denom = math.cos(phi0) * math.cos(phi);
-      if (denom.abs() < 1e-9) {
-        maxDLng = 180;
-        break;
+    // Four corners + four edge midpoints.
+    const samples = <(double, double)>[
+      (0.0, 0.0),
+      (0.5, 0.0),
+      (1.0, 0.0),
+      (1.0, 0.5),
+      (1.0, 1.0),
+      (0.5, 1.0),
+      (0.0, 1.0),
+      (0.0, 0.5),
+    ];
+
+    LatLng? unprojectClamped(double fx, double fy) {
+      final p = Vec2(fx * w, fy * h);
+      var geo = unproject(p, camera);
+      if (geo == null) {
+        // Off the disc: snap to the nearest point on the limb (horizon ring),
+        // i.e. along the ray from the disc centre, at radius r.
+        final dx = p.x - cx;
+        final dy = p.y - cy;
+        final len = math.sqrt(dx * dx + dy * dy);
+        if (len < 1e-6) return null;
+        final t = r / len;
+        geo = unproject(Vec2(cx + dx * t, cy + dy * t), camera);
       }
-      final cosD = (math.cos(alpha) - math.sin(phi0) * math.sin(phi)) / denom;
-      if (cosD <= -1.0) {
-        maxDLng = 180;
-        break;
-      }
-      final d = math.acos(cosD.clamp(-1.0, 1.0)) * rad2deg;
-      if (d > maxDLng) maxDLng = d;
+      return geo;
     }
-    final padLng = math.min(180.0, maxDLng) + 1.0;
+
+    var mostWest = 0.0, mostEast = 0.0, mostNorth = 0.0, mostSouth = 0.0;
+    var anyOnGlobe = false;
+    for (final s in samples) {
+      final geo = unprojectClamped(s.$1, s.$2);
+      if (geo == null) continue;
+      anyOnGlobe = true;
+      final dLng = _angularDiff(geo.longitude, center.longitude);
+      final dLat = geo.latitude - center.latitude;
+      if (dLng < mostWest) mostWest = dLng;
+      if (dLng > mostEast) mostEast = dLng;
+      if (dLat > mostNorth) mostNorth = dLat;
+      if (dLat < mostSouth) mostSouth = dLat;
+    }
+
+    // A pole on screen means the meridians converge there and the visible
+    // longitude span opens to the full ±180 — the same case MapLibre's
+    // `getBounds` patches after sampling the corners.
+    final poleMargin = math.min(w, h) * 0.05;
+    void checkPole(double lat, double setNorthFromCenter, double setSouthFromCenter) {
+      final p = project(LatLng(lat, center.longitude), camera);
+      if (p == null) return;
+      if (p.x < -poleMargin ||
+          p.x > w + poleMargin ||
+          p.y < -poleMargin ||
+          p.y > h + poleMargin) {
+        return;
+      }
+      if (setNorthFromCenter > mostNorth) mostNorth = setNorthFromCenter;
+      if (setSouthFromCenter < mostSouth) mostSouth = setSouthFromCenter;
+      mostWest = -180;
+      mostEast = 180;
+    }
+    checkPole(90, 90 - center.latitude, 0);
+    checkPole(-90, 0, -90 - center.latitude);
+
+    if (!anyOnGlobe) {
+      // Disc entirely off-screen: nothing visible — return a degenerate point.
+      return GeoBounds(
+        south: center.latitude,
+        west: center.longitude,
+        north: center.latitude,
+        east: center.longitude,
+      );
+    }
 
     return GeoBounds(
-      south: south,
-      north: north,
-      west: camera.center.longitude - padLng,
-      east: camera.center.longitude + padLng,
+      south: center.latitude + mostSouth,
+      north: center.latitude + mostNorth,
+      west: center.longitude + mostWest,
+      east: center.longitude + mostEast,
     );
+  }
+
+  /// Shortest signed angular difference `a - b` in (-180, 180].
+  static double _angularDiff(double a, double b) {
+    var d = (a - b) % 360;
+    if (d > 180) d -= 360;
+    if (d < -180) d += 360;
+    return d;
   }
 
 }

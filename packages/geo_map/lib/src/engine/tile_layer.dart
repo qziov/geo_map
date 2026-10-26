@@ -30,6 +30,7 @@
 /// whole texture over it.
 library;
 
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:geo_map_core/geo_map_core.dart';
 
@@ -81,7 +82,8 @@ class TileLayer extends StatefulWidget {
   State<TileLayer> createState() => _TileLayerState();
 }
 
-class _TileLayerState extends State<TileLayer> {
+class _TileLayerState extends State<TileLayer>
+    with SingleTickerProviderStateMixin {
   /// The unit-mesh cache is shared between frames: the unit sphere does not
   /// depend on the projection, so panning does not rebuild geometry.
   final TileMeshBuilder _meshBuilder = TileMeshBuilder();
@@ -91,17 +93,43 @@ class _TileLayerState extends State<TileLayer> {
 
   TileEngine get _engine => widget.engine ?? _owned!;
 
+  /// The engine we currently hold a `_onEngineChanged` listener on.
+  TileEngine? _attachedEngine;
+
+  /// Per-frame driver for the fade-in: while any tile is mid-fade we keep
+  /// repainting so the opacity actually animates (MapLibre keeps
+  /// `triggerRepaint` alive while `hasRasterTransition`).
+  late final Ticker _fadeTicker;
+
+  /// Whether the fade ticker is currently running.
+  bool _fadeActive = false;
+
   @override
   void initState() {
     super.initState();
     if (widget.engine == null) {
       _owned = TileEngine(source: widget.source);
     }
+    _attachEngine(_engine);
+    _fadeTicker = createTicker(_onFadeTick);
+  }
+
+  /// Attach our repaint trigger to [engine], detaching from any previous one.
+  void _attachEngine(TileEngine engine) {
+    if (_attachedEngine == engine) return;
+    _attachedEngine?.removeListener(_onEngineChanged);
+    _attachedEngine = engine;
+    engine.addListener(_onEngineChanged);
   }
 
   @override
   void didUpdateWidget(TileLayer oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // The engine instance may have changed (host injected / withdrew one):
+    // re-attach the repaint trigger to whichever engine is now active.
+    if (oldWidget.engine != widget.engine) {
+      _attachEngine(_engine);
+    }
     if (widget.engine != null) {
       // The host took over — retire ours, do not touch theirs.
       _retireOwned();
@@ -116,17 +144,48 @@ class _TileLayerState extends State<TileLayer> {
     }
   }
 
+  /// A tile just decoded: if it (or anything else) is still fading in, start
+  /// the repaint loop. This also covers the stationary-load case — without a
+  /// camera move the only thing that changes is the fade clock.
+  void _onEngineChanged() {
+    if (!_fadeActive && _engine.hasFadingTiles()) {
+      _fadeActive = true;
+      _fadeTicker.start();
+    }
+  }
+
+  /// One tick of the fade loop: repaint, and stop once every tile has settled.
+  void _onFadeTick(Duration _) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (!_engine.hasFadingTiles(now)) {
+      _fadeActive = false;
+      _fadeTicker.stop();
+      // One last repaint to land every tile at full opacity.
+      setState(() {});
+      return;
+    }
+    setState(() {});
+  }
+
   /// Drop the engine we own after the frame: the current `ListenableBuilder`
   /// is still attached to it while the tree rebuilds.
   void _retireOwned() {
     final old = _owned;
     if (old == null) return;
+    // The listener was already moved off it by `_attachEngine` if the engine
+    // instance changed; remove defensively so a disposed notifier is clean.
+    old.removeListener(_onEngineChanged);
+    if (_attachedEngine == old) _attachedEngine = null;
     _owned = null;
     WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
   }
 
   @override
   void dispose() {
+    if (_fadeActive) _fadeTicker.stop();
+    _fadeTicker.dispose();
+    _attachedEngine?.removeListener(_onEngineChanged);
+    _attachedEngine = null;
     _owned?.dispose();
     super.dispose();
   }
@@ -145,6 +204,9 @@ class _TileLayerState extends State<TileLayer> {
             mode: widget.mode,
             camera: camera,
             meshBuilder: _meshBuilder,
+            // A live clock: changes on every rebuild so `shouldRepaint` keeps
+            // redrawing through the fade-in window.
+            fadeClock: DateTime.now().microsecondsSinceEpoch,
           ),
         ),
       ),
@@ -158,6 +220,7 @@ class _TilePainter extends CustomPainter {
     required this.mode,
     required this.camera,
     required this.meshBuilder,
+    required this.fadeClock,
   });
 
   final TileEngine engine;
@@ -165,11 +228,22 @@ class _TilePainter extends CustomPainter {
   final MapCamera camera;
   final TileMeshBuilder meshBuilder;
 
+  /// Monotonic clock passed in by the fade ticker. It changes on every
+  /// repaint, so the canvas is redrawn (not just relaid out) during the
+  /// fade-in window — without it `shouldRepaint` would see an unchanged
+  /// camera/engine/mode and skip the frame.
+  final int fadeClock;
+
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
     final source = engine.source;
     final scheme = source.scheme;
+
+    // Wall clock for the self-fade-in (MapLibre `fadeDuration`). Computed
+    // once per frame so every tile in this frame shares the same opacity
+    // progress.
+    final now = DateTime.now().millisecondsSinceEpoch;
 
     // ── Camera ──────────────────────────────────────────────────────────────
     // The vendored `MapCamera` speaks in screen space for the globe and in
@@ -244,7 +318,8 @@ class _TilePainter extends CustomPainter {
 
     // The previous frame is painted underneath, so a zoom transition never
     // flashes black. Only tiles of the *current* data level are reused: a
-    // different level would carry a different magnification.
+    // different level would carry a different magnification. The underlay is
+    // kept at full opacity — it is the "previous frame", not a fresh load.
     for (final draw in engine.previousDraws) {
       if (draw.geoKey.z != dataZoom) continue;
       geometry.drawTile(canvas, draw, camera: state, opacity: 1);
@@ -260,7 +335,10 @@ class _TilePainter extends CustomPainter {
         continue;
       }
       for (final draw in draws) {
-        geometry.drawTile(canvas, draw, camera: state, opacity: 1);
+        // Self fade-in: a freshly decoded tile rises 0→1 over
+        // [TileEngine.fadeDurationMs] while the underlay shows through.
+        final opacity = engine.fadeOpacity(draw.image, now);
+        geometry.drawTile(canvas, draw, camera: state, opacity: opacity);
         engine.markRendered(draw.sourceKey);
         frameDraws.add(draw);
         drawn++;
@@ -275,7 +353,8 @@ class _TilePainter extends CustomPainter {
         camera: state,
         dataZoom: dataZoom,
       )) {
-        geometry.drawCap(canvas, cap, camera: state, opacity: 1);
+        final opacity = engine.fadeOpacity(cap.image, now);
+        geometry.drawCap(canvas, cap, camera: state, opacity: opacity);
         // The cap samples a real tile: protect it from eviction like any other
         // tile that was on screen this frame.
         engine.markRendered(cap.sourceKey);
@@ -305,5 +384,6 @@ class _TilePainter extends CustomPainter {
   bool shouldRepaint(covariant _TilePainter oldDelegate) =>
       oldDelegate.camera != camera ||
       oldDelegate.engine != engine ||
-      oldDelegate.mode != mode;
+      oldDelegate.mode != mode ||
+      oldDelegate.fadeClock != fadeClock;
 }

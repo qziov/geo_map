@@ -41,10 +41,15 @@ import '../globe/tile_source.dart';
 
 /// A decoded tile image plus its shader.
 class TileImage {
-  TileImage(this.image, this.shader);
+  TileImage(this.image, this.shader, {this.loadedAt});
 
   final ui.Image image;
   final ui.ImageShader shader;
+
+  /// Wall-clock time (ms) the image finished decoding, used for the self
+  /// fade-in (MapLibre `fadeDuration`). `null` marks a pre-settled image that
+  /// always draws at full opacity.
+  final int? loadedAt;
 
   int get bytes => image.width * image.height * 4;
 
@@ -294,7 +299,11 @@ class TileEngine extends ChangeNotifier {
         _identity(),
         filterQuality: ui.FilterQuality.low,
       );
-      _images[key] = TileImage(image, shader);
+      _images[key] = TileImage(
+        image,
+        shader,
+        loadedAt: DateTime.now().millisecondsSinceEpoch,
+      );
       _policy.put(key, image.width * image.height * 4);
       _policy.clearFailure(key);
       for (final evicted in _policy.trim()) {
@@ -648,6 +657,41 @@ class TileEngine extends ChangeNotifier {
       );
     }
     return null;
+  }
+
+  // --- fade-in (MapLibre `fadeDuration`) ----------------------------------------
+
+  /// Self-fade window for a freshly decoded raster tile (ms). Mirrors
+  /// MapLibre's `fadeDuration` (default 300).
+  static const int fadeDurationMs = 300;
+
+  /// Linear self-fade opacity (0→1) for [image] at wall-clock [now].
+  ///
+  /// A `null` [TileImage.loadedAt] (e.g. a pre-cached image) is always 1. This
+  /// is the raster-only "load fade" of MapLibre — a tile is blended in from
+  /// transparent to opaque instead of popping in (see `draw_raster.ts`
+  /// `getSelfFadeValues`).
+  double fadeOpacity(TileImage image, int now) {
+    final loadedAt = image.loadedAt;
+    if (loadedAt == null) return 1.0;
+    final t = (now - loadedAt) / fadeDurationMs;
+    if (t <= 0) return 0.0;
+    if (t >= 1) return 1.0;
+    return t;
+  }
+
+  /// Whether any cached tile is still inside its fade window at [now].
+  ///
+  /// Drives the per-frame repaint loop: while this is true the layer keeps
+  /// redrawing so the fade actually animates (MapLibre keeps `triggerRepaint`
+  /// alive while `hasRasterTransition`).
+  bool hasFadingTiles([int? now]) {
+    final t = now ?? DateTime.now().millisecondsSinceEpoch;
+    for (final img in _images.values) {
+      final loadedAt = img.loadedAt;
+      if (loadedAt != null && t - loadedAt < fadeDurationMs) return true;
+    }
+    return false;
   }
 
   // --- frame bookkeeping --------------------------------------------------------
