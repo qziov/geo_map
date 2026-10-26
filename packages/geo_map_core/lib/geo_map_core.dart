@@ -13,6 +13,8 @@ export 'src/projection/mercator_projector.dart';
 export 'src/projection/orthographic_projector.dart';
 export 'src/style/expression.dart';
 export 'src/style/style_color.dart';
+export 'src/style/style_filter.dart';
+export 'src/style/style_properties.dart';
 export 'src/style/style_spec.dart';
 export 'src/tiles/polar_cap.dart';
 export 'src/tiles/tile_cache_policy.dart';

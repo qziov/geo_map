@@ -84,4 +84,88 @@ void main() {
     expect(dataDriven.isExpression, isTrue);
     expect(dataDriven.isFeatureConstant, isFalse);
   });
+
+  test('defaults are applied per layer type', () {
+    final spec = StyleSpec.parse({
+      'version': 8,
+      'layers': [
+        {'id': 'f', 'type': 'fill', 'source': 's'},
+        {'id': 'l', 'type': 'line', 'source': 's'},
+      ],
+    });
+
+    final fill = spec.layers[0];
+    expect(fill.color('fill-color', const ExpressionContext(zoom: 5)),
+        const StyleColor(0, 0, 0));
+    expect(fill.number('fill-opacity', const ExpressionContext(zoom: 5)), 1);
+    expect(fill.boolean('fill-antialias', const ExpressionContext(zoom: 5)),
+        isTrue);
+
+    final line = spec.layers[1];
+    expect(line.number('line-width', const ExpressionContext(zoom: 5)), 1);
+    expect(line.string('line-join', const ExpressionContext(zoom: 5)), 'miter');
+    expect(line.string('line-cap', const ExpressionContext(zoom: 5)), 'butt');
+  });
+
+  test('typed getter reads an expression', () {
+    final spec = StyleSpec.parse({
+      'version': 8,
+      'layers': [
+        {
+          'id': 'l',
+          'type': 'line',
+          'source': 's',
+          'paint': {
+            'line-width': [
+              'interpolate', ['linear'], ['zoom'], 0, 1, 10, 11,
+            ],
+          },
+        },
+      ],
+    });
+    expect(spec.layers[0].number('line-width', const ExpressionContext(zoom: 5)),
+        closeTo(6, 1e-9));
+  });
+
+  test('filter is compiled and evaluable', () {
+    final spec = StyleSpec.parse({
+      'version': 8,
+      'layers': [
+        {
+          'id': 'f',
+          'type': 'fill',
+          'source': 's',
+          'filter': ['==', 'use', 'park'],
+        },
+      ],
+    });
+    final f = spec.layers[0];
+    expect(f.filter({'use': 'park'}), isTrue);
+    expect(f.filter({'use': 'road'}), isFalse);
+  });
+
+  test('visibility none hides a layer', () {
+    final spec = StyleSpec.parse({
+      'version': 8,
+      'layers': [
+        {
+          'id': 'f',
+          'type': 'fill',
+          'source': 's',
+          'layout': {'visibility': 'none'},
+        },
+      ],
+    });
+    expect(spec.layers[0].isVisibleAt(10), isFalse);
+  });
+
+  test('unknown layer type parses but is not supported', () {
+    final spec = StyleSpec.parse({
+      'version': 8,
+      'layers': [
+        {'id': 's', 'type': 'symbol', 'source': 's'},
+      ],
+    });
+    expect(spec.layers[0].isSupported, isFalse);
+  });
 }

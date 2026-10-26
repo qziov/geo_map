@@ -1,14 +1,17 @@
-/// A minimal style-spec model (M1 spike): sources + layers + paint/layout
-/// properties that are either constants or expressions.
+/// A minimal style-spec model (M1): sources + layers + paint/layout properties
+/// that are either constants or expressions, plus a compiled feature filter.
 ///
 /// Aligns with MapLibre's style JSON (`v8.json` `$root`/`layer`) and the
 /// `PropertyValue` / `PossiblyEvaluatedPropertyValue` split in
 /// `src/style/properties.ts`: a property keeps its raw/expression form and is
-/// evaluated against an [ExpressionContext] at draw time.
+/// evaluated against an [ExpressionContext] at draw time. Defaults come from
+/// [layerPaintDefs] / [layerLayoutDefs] (matching `v8.json`).
 library;
 
 import 'expression.dart';
 import 'style_color.dart';
+import 'style_filter.dart';
+import 'style_properties.dart';
 
 class StyleSpec {
   StyleSpec({
@@ -54,11 +57,12 @@ class StyleLayer {
     this.maxZoom,
     this.paint = const {},
     this.layout = const {},
+    this.filter = matchAllFeatures,
   });
 
   final String id;
 
-  /// `fill` or `line` in the M1 subset.
+  /// `fill` or `line` in the M1 subset (other types parse but are not drawn).
   final String type;
   final String? source;
   final String? sourceLayer;
@@ -67,45 +71,90 @@ class StyleLayer {
   final Map<String, PropertyValue> paint;
   final Map<String, PropertyValue> layout;
 
-  /// Paint properties whose values are colors (so constants are parsed to
-  /// [StyleColor] and interpolation mixes in RGB).
-  static const Set<String> _colorProps = {
-    'fill-color',
-    'fill-outline-color',
-    'line-color',
-  };
+  /// Compiled filter over feature properties (always-true when absent).
+  final FeaturePredicate filter;
+
+  /// Whether the M1 renderer can draw this layer type.
+  bool get isSupported => type == 'fill' || type == 'line';
 
   static StyleLayer parse(Map<String, Object?> json) {
-    Map<String, PropertyValue> parseProps(Object? raw, {required bool isPaint}) {
+    final id = '${json['id'] ?? ''}';
+    final type = '${json['type'] ?? ''}';
+    final paintDefs =
+        layerPaintDefs[type] ?? const <String, StylePropertyDef>{};
+    final layoutDefs =
+        layerLayoutDefs[type] ?? const <String, StylePropertyDef>{};
+
+    Map<String, PropertyValue> parseProps(
+      Object? raw,
+      Map<String, StylePropertyDef> defs,
+    ) {
       final out = <String, PropertyValue>{};
       if (raw is Map) {
         raw.forEach((k, v) {
           final key = '$k';
           out[key] = PropertyValue.fromJson(
             v,
-            isColor: isPaint && _colorProps.contains(key),
+            isColor: defs[key]?.type == StylePropertyType.color,
           );
         });
       }
+      // Apply spec defaults for known properties that were not set.
+      defs.forEach((key, def) {
+        if (out.containsKey(key) || def.defaultValue == null) return;
+        out[key] = PropertyValue.fromJson(
+          def.defaultValue,
+          isColor: def.type == StylePropertyType.color,
+        );
+      });
       return out;
     }
 
     return StyleLayer(
-      id: '${json['id'] ?? ''}',
-      type: '${json['type'] ?? ''}',
+      id: id,
+      type: type,
       source: json['source']?.toString(),
       sourceLayer: json['source-layer']?.toString(),
       minZoom: json['minzoom'] as num?,
       maxZoom: json['maxzoom'] as num?,
-      paint: parseProps(json['paint'], isPaint: true),
-      layout: parseProps(json['layout'], isPaint: false),
+      paint: parseProps(json['paint'], paintDefs),
+      layout: parseProps(json['layout'], layoutDefs),
+      filter: compileFilter(json['filter']),
     );
   }
 
-  /// MapLibre visibility: `minzoom <= zoom < maxzoom`.
+  /// Evaluate any paint or layout property (paint first, then layout).
+  Object? valueOf(String name, ExpressionContext ctx) {
+    final pv = paint[name] ?? layout[name];
+    return pv?.evaluate(ctx);
+  }
+
+  double? number(String name, ExpressionContext ctx) {
+    final v = valueOf(name, ctx);
+    return v is num ? v.toDouble() : null;
+  }
+
+  StyleColor? color(String name, ExpressionContext ctx) {
+    final v = valueOf(name, ctx);
+    if (v == null) return null;
+    return v is StyleColor ? v : StyleColor.parse(v);
+  }
+
+  String? string(String name, ExpressionContext ctx) =>
+      valueOf(name, ctx)?.toString();
+
+  bool? boolean(String name, ExpressionContext ctx) {
+    final v = valueOf(name, ctx);
+    return v is bool ? v : null;
+  }
+
+  /// MapLibre visibility: `minzoom <= zoom < maxzoom` and `visibility != none`.
   bool isVisibleAt(double zoom) {
     if (minZoom != null && zoom < minZoom!) return false;
     if (maxZoom != null && zoom >= maxZoom!) return false;
+    if (string('visibility', ExpressionContext(zoom: zoom)) == 'none') {
+      return false;
+    }
     return true;
   }
 }
