@@ -1,0 +1,78 @@
+name: API docs
+
+# Build `dart doc` for both packages and publish to GitHub Pages.
+#
+# One-time setup: in the repository Settings → Pages, set the source to the
+# `gh-pages` branch (this workflow pushes there with `force_orphan`).
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: api-docs
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Flutter bundles Dart, and `geo_map` is a Flutter package, so one setup
+      # covers both `dart doc` runs.
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Docs — geo_map_core (pure Dart)
+        working-directory: packages/geo_map_core
+        run: |
+          dart pub get
+          dart doc --output ../../doc/api/geo_map_core
+
+      - name: Docs — geo_map (Flutter shell)
+        working-directory: packages/geo_map
+        run: |
+          flutter pub get
+          dart doc --output ../../doc/api/geo_map
+
+      - name: Landing page
+        run: |
+          cat > doc/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>geo_map API docs</title>
+            <style>
+              body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+                     max-width: 640px; margin: 64px auto; padding: 0 16px;
+                     line-height: 1.7; color: #222; }
+              a { color: #3498db; }
+              code { background: #f3f3f3; padding: 1px 5px; border-radius: 4px; }
+            </style>
+          </head>
+          <body>
+            <h1>geo_map API docs</h1>
+            <p>Self-contained 2D/3D Flutter map engine.</p>
+            <ul>
+              <li><a href="api/geo_map/">geo_map</a> — Flutter shell: <code>GeoMap</code> widget, unified render stack, sources</li>
+              <li><a href="api/geo_map_core/">geo_map_core</a> — pure-Dart core: projection, camera, selection, tiles</li>
+            </ul>
+          </body>
+          </html>
+          HTML
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./doc
+          publish_branch: gh-pages
+          force_orphan: true
