@@ -149,4 +149,68 @@ void main() {
       expect(both.isZoomConstant, isFalse);
     });
   });
+
+  group('let / var / match / in / to-boolean', () {
+    test('let binds, and a later binding sees an earlier one', () {
+      final e = parseExpression([
+        'let', 'a', ['get', 'x'], 'b', ['var', 'a'], ['var', 'b'],
+      ]);
+      expect(e.evaluate(ctx(props: {'x': 7})), 7);
+    });
+
+    test('a var without a let binding is null', () {
+      expect(parseExpression(['var', 'nope']).evaluate(ctx()), isNull);
+    });
+
+    test('match picks scalar and array labels', () {
+      final e = parseExpression([
+        'match', ['get', 'kind'],
+        'a', 'A',
+        ['b', 'c'], 'BC',
+        'other',
+      ]);
+      expect(e.evaluate(ctx(props: {'kind': 'a'})), 'A');
+      expect(e.evaluate(ctx(props: {'kind': 'c'})), 'BC');
+      expect(e.evaluate(ctx(props: {'kind': 'z'})), 'other');
+    });
+
+    test('in checks arrays and substrings', () {
+      final arr = parseExpression(['in', ['get', 'k'], ['literal', ['a', 'b']]]);
+      expect(arr.evaluate(ctx(props: {'k': 'a'})), isTrue);
+      expect(arr.evaluate(ctx(props: {'k': 'z'})), isFalse);
+      final sub = parseExpression(['in', 'ell', ['literal', 'hello']]);
+      expect(sub.evaluate(ctx()), isTrue);
+    });
+
+    test('to-boolean coerces numbers and strings', () {
+      expect(parseExpression(['to-boolean', 1]).evaluate(ctx()), isTrue);
+      expect(parseExpression(['to-boolean', 0]).evaluate(ctx()), isFalse);
+      expect(parseExpression(['to-boolean', 'true']).evaluate(ctx()), isTrue);
+    });
+  });
+
+  group('zoom placement validation', () {
+    test('zoom as a step/interpolate input is allowed', () {
+      expect(
+        () => validateZoomUsage(parseExpression(
+            ['interpolate', ['linear'], ['zoom'], 0, 1, 10, 2])),
+        returnsNormally,
+      );
+      expect(
+        () => validateZoomUsage(parseExpression(['step', ['zoom'], 0, 10, 1])),
+        returnsNormally,
+      );
+    });
+
+    test('zoom nested in another operator is rejected', () {
+      expect(
+        () => validateZoomUsage(parseExpression(['==', ['zoom'], 5])),
+        throwsFormatException,
+      );
+    });
+
+    test('a bare zoom is not a valid property value', () {
+      expect(() => PropertyValue.fromJson(['zoom']), throwsFormatException);
+    });
+  });
 }

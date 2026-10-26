@@ -25,10 +25,14 @@ class ExpressionContext {
   const ExpressionContext({
     required this.zoom,
     this.properties = const {},
+    this.variables = const {},
   });
 
   final double zoom;
   final Map<String, Object?> properties;
+
+  /// Bindings introduced by [`let`] expressions.
+  final Map<String, Object?> variables;
 }
 
 /// A parsed expression node.
@@ -349,6 +353,132 @@ class ToColorExpr extends Expr {
   bool get isZoomConstant => arg.isZoomConstant;
 }
 
+// --- let / var / match / in / to-boolean --------------------------------------
+
+class LetExpr extends Expr {
+  LetExpr(this.bindings, this.body);
+
+  final List<(String, Expr)> bindings;
+  final Expr body;
+
+  @override
+  Object? evaluate(ExpressionContext ctx) {
+    final vars = Map<String, Object?>.of(ctx.variables);
+    for (final (name, value) in bindings) {
+      vars[name] = value.evaluate(ExpressionContext(
+        zoom: ctx.zoom,
+        properties: ctx.properties,
+        variables: vars,
+      ));
+    }
+    return body.evaluate(ExpressionContext(
+      zoom: ctx.zoom,
+      properties: ctx.properties,
+      variables: vars,
+    ));
+  }
+
+  @override
+  bool get isFeatureConstant =>
+      bindings.every((b) => b.$2.isFeatureConstant) && body.isFeatureConstant;
+
+  @override
+  bool get isZoomConstant =>
+      bindings.every((b) => b.$2.isZoomConstant) && body.isZoomConstant;
+}
+
+class VarExpr extends Expr {
+  const VarExpr(this.name);
+  final String name;
+
+  @override
+  Object? evaluate(ExpressionContext ctx) => ctx.variables[name];
+
+  // The enclosing `let` accounts for the dependency; a bare `var` is constant.
+  @override
+  bool get isFeatureConstant => true;
+
+  @override
+  bool get isZoomConstant => true;
+}
+
+class MatchExpr extends Expr {
+  MatchExpr(this.input, this.pairs, this.fallback);
+
+  final Expr input;
+
+  /// label (a scalar, or a list of scalars) -> output.
+  final List<(Object?, Expr)> pairs;
+  final Expr fallback;
+
+  @override
+  Object? evaluate(ExpressionContext ctx) {
+    final v = input.evaluate(ctx);
+    for (final (label, out) in pairs) {
+      if (label is List) {
+        if (label.contains(v)) return out.evaluate(ctx);
+      } else if (label == v) {
+        return out.evaluate(ctx);
+      }
+    }
+    return fallback.evaluate(ctx);
+  }
+
+  @override
+  bool get isFeatureConstant =>
+      input.isFeatureConstant &&
+      pairs.every((p) => p.$2.isFeatureConstant) &&
+      fallback.isFeatureConstant;
+
+  @override
+  bool get isZoomConstant =>
+      input.isZoomConstant &&
+      pairs.every((p) => p.$2.isZoomConstant) &&
+      fallback.isZoomConstant;
+}
+
+class InExpr extends Expr {
+  const InExpr(this.needle, this.haystack);
+  final Expr needle;
+  final Expr haystack;
+
+  @override
+  Object? evaluate(ExpressionContext ctx) {
+    final h = haystack.evaluate(ctx);
+    final n = needle.evaluate(ctx);
+    if (h is List) return h.contains(n);
+    if (h is String) return h.contains('$n');
+    return false;
+  }
+
+  @override
+  bool get isFeatureConstant =>
+      needle.isFeatureConstant && haystack.isFeatureConstant;
+
+  @override
+  bool get isZoomConstant => needle.isZoomConstant && haystack.isZoomConstant;
+}
+
+class ToBooleanExpr extends Expr {
+  const ToBooleanExpr(this.arg);
+  final Expr arg;
+
+  @override
+  Object? evaluate(ExpressionContext ctx) {
+    final v = arg.evaluate(ctx);
+    if (v is bool) return v;
+    if (v is num) return v != 0;
+    if (v is String) return v == 'true';
+    return false;
+  }
+
+  @override
+  bool get isFeatureConstant => arg.isFeatureConstant;
+
+  @override
+  bool get isZoomConstant => arg.isZoomConstant;
+}
+
 // --- parser ------------------------------------------------------------------
 
 /// True when [json] is an expression array (first element is an operator).
@@ -398,12 +528,22 @@ Expr _parseArray(List json) {
       return _parseCase(json);
     case 'coalesce':
       return CoalesceExpr(_exprList(json, 1));
+    case 'let':
+      return _parseLet(json);
+    case 'var':
+      return VarExpr(_string(json[1]));
+    case 'match':
+      return _parseMatch(json);
+    case 'in':
+      return InExpr(parseExpression(json[1]), parseExpression(json[2]));
     case 'to-number':
       return ToNumberExpr(parseExpression(json[1]));
     case 'to-string':
       return ToStringExpr(parseExpression(json[1]));
     case 'to-color':
       return ToColorExpr(parseExpression(json[1]));
+    case 'to-boolean':
+      return ToBooleanExpr(parseExpression(json[1]));
     default:
       throw FormatException('unsupported expression operator: $op');
   }
@@ -457,6 +597,78 @@ Expr _parseCase(List json) {
     pairs.add((parseExpression(json[i]), parseExpression(json[i + 1])));
   }
   return CaseExpr(pairs, parseExpression(json.last));
+}
+
+Expr _parseLet(List json) {
+  // ['let', name, value, ..., body]
+  if (json.length < 4 || json.length.isOdd) {
+    throw const FormatException('let: want name/value pairs + body');
+  }
+  final bindings = <(String, Expr)>[];
+  for (var i = 1; i + 2 < json.length; i += 2) {
+    bindings.add((_string(json[i]), parseExpression(json[i + 1])));
+  }
+  return LetExpr(bindings, parseExpression(json.last));
+}
+
+Expr _parseMatch(List json) {
+  // ['match', input, label, output, ..., fallback]
+  if (json.length < 4 || json.length.isEven) {
+    throw const FormatException('match: want input, pairs + fallback');
+  }
+  final pairs = <(Object?, Expr)>[];
+  for (var i = 2; i + 2 < json.length; i += 2) {
+    pairs.add((json[i], parseExpression(json[i + 1])));
+  }
+  return MatchExpr(parseExpression(json[1]), pairs, parseExpression(json.last));
+}
+
+/// Enforce MapLibre's rule: `zoom` may only appear as the direct input of a
+/// `step` / `interpolate` (a zoom curve), never nested elsewhere.
+///
+/// This is a pragmatic version of `findZoomCurve` (`[SPEC] expression/index.ts:721`);
+/// it does not additionally require the curve to be at the very top level, so
+/// `['==', ['step', ['zoom'], ...], 5]` is accepted here (MapLibre rejects it).
+void validateZoomUsage(Expr root) {
+  if (!_zoomAllowed(root, allowed: false)) {
+    throw const FormatException(
+        'zoom may only be the input of a step/interpolate');
+  }
+}
+
+bool _zoomAllowed(Expr e, {required bool allowed}) {
+  if (e is ZoomExpr) return allowed;
+  if (e is StepExpr) {
+    return _zoomAllowed(e.input, allowed: true) &&
+        _zoomAllowed(e.fallback, allowed: false) &&
+        e.outputs.every((o) => _zoomAllowed(o, allowed: false));
+  }
+  if (e is InterpolateExpr) {
+    return _zoomAllowed(e.input, allowed: true) &&
+        e.outputs.every((o) => _zoomAllowed(o, allowed: false));
+  }
+  for (final c in _children(e)) {
+    if (!_zoomAllowed(c, allowed: false)) return false;
+  }
+  return true;
+}
+
+Iterable<Expr> _children(Expr e) {
+  if (e is ComparisonExpr) return [e.left, e.right];
+  if (e is NotExpr) return [e.arg];
+  if (e is LogicalExpr) return e.args;
+  if (e is CaseExpr) {
+    return [for (final p in e.pairs) ...[p.$1, p.$2], e.fallback];
+  }
+  if (e is CoalesceExpr) return e.args;
+  if (e is ToNumberExpr) return [e.arg];
+  if (e is ToStringExpr) return [e.arg];
+  if (e is ToColorExpr) return [e.arg];
+  if (e is ToBooleanExpr) return [e.arg];
+  if (e is LetExpr) return [for (final b in e.bindings) b.$2, e.body];
+  if (e is MatchExpr) return [e.input, ...e.pairs.map((p) => p.$2), e.fallback];
+  if (e is InExpr) return [e.needle, e.haystack];
+  return const [];
 }
 
 void _checkStops(List<num> stops, {required int minimum}) {

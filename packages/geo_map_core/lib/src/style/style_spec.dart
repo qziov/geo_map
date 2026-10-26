@@ -165,7 +165,9 @@ class PropertyValue {
 
   factory PropertyValue.fromJson(Object? json, {bool isColor = false}) {
     if (isExpressionJson(json)) {
-      return PropertyValue._(null, parseExpression(json), isColor);
+      final expr = parseExpression(json);
+      validateZoomUsage(expr);
+      return PropertyValue._(null, expr, isColor);
     }
     return PropertyValue._(json, null, isColor);
   }
