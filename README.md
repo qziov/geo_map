@@ -62,7 +62,7 @@ GeoMap(
 
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — 分层与数据流
 - [MAPLIBRE_ALIGNMENT.md](docs/MAPLIBRE_ALIGNMENT.md) — 与 MapLibre 的接口对齐表与演进路线
-- API 文档：[qziov.github.io/geo_map](https://qziov.github.io/geo_map/)（CI 自动发布，见 `.github/workflows/docs.yml`）
+- API 文档（中文入口）：[qziov.github.io/geo_map](https://qziov.github.io/geo_map/)（CI 自动发布，见 `.github/workflows/docs.yml`；API 参考正文与界面为英文）
 
 ## 路线图
 

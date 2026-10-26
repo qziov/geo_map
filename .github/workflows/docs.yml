@@ -6,10 +6,11 @@ name: API docs
 # This workflow deploys with the official Pages actions (upload-pages-artifact +
 # deploy-pages). It does NOT push a `gh-pages` branch.
 #
-# Note: Flutter 3.47.8 bundles dartdoc 9.0.6, which crashes on this package's
-# docs (`RangeError ... _stripDocImports`) while building geo_map (core is fine).
-# We pin 3.44.9 and mark the geo_map step continue-on-error so a dartdoc crash
-# never blocks publishing the core docs.
+# Note: official Flutter 3.47.8 bundles dartdoc 9.0.6, which crashes on this
+# package's docs (`RangeError ... _stripDocImports`) while building geo_map
+# (core is fine). We pin 3.44.9 to dodge that dartdoc. The geo_map step is NOT
+# continue-on-error on purpose: if doc generation ever fails we want the deploy
+# to stop and keep the previous (complete) site, not publish a core-only one.
 on:
   push:
     branches: [master]
@@ -46,39 +47,75 @@ jobs:
 
       - name: Docs — geo_map (Flutter shell)
         working-directory: packages/geo_map
-        continue-on-error: true
         run: |
           flutter pub get
           dart doc --output ../../doc/api/geo_map
 
-      - name: Landing page
+      - name: Landing page (中文入口)
         run: |
-          geo_li='<li>geo_map — API docs unavailable (upstream dartdoc crash; see Actions log)</li>'
-          if [ -f doc/api/geo_map/index.html ]; then
-            geo_li='<li><a href="api/geo_map/">geo_map</a> — Flutter shell: <code>GeoMap</code> widget, unified render stack, sources</li>'
-          fi
-          cat > doc/index.html <<HTML
+          cat > doc/index.html <<'HTML'
           <!doctype html>
-          <html lang="en">
+          <html lang="zh-CN">
           <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>geo_map API docs</title>
+            <title>geo_map API 文档</title>
             <style>
-              body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-                     max-width: 640px; margin: 64px auto; padding: 0 16px;
-                     line-height: 1.7; color: #222; }
-              a { color: #3498db; }
-              code { background: #f3f3f3; padding: 1px 5px; border-radius: 4px; }
+              body { font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+                     max-width: 720px; margin: 48px auto; padding: 0 18px; line-height: 1.8;
+                     color: #222; background: #fff; }
+              h1 { font-size: 1.7rem; margin: 0 0 .2rem; }
+              .sub { color: #6b7684; margin: 0 0 1.6rem; }
+              h2 { font-size: 1.15rem; margin: 2rem 0 .6rem; border-left: 3px solid #3498db;
+                   padding-left: .6rem; }
+              a { color: #3498db; text-decoration: none; }
+              a:hover { text-decoration: underline; }
+              ul { padding-left: 1.2rem; }
+              li { margin: .35rem 0; }
+              code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: .92em; }
+              pre { background: #f6f7f9; border: 1px solid #e5e7eb; border-radius: 8px;
+                    padding: 12px 14px; overflow: auto; font-size: .86rem; line-height: 1.6; }
+              .note { color: #6b7684; font-size: .9rem; background: #f8fafc;
+                      border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; }
+              @media (prefers-color-scheme: dark) {
+                body { background: #16191d; color: #e6e9ee; }
+                .sub, .note { color: #9aa6b2; }
+                code { background: #232830; }
+                pre, .note { background: #1d2228; border-color: #2c333b; }
+              }
             </style>
           </head>
           <body>
-            <h1>geo_map API docs</h1>
-            <p>Self-contained 2D/3D Flutter map engine.</p>
+            <h1>geo_map API 文档</h1>
+            <p class="sub">自带 2D/3D 的 Flutter 地图引擎（墨卡托平面 + 正交地球）</p>
+
+            <h2>包结构</h2>
             <ul>
-              $geo_li
-              <li><a href="api/geo_map_core/">geo_map_core</a> — pure-Dart core: projection, camera, selection, tiles</li>
+              <li><a href="api/geo_map/">geo_map</a> —— Flutter 外壳：<code>GeoMap</code> 组件、统一渲染栈、手势、数据源</li>
+              <li><a href="api/geo_map_core/">geo_map_core</a> —— 纯 Dart 核心：投影、相机、选片、瓦片、网格</li>
             </ul>
+
+            <h2>快速开始</h2>
+            <pre><code>import 'package:geo_map/geo_map.dart';
+
+final source = await MbtilesTileSource.open(
+  id: 'base',
+  assetPath: 'assets/tiles/base.mbtiles',
+);
+
+GeoMap(
+  options: const GeoMapOptions(
+    initialCenter: LatLng(30, 105),
+    initialZoom: 4.2,
+    useGlobe: true, // false = 2D 平面
+  ),
+  source: source,
+);</code></pre>
+
+            <h2>说明</h2>
+            <p class="note">API 参考的正文与界面标签（Classes / Methods 等）由 dartdoc 生成，目前为英文；
+            本页是中文入口。需要中文的技术讲解，请看个人博客知识库：
+            <a href="https://jiweileng.top">jiweileng.top</a>。</p>
           </body>
           </html>
           HTML
