@@ -335,15 +335,10 @@ class TileEngine extends ChangeNotifier {
   /// `parentWasRequested`). Requesting the whole pyramid at once is what
   /// produced request storms (and the black holes that followed).
   TileResolution resolve(TileKey key, int dataZoom) {
-    final exact = _images[keyOf(key)];
-    if (exact != null) {
-      _policy.touch(keyOf(key));
-      return TileResolution.exact(exact);
-    }
-
-    // The ideal tile is wanted no matter what we are about to draw, and the
-    // ancestor chain escalates only through levels that already failed. Both
-    // halves of that rule live in [planTileRequest] so they can be tested.
+    // Request planning (what to fetch) is separate from resolution (what to
+    // draw). The ideal tile is always requested; the ancestor chain only
+    // escalates through levels that already failed. Both halves live in
+    // [planTileRequest] so they are testable.
     final plan = planTileRequest(
       ideal: key,
       sourceMinZoom: source.minZoom,
@@ -356,61 +351,30 @@ class TileEngine extends ChangeNotifier {
       request(ancestor);
     }
 
-    // ① Loaded descendants (MapLibre `_retainLoadedChildren`): a complete
-    //    generation of finer tiles may already be in the cache.
-    final descendants = _loadedDescendants(key, dataZoom);
-    if (descendants != null) {
-      return TileResolution.descendants(
-        descendants.keys.toList(growable: false),
-        descendants.values.toList(growable: false),
-      );
-    }
-
-    // ② Loaded ancestors (MapLibre parent ascent): coarse tiles stretched
-    //    over the fine footprint. This is what keeps the screen covered while
-    //    the ideal tile is in flight — not a substitute for fetching it.
-    for (var dz = 1;
-        dz <= GeoEngineTuning.maxUnderzooming &&
-            dataZoom - dz >= source.minZoom;
-        dz++) {
-      final ancestor = TileKey(dataZoom - dz, key.x >> dz, key.y >> dz);
-      final image = _images[keyOf(ancestor)];
-      if (image != null) {
+    // What to draw: exact → complete children → nearest ancestor → none. The
+    // whole decision lives in [planTileResolution] (pure, unit-tested).
+    final decision = planTileResolution(
+      ideal: key,
+      sourceMinZoom: source.minZoom,
+      sourceMaxZoom: source.maxZoom,
+      scheme: source.scheme,
+      isLoaded: (k) => _images.containsKey(keyOf(k)),
+    );
+    switch (decision.kind) {
+      case TileFallbackKind.exact:
+        _policy.touch(keyOf(key));
+        return TileResolution.exact(_images[keyOf(key)]!);
+      case TileFallbackKind.descendants:
+        final keys = decision.children;
+        final images = [for (final k in keys) _images[keyOf(k)]!];
+        return TileResolution.descendants(keys, images);
+      case TileFallbackKind.ancestor:
+        final ancestor = decision.ancestor!;
         _policy.touch(keyOf(ancestor));
-        return TileResolution.ancestor(image, dz);
-      }
+        return TileResolution.ancestor(_images[keyOf(ancestor)]!, decision.dz);
+      case TileFallbackKind.none:
+        return const TileResolution.descendants([], []);
     }
-
-    return const TileResolution.descendants([], []);
-  }
-
-  /// A complete generation of loaded descendants, or `null`.
-  Map<TileKey, TileImage>? _loadedDescendants(TileKey key, int dataZoom) {
-    for (var d = 1; d <= GeoEngineTuning.maxOverzooming; d++) {
-      final z = dataZoom + d;
-      if (z > source.maxZoom) break;
-      final grid = TileGrid.of(source.scheme, z);
-      final keys = <TileKey>[];
-      final images = <TileImage>[];
-      var complete = true;
-      for (final child in grid.childrenOf(key)) {
-        if (child.x >= grid.cols || child.y >= grid.rows) {
-          complete = false;
-          break;
-        }
-        final image = _images[keyOf(child)];
-        if (image == null) {
-          complete = false;
-          break;
-        }
-        keys.add(child);
-        images.add(image);
-      }
-      if (complete && keys.isNotEmpty) {
-        return {for (var i = 0; i < keys.length; i++) keys[i]: images[i]};
-      }
-    }
-    return null;
   }
 
   // --- drawing commands ---------------------------------------------------------

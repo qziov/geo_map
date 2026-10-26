@@ -134,4 +134,76 @@ void main() {
       expect(s.canRequest(0), isTrue);
     });
   });
+
+  group('scheduler priority queue', () {
+    const a = TileKey(3, 0, 0);
+    const b = TileKey(3, 1, 1);
+    const c = TileKey(3, 2, 2);
+
+    test('equal priority is FIFO', () {
+      final s = TileScheduler();
+      s.enqueue(a, 0);
+      s.enqueue(b, 0);
+      s.enqueue(c, 0);
+      expect(s.take(3), [a, b, c]);
+    });
+
+    test('higher priority is taken first, FIFO within a priority', () {
+      final s = TileScheduler();
+      s.enqueue(a, 0, priority: 0);
+      s.enqueue(b, 0, priority: 5);
+      s.enqueue(c, 0, priority: 5);
+      // b before c (FIFO among the two priority-5), then a (priority 0).
+      expect(s.take(3), [b, c, a]);
+    });
+
+    test('enqueue is idempotent', () {
+      final s = TileScheduler();
+      expect(s.enqueue(a, 0), isTrue);
+      expect(s.enqueue(a, 10), isFalse);
+      expect(s.pendingCount, 1);
+      expect(s.isQueued(a), isTrue);
+    });
+
+    test('take(max) pulls in order and shrinks the queue', () {
+      final s = TileScheduler();
+      s.enqueue(a, 0);
+      s.enqueue(b, 0);
+      s.enqueue(c, 0);
+      expect(s.take(2), [a, b]);
+      expect(s.pendingCount, 1);
+      expect(s.takeNext(), c);
+      expect(s.takeNext(), isNull);
+    });
+
+    test('remove drops one queued tile', () {
+      final s = TileScheduler();
+      s.enqueue(a, 0);
+      s.enqueue(b, 0);
+      expect(s.remove(a), isTrue);
+      expect(s.remove(a), isFalse);
+      expect(s.isQueued(a), isFalse);
+      expect(s.takeNext(), b);
+    });
+
+    test('reclaim returns and drops tiles older than the timeout', () {
+      final s = TileScheduler();
+      s.enqueue(a, 1000);
+      s.enqueue(b, 2000);
+      // At 2500, only the tile enqueued at 1000 has aged past 1000 ms.
+      expect(s.reclaim(2500, 1000), [a]);
+      expect(s.isQueued(a), isFalse);
+      expect(s.isQueued(b), isTrue);
+      expect(s.pendingCount, 1);
+    });
+
+    test('reset clears the queue', () {
+      final s = TileScheduler();
+      s.enqueue(a, 0);
+      s.enqueue(b, 0);
+      s.reset();
+      expect(s.pendingCount, 0);
+      expect(s.takeNext(), isNull);
+    });
+  });
 }

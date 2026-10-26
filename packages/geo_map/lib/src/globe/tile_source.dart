@@ -4,79 +4,34 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:geo_map_core/geo_map_core.dart'
-    show GeoEngineTuning, TileFailureKind, TileRowOrder, TileSchemeKind;
+    show
+        GeoEngineTuning,
+        GeoTileSource,
+        TileFailureKind,
+        TileFetchResult,
+        TileRowOrder,
+        TileSchemeKind,
+        TileUrlBuilder;
 
-/// The outcome of a single tile fetch.
-///
-/// MapLibre draws a hard line between "the server says there is no such tile"
-/// (404 — never blacklisted, the engine just keeps falling back to
-/// parent/child tiles) and "the request broke" (network error — retried
-/// quickly). Collapsing both into `null` is what made the old engine
-/// blacklist tiles after two failures and leave black holes behind.
-class TileFetchResult {
-  const TileFetchResult.ok(this.bytes) : failure = null;
+/// The source **contract** ([GeoTileSource]) and [TileFetchResult] now live in
+/// `geo_map_core`; re-export them so existing
+/// `import '../globe/tile_source.dart'` keep working.
+export 'package:geo_map_core/geo_map_core.dart'
+    show GeoTileSource, TileFetchResult, TileUrlBuilder;
 
-  const TileFetchResult.failed(this.failure) : bytes = null;
-
-  /// The decoded payload, or `null` when [failure] is set.
-  final Uint8List? bytes;
-
-  /// Why the tile could not be produced (`null` on success).
-  final TileFailureKind? failure;
-
-  bool get isOk => failure == null && bytes != null;
-
-  bool get isNotFound => failure == TileFailureKind.notFound;
-
-  @override
-  String toString() =>
-      isOk ? 'TileFetchResult.ok(${bytes?.length} bytes)' : 'TileFetchResult.failed($failure)';
-}
-
-/// A raster tile provider.
-///
-/// Async on purpose: WMTS/XYZ tiles come over HTTP, MBTiles is local. The
-/// caller (the tile cache) is already async, so both fit the same shape.
-abstract class GlobeRasterSource {
-  int get minZoom;
-
-  int get maxZoom;
-
-  /// The tile grid geometry of this source.
-  ///
-  /// Uses the core enumeration so that the geometry (row latitudes, column
-  /// counts, parent/child relations) has exactly **one** definition in the
-  /// project — the old second definition used linear latitudes for Web
-  /// Mercator, which is exactly why high-latitude tiles landed in the wrong
-  /// row and the screen went black.
-  TileSchemeKind get scheme;
-
-  /// Row order used **on the wire** (TMS / MBTiles count rows from south).
-  TileRowOrder get rowOrder => TileRowOrder.xyzTopDown;
-
-  /// How many requests may be in flight at the same time.
-  ///
-  /// A local sqlite file gains nothing from parallel reads, so MBTiles
-  /// overrides this with a much smaller number.
-  int get maxConcurrentRequests => GeoEngineTuning.maxParallelRequests;
-
-  /// Fetch one tile.
-  ///
-  /// [x] / [y] are always in **canonical XYZ** orientation (row 0 = northern
-  /// edge); the source converts to its own wire order internally.
-  Future<TileFetchResult> fetch(int z, int x, int y);
-
-  /// Attribution shown in debug UI.
-  String get attribution;
-
-  /// Release any resource held by the source (sqlite handle, http client).
-  void dispose() {}
-}
+/// Backwards-compatible name for [GeoTileSource].
+typedef GlobeRasterSource = GeoTileSource;
 
 /// WMTS / XYZ over HTTP.
 ///
+/// URL building (templates, TMS flip, quadkey, bbox, subdomains, ratio) is
+/// delegated to the pure [TileUrlBuilder] in core, so it is unit-tested there.
+/// This class only owns transport: one shared [HttpClient], timeouts, and the
+/// 404-vs-network failure split.
+///
 /// [urlTemplate] supports `{z}`, `{x}`, `{y}`, `{TileMatrix}`, `{TileRow}`,
-/// `{TileCol}`. Both RESTful WMTS and plain XYZ templates work, e.g.:
+/// `{TileCol}`, `{prefix}`, `{ratio}`, `{quadkey}`, `{bbox}`,
+/// `{bbox-epsg-3857}`. Both RESTful WMTS and plain XYZ templates work, e.g.:
 ///
 /// ```
 /// WMTS (EPSG:4326, NASA GIBS):
@@ -95,6 +50,8 @@ class HttpTileSource implements GlobeRasterSource {
     this.headers = const {},
     this.rowOrder = TileRowOrder.xyzTopDown,
     this.userAgent = 'geo_map/0.1',
+    this.subdomains = const [],
+    this.tileRatio = 1,
   });
 
   final String urlTemplate;
@@ -122,6 +79,12 @@ class HttpTileSource implements GlobeRasterSource {
 
   final String userAgent;
 
+  /// Subdomains spread by `{prefix}` (empty disables it).
+  final List<String> subdomains;
+
+  /// Pixel ratio rendered by `{ratio}` (`> 1` → `@Nx`).
+  final int tileRatio;
+
   /// Last transport error, surfaced in the debug HUD (DNS failure, timeout…).
   String? lastError;
 
@@ -130,9 +93,9 @@ class HttpTileSource implements GlobeRasterSource {
 
   /// One shared client for the whole source.
   ///
-  /// The old implementation created a fresh `HttpClient` per tile, which
-  /// meant a fresh TCP connection *and* a fresh TLS handshake for every tile
-  /// — at z12 that is hundreds of handshakes and a very visible stall.
+  /// The old implementation created a fresh `HttpClient` per tile, which meant
+  /// a fresh TCP connection *and* a fresh TLS handshake for every tile — at
+  /// z12 that is hundreds of handshakes and a very visible stall.
   HttpClient? _client;
 
   HttpClient get _sharedClient => _client ??= HttpClient()
@@ -141,25 +104,16 @@ class HttpTileSource implements GlobeRasterSource {
     ..idleTimeout = const Duration(seconds: 30)
     ..maxConnectionsPerHost = GeoEngineTuning.maxParallelRequests;
 
-  /// The row index to put into the URL.
-  ///
-  /// TMS-style services number rows from the south
-  /// (`y = 2^z − 1 − y`, MapLibre `tile_id.ts` L48).
-  int _wireRow(int z, int y) => switch (rowOrder) {
-        TileRowOrder.xyzTopDown => y,
-        TileRowOrder.tmsBottomUp => (1 << z) - 1 - y,
-      };
+  /// Pure URL building, delegated to core.
+  late final TileUrlBuilder _urls = TileUrlBuilder(
+    templates: urlTemplate,
+    subdomains: subdomains,
+    tileRatio: tileRatio,
+    scheme: scheme,
+    rowOrder: rowOrder,
+  );
 
-  String urlFor(int z, int x, int y) {
-    final row = _wireRow(z, y);
-    return urlTemplate
-        .replaceAll('{z}', '$z')
-        .replaceAll('{x}', '$x')
-        .replaceAll('{y}', '$row')
-        .replaceAll('{TileMatrix}', '$z')
-        .replaceAll('{TileRow}', '$row')
-        .replaceAll('{TileCol}', '$x');
-  }
+  String urlFor(int z, int x, int y) => _urls.urlFor(z, x, y);
 
   @override
   Future<TileFetchResult> fetch(int z, int x, int y) async {
