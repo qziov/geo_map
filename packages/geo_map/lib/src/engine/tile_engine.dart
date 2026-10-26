@@ -344,6 +344,8 @@ class TileEngine extends ChangeNotifier {
       sourceMinZoom: source.minZoom,
       isLoaded: (k) => _images.containsKey(keyOf(k)),
       failureOf: (k) => _policy.failureKind(keyOf(k)),
+      // While zooming, fetch the ideal tile but do not spawn parent requests.
+      suspendAncestors: isZooming,
     );
     final ideal = plan.ideal;
     if (ideal != null) request(ideal);
@@ -675,6 +677,7 @@ class TileEngine extends ChangeNotifier {
   /// Record the data level of this frame. When it differs from the previous
   /// frame a cross-fade begins; returns true on the first frame of a transition.
   bool noteDataZoom(int dataZoom, int now) {
+    _nowMs = now;
     final prev = _prevDataZoom;
     _prevDataZoom = dataZoom;
     if (prev != null && prev != dataZoom) {
@@ -699,6 +702,32 @@ class TileEngine extends ChangeNotifier {
   bool isCrossFading(int now) =>
       _crossFadeFrom != null &&
       isWithinFade(_crossFadeStartMs, now, crossFadeDurationMs);
+
+  // --- zoom activity (parent-request suspension) --------------------------------
+
+  /// How long after the last zoom change the camera is still treated as
+  /// "zooming" (ms). Long enough to cover a continuous pinch, short enough to
+  /// resume parent requests promptly after the finger lifts.
+  static const int zoomSettleMs = 250;
+
+  int _nowMs = 0;
+  double? _lastRenderZoom;
+  int _zoomingUntilMs = 0;
+
+  /// Record the render zoom of this frame. Any change of zoom marks the camera
+  /// as zooming until [zoomSettleMs] after the last change.
+  void noteRenderZoom(double zoom, int now) {
+    _nowMs = now;
+    final last = _lastRenderZoom;
+    _lastRenderZoom = zoom;
+    if (last != null && zoom != last) {
+      _zoomingUntilMs = now + zoomSettleMs;
+    }
+  }
+
+  /// Whether the camera is currently zooming (within [zoomSettleMs] of the last
+  /// zoom change). Drives [planTileRequest]'s `suspendAncestors`.
+  bool get isZooming => _nowMs < _zoomingUntilMs;
 
   // --- frame bookkeeping --------------------------------------------------------
 

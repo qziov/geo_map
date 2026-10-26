@@ -40,14 +40,24 @@ class TileRequestPlan {
 
 /// Decide what [ideal] implies: always itself, plus the ancestor chain that
 /// has already failed its way up.
+/// [suspendAncestors] mirrors MapLibre `cancelPendingTileRequestsWhileZooming`:
+/// while the camera is actively zooming, do **not** start new parent (ancestor)
+/// requests — only the ideal tile is fetched. Already-loaded / already-requested
+/// ancestors are still used for drawing, and the chain resumes once the camera
+/// settles (because resolution runs every frame).
 TileRequestPlan planTileRequest({
   required TileKey ideal,
   required int sourceMinZoom,
   required bool Function(TileKey key) isLoaded,
   required TileFailureKind? Function(TileKey key) failureOf,
   int maxUnderzooming = GeoEngineTuning.maxUnderzooming,
+  bool suspendAncestors = false,
 }) {
   if (isLoaded(ideal)) return const TileRequestPlan();
+
+  // Zoom in progress: fetch the ideal tile, but do not speculatively fetch
+  // parents. This is the single biggest source of request churn while zooming.
+  if (suspendAncestors) return TileRequestPlan(ideal: ideal);
 
   final ancestors = <TileKey>[];
   var child = ideal;

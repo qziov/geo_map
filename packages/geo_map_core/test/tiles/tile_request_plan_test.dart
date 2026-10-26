@@ -9,12 +9,14 @@ void main() {
       Set<TileKey> loaded = const {},
       Map<TileKey, TileFailureKind> failed = const {},
       int minZoom = 0,
+      bool suspend = false,
     }) =>
         planTileRequest(
           ideal: ideal,
           sourceMinZoom: minZoom,
           isLoaded: loaded.contains,
           failureOf: (k) => failed[k],
+          suspendAncestors: suspend,
         );
 
     test('the ideal tile is requested even when a parent is cached', () {
@@ -95,6 +97,27 @@ void main() {
         expect(a.x, ideal.x >> (i + 1));
         expect(a.y, ideal.y >> (i + 1));
       }
+    });
+
+    group('parent-request suspension (while zooming)', () {
+      test('suspending drops ancestor requests but keeps the ideal tile', () {
+        final result = plan(
+          suspend: true,
+          failed: {ideal: TileFailureKind.notFound},
+        );
+        expect(result.ideal, ideal);
+        expect(result.ancestors, isEmpty);
+      });
+
+      test('suspending still requests nothing when the ideal is cached', () {
+        final result = plan(suspend: true, loaded: {ideal});
+        expect(result.isEmpty, isTrue);
+      });
+
+      test('without suspension the ancestor chain is unaffected', () {
+        final result = plan(failed: {ideal: TileFailureKind.notFound});
+        expect(result.ancestors, [TileKey(9, 256, 170)]);
+      });
     });
   });
 }

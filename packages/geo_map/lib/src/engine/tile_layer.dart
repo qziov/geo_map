@@ -303,6 +303,7 @@ class _TilePainter extends CustomPainter {
     // Record the data level of this frame. When it steps to a new level a
     // cross-fade begins, and the engine asks us (via `onCrossFadeStart`) to
     // keep repainting through the transition.
+    engine.noteRenderZoom(camera.zoom, now);
     engine.noteDataZoom(dataZoom, now);
     final crossFading = engine.isCrossFading(now);
     final fromZoom = engine.crossFadeFromZoom;
