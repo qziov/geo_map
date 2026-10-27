@@ -9,6 +9,7 @@ export 'src/math/geodesy.dart';
 export 'src/math/fade.dart';
 export 'src/math/projections.dart';
 export 'src/mvt/mvt.dart';
+export 'src/mvt/mvt_async.dart';
 export 'src/mvt/mvt_bucket.dart';
 export 'src/mvt/mvt_dash.dart';
 export 'src/mvt/mvt_resolution.dart';

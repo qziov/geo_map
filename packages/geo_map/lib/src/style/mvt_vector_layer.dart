@@ -171,7 +171,10 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
       if (!mounted) return;
       final bytes = result.bytes;
       if (result.isOk && bytes != null) {
-        _decoded[key] = _DecodedTile(decodeMvtTile(bytes));
+        // Parse off the UI isolate: a z0 world tile is ~34k vertices.
+        final tile = await decodeMvtTileAsync(bytes);
+        if (!mounted) return;
+        _decoded[key] = _DecodedTile(tile);
         while (_decoded.length > widget.maxCachedTiles) {
           _decoded.remove(_decoded.keys.first);
         }
