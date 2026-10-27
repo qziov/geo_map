@@ -397,22 +397,11 @@ class _MvtPainter extends CustomPainter {
     CameraState state,
     bool flat,
   ) {
-    final x = _unwrapX(key);
+    final x = TileGrid.unwrapX(key.x, key.z, camera.center.longitude);
     if (flat) {
-      final nw = projector.project(_latLng(key, x, 0, 0), state);
-      final ne = projector.project(_latLng(key, x, 1, 0), state);
-      final sw = projector.project(_latLng(key, x, 0, 1), state);
-      if (nw == null || ne == null || sw == null) {
-        return (_) => null;
-      }
-      final ax = ne.x - nw.x;
-      final ay = ne.y - nw.y;
-      final bx = sw.x - nw.x;
-      final by = sw.y - nw.y;
-      return (p) => Vec2(
-            nw.x + p.x * ax + p.y * bx,
-            nw.y + p.x * ay + p.y * by,
-          );
+      final affine = tileAffine(projector, state, z: key.z, x: x, y: key.y);
+      if (affine == null) return (_) => null;
+      return affine.map;
     }
     return (p) => projector.project(_latLng(key, x, p.x, p.y), state);
   }
@@ -425,19 +414,6 @@ class _MvtPainter extends CustomPainter {
         tileY: key.y,
         extent: 1,
       );
-
-  /// Column index unwrapped to the world copy nearest the camera, so tiles east
-  /// of the antimeridian land on the right side instead of the far left.
-  ///
-  /// Picks the copy whose tile **centre** (`x + 0.5 + k·cols`) is closest to the
-  /// camera's column, not the tile's left edge: rounding the edge would push a
-  /// z0 tile one world east when the camera sits at the prime meridian.
-  int _unwrapX(TileKey key) {
-    final cols = 1 << key.z;
-    final centerCol = (camera.center.longitude + 180) / 360 * cols;
-    final k = ((centerCol - key.x - 0.5) / cols).round();
-    return key.x + cols * k;
-  }
 
   bool _addPolygon(
     Path path,

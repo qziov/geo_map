@@ -82,6 +82,21 @@ class TileGrid {
 
   int wrapX(int x) => ((x % cols) + cols) % cols;
 
+  /// Column [x] unwrapped to the world copy whose tile **centre** is nearest
+  /// [centerLongitude].
+  ///
+  /// Rendering a tile at its canonical column breaks across the antimeridian:
+  /// a tile east of it must be drawn on the right, not on the far left. Rounding
+  /// the tile centre (not its left edge) keeps the world copy at
+  /// `centerLongitude == 0` unchanged — rounding the edge would shift a z0 tile
+  /// one whole world east.
+  static int unwrapX(int x, int z, double centerLongitude) {
+    final cols = 1 << z;
+    final centerCol = (centerLongitude + 180) / 360 * cols;
+    final k = ((centerCol - x - 0.5) / cols).round();
+    return x + cols * k;
+  }
+
   int xOf(double lng) => ((lng + 180) / 360 * cols).floor().clamp(0, cols - 1);
 
   /// Unclamped column index — callers wrap it (a ±180 window must not collapse).

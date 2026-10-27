@@ -20,7 +20,9 @@ import 'dart:math' as math;
 
 import 'package:latlong2/latlong.dart';
 
+import '../camera/camera_state.dart';
 import '../math/geo_geometry.dart';
+import '../projection/geo_projector.dart';
 import 'mvt.dart';
 
 /// A fill-ready polygon: `rings.first` is the outer ring, the rest are holes.
@@ -129,4 +131,67 @@ LatLng mvtTilePointToLatLng(
   final y2 = 180.0 - (point.y + y0) * 360.0 / size;
   final lat = math.atan(math.exp(y2 * math.pi / 180.0)) * 360.0 / math.pi - 90.0;
   return LatLng(lat, lon);
+}
+
+/// Screen-space affine map for one tile, used by the flat (Mercator) renderer.
+///
+/// Web Mercator is linear in tile space, so a tile's `[0,1]` square maps to a
+/// parallelogram on screen. Keeping the three corner vectors avoids a
+/// projection (and trig) call per vertex; because the basis comes from the
+/// projected corners it also handles camera rotation.
+class TileAffine {
+  const TileAffine({
+    required this.origin,
+    required this.ux,
+    required this.uy,
+    required this.vx,
+    required this.vy,
+  });
+
+  /// Screen position of the tile's top-left corner (tile space 0,0).
+  final Vec2 origin;
+  final double ux;
+  final double uy;
+  final double vx;
+  final double vy;
+
+  Vec2 map(Vec2 point) => Vec2(
+        origin.x + point.x * ux + point.y * vx,
+        origin.y + point.x * uy + point.y * vy,
+      );
+}
+
+/// Builds the flat affine map for tile ([z], [x], [y]).
+///
+/// Returns `null` when a corner does not project (only possible on a
+/// non-affine projector; Mercator always succeeds).
+TileAffine? tileAffine(
+  GeoProjector projector,
+  CameraState camera, {
+  required int z,
+  required int x,
+  required int y,
+}) {
+  Vec2? corner(double u, double v) => projector.project(
+        mvtTilePointToLatLng(
+          Vec2(u, v),
+          z: z,
+          tileX: x,
+          tileY: y,
+          extent: 1,
+        ),
+        camera,
+      );
+
+  final nw = corner(0, 0);
+  final ne = corner(1, 0);
+  final sw = corner(0, 1);
+  if (nw == null || ne == null || sw == null) return null;
+  return TileAffine(
+    origin: nw,
+    ux: ne.x - nw.x,
+    uy: ne.y - nw.y,
+    vx: sw.x - nw.x,
+    vy: sw.y - nw.y,
+  );
 }
