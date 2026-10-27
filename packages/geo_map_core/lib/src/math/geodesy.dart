@@ -85,9 +85,18 @@ List<LatLng> densifyGreatCircle(
   final out = <LatLng>[points.first];
   final segments = closed ? points.length : points.length - 1;
   for (var i = 0; i < segments; i++) {
-    final a = Vec3.of(points[i % points.length]);
-    final b = Vec3.of(points[(i + 1) % points.length]);
+    final index = i % points.length;
+    final next = (i + 1) % points.length;
+    final a = Vec3.of(points[index]);
+    final b = Vec3.of(points[next]);
     final theta = math.acos(a.dot(b).clamp(-1.0, 1.0));
+    // Short segment: the endpoint is already within the error budget, so skip
+    // the slerp. Country borders are mostly short segments and this is the hot
+    // path when a dense line is densified per frame.
+    if (theta <= step) {
+      out.add(points[next]);
+      continue;
+    }
     final n = math.max(1, (theta / step).ceil());
     for (var k = 1; k <= n; k++) {
       if (out.length >= maxPoints) return out;

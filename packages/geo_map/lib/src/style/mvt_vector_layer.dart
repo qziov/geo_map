@@ -324,13 +324,29 @@ class _DecodedTile {
 
 /// How one tile maps to the screen: a point mapper plus the world copies.
 class _TileMapping {
-  const _TileMapping(this.project, this.copies, this.worldSize);
+  const _TileMapping(
+    this.project,
+    this.copies,
+    this.worldSize, {
+    this.toLatLng,
+    this.projectGeo,
+    this.densifyStepRad = 0,
+  });
 
   final Vec2? Function(Vec2) project;
 
   /// Inclusive copy indices; each copy is offset by `k * worldSize` in x.
   final (int, int) copies;
   final double worldSize;
+
+  /// Globe only: normalized tile point → geographic point.
+  final LatLng Function(Vec2)? toLatLng;
+
+  /// Globe only: geographic point → screen.
+  final Vec2? Function(LatLng)? projectGeo;
+
+  /// Globe only: great-circle step; 0 on the affine flat map.
+  final double densifyStepRad;
 }
 
 class _MvtPainter extends CustomPainter {
@@ -591,9 +607,16 @@ class _MvtPainter extends CustomPainter {
     bool flat,
   ) {
     if (!flat) {
-      Vec2? project(Vec2 p) =>
-          projector.project(_latLng(key, key.x, p.x, p.y), state);
-      return _TileMapping(project, (0, 0), state.worldSize);
+      LatLng toLatLng(Vec2 p) => _latLng(key, key.x, p.x, p.y);
+      Vec2? project(Vec2 p) => projector.project(toLatLng(p), state);
+      return _TileMapping(
+        project,
+        (0, 0),
+        state.worldSize,
+        toLatLng: toLatLng,
+        projectGeo: (ll) => projector.project(ll, state),
+        densifyStepRad: projector.densifyStepRad(state),
+      );
     }
     final affine = tileAffine(projector, state, z: key.z, x: key.x, y: key.y);
     if (affine == null) return null;
@@ -686,16 +709,38 @@ class _MvtPainter extends CustomPainter {
         run.clear();
       }
 
-      for (final p in line.points) {
-        final s = mapping.project(p);
-        if (s == null) {
-          flush();
-          continue;
+      final toLatLng = mapping.toLatLng;
+      final projectGeo = mapping.projectGeo;
+      if (toLatLng != null &&
+          projectGeo != null &&
+          mapping.densifyStepRad > 0) {
+        // Same recipe as the graticule: densify the great circle *before*
+        // projecting. A sparse MVT segment is otherwise a screen chord, and
+        // two adjacent tiles meet at a visible step on the globe.
+        final geo = [for (final p in line.points) toLatLng(p)];
+        final dense = densifyGreatCircle(
+          geo,
+          stepRad: mapping.densifyStepRad,
+        );
+        for (final ll in dense) {
+          final s = projectGeo(ll);
+          if (s == null) {
+            flush();
+            continue;
+          }
+          run.add(s);
         }
-        run.add(s);
+      } else {
+        for (final p in line.points) {
+          final s = mapping.project(p);
+          if (s == null) {
+            flush();
+            continue;
+          }
+          run.add(s);
+        }
       }
-      flush();
-    }
+      flush();    }
     return any;
   }
 
