@@ -38,8 +38,10 @@ import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../globe/tile_source.dart' show HttpTileSource;
 import '../vendor/flutter_map_camera/flutter_map_camera.dart';
+import 'sprite_atlas.dart';
 import 'style_controller.dart';
 import 'symbol_painter.dart';
+import 'symbol_style.dart';
 
 /// What the layer is currently doing, for a debug HUD.
 ///
@@ -101,6 +103,7 @@ class MvtVectorLayer extends StatefulWidget {
     this.opacity = 1.0,
     this.maxCachedTiles = 160,
     this.renderWorldCopies = true,
+    this.sprite,
     this.onDiagnostics,
   }) : assert(style != null || controller != null,
             'provide either style or controller');
@@ -121,6 +124,9 @@ class MvtVectorLayer extends StatefulWidget {
   /// Defaults to `true` (MapLibre's `renderWorldCopies`). Set `false` for a
   /// fixed single-world view: off-screen data is clipped instead of repeated.
   final bool renderWorldCopies;
+
+  /// Icons for `icon-image`; without one the labels are still drawn.
+  final SpriteAtlas? sprite;
 
   /// Called after a frame when the diagnostics change (for a debug HUD).
   final ValueChanged<MvtDiagnostics>? onDiagnostics;
@@ -348,6 +354,7 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
           decoded: _decoded,
           revision: _revision,
           opacity: widget.opacity,
+          sprite: widget.sprite,
           renderWorldCopies: widget.renderWorldCopies,
           sourceMinZoom: widget.source.minZoom,
           sourceMaxZoom: widget.source.maxZoom,
@@ -477,6 +484,7 @@ class _MvtPainter extends CustomPainter {
     required this.decoded,
     required this.revision,
     required this.opacity,
+    required this.sprite,
     required this.renderWorldCopies,
     required this.sourceMinZoom,
     required this.sourceMaxZoom,
@@ -491,6 +499,7 @@ class _MvtPainter extends CustomPainter {
   final Map<TileKey, _DecodedTile> decoded;
   final int revision;
   final double opacity;
+  final SpriteAtlas? sprite;
   final bool renderWorldCopies;
   final int sourceMinZoom;
   final int sourceMaxZoom;
@@ -639,8 +648,9 @@ class _MvtPainter extends CustomPainter {
     bool flat,
     List<TileKey> drawTiles,
   ) {
-    final labels = <LabelSpec>[];
+    final symbols = <SymbolSpec>[];
     var order = 0;
+    var collisionGroup = 0;
     for (final key in drawTiles) {
       final decodedTile = decoded[key];
       if (decodedTile == null) continue;
@@ -654,46 +664,21 @@ class _MvtPainter extends CustomPainter {
           zoom: camera.zoom,
           properties: symbol.properties,
         );
-        final raw = layer.valueOf('text-field', ctx);
-        if (raw == null) continue;
-        final text = '$raw';
-        if (text.isEmpty) continue;
-        labels.add(_labelSpec(layer, ctx, anchor, text,
-            symbol.tilePriority * 1000 + order++));
+        symbols.addAll(resolveSymbols(
+          layer: layer,
+          ctx: ctx,
+          anchor: anchor,
+          sprite: sprite,
+          order: order,
+          collisionGroup: ++collisionGroup,
+        ));
+        order += 2;
       }
     }
-    if (labels.isEmpty) return;
+    if (symbols.isEmpty) return;
     SymbolPainter(viewport: Size(state.size.width, state.size.height))
-        .paint(canvas, labels);
+        .paint(canvas, symbols);
   }
-
-  static LabelSpec _labelSpec(
-    StyleLayer layer,
-    ExpressionContext ctx,
-    Vec2 anchor,
-    String text,
-    int order,
-  ) {
-    final haloWidth = layer.number('text-halo-width', ctx) ?? 0;
-    final color = layer.color('text-color', ctx) ?? const StyleColor(0, 0, 0, 255);
-    final halo = layer.color('text-halo-color', ctx) ??
-        const StyleColor(0, 0, 0, 0);
-    return LabelSpec(
-      anchor: anchor,
-      text: text,
-      fontSize: layer.number('text-size', ctx) ?? 16,
-      color: ui.Color(_argb(_withAlpha(color, 1), 1)),
-      haloColor: ui.Color(_argb(halo, 1)),
-      haloWidth: haloWidth,
-      allowOverlap: layer.valueOf('text-allow-overlap', ctx) == true,
-      ignorePlacement: layer.valueOf('text-ignore-placement', ctx) == true,
-      sortKey: layer.number('symbol-sort-key', ctx) ?? 0,
-      order: order,
-    );
-  }
-
-  static StyleColor _withAlpha(StyleColor c, int alpha) =>
-      StyleColor(c.r, c.g, c.b, alpha);
 
   // --- line ------------------------------------------------------------------
 

@@ -19,8 +19,10 @@ import 'package:geo_map_core/geo_map_core.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../vendor/flutter_map_camera/flutter_map_camera.dart';
+import 'sprite_atlas.dart';
 import 'style_controller.dart';
 import 'symbol_painter.dart';
+import 'symbol_style.dart';
 
 class StyleVectorLayer extends StatelessWidget {
   const StyleVectorLayer({
@@ -29,6 +31,7 @@ class StyleVectorLayer extends StatelessWidget {
     this.controller,
     required this.features,
     this.opacity = 1.0,
+    this.sprite,
   })  : sources = null,
         assert(style != null || controller != null,
             'provide either style or controller');
@@ -44,6 +47,7 @@ class StyleVectorLayer extends StatelessWidget {
     this.controller,
     required Map<String, List<GeoJsonFeature>> this.sources,
     this.opacity = 1.0,
+    this.sprite,
   })  : features = const [],
         assert(style != null || controller != null,
             'provide either style or controller');
@@ -61,6 +65,9 @@ class StyleVectorLayer extends StatelessWidget {
 
   final double opacity;
 
+  /// Icons for `icon-image`; without one the labels are still drawn.
+  final SpriteAtlas? sprite;
+
   @override
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
@@ -71,6 +78,7 @@ class StyleVectorLayer extends StatelessWidget {
               style: spec,
               features: features,
               sources: sources,
+              sprite: sprite,
               camera: camera,
               opacity: opacity,
             ),
@@ -92,6 +100,7 @@ class _StyleVectorPainter extends CustomPainter {
     required this.style,
     required this.features,
     required this.sources,
+    required this.sprite,
     required this.camera,
     required this.opacity,
   });
@@ -99,6 +108,7 @@ class _StyleVectorPainter extends CustomPainter {
   final StyleSpec style;
   final List<GeoJsonFeature> features;
   final Map<String, List<GeoJsonFeature>>? sources;
+  final SpriteAtlas? sprite;
   final MapCamera camera;
   final double opacity;
 
@@ -129,8 +139,9 @@ class _StyleVectorPainter extends CustomPainter {
     // layer is meant to sit on top of the geometry regardless of where it is in
     // the style, and one placer must see every candidate to arbitrate between
     // them.
-    final labels = <LabelSpec>[];
-    var labelOrder = 0;
+    final symbols = <SymbolSpec>[];
+    var symbolOrder = 0;
+    var collisionGroup = 0;
 
     for (final layer in style.layers) {
       if (!layer.isVisibleAt(camera.zoom)) continue;
@@ -150,9 +161,15 @@ class _StyleVectorPainter extends CustomPainter {
             zoom: camera.zoom,
             properties: feature.properties,
           );
-          final text = _labelText(layer, ctx);
-          if (text == null) continue;
-          labels.add(_labelSpec(layer, ctx, anchor, text, labelOrder++));
+          symbols.addAll(resolveSymbols(
+            layer: layer,
+            ctx: ctx,
+            anchor: anchor,
+            sprite: sprite,
+            order: symbolOrder,
+            collisionGroup: ++collisionGroup,
+          ));
+          symbolOrder += 2;
         }
         continue;
       }
@@ -222,42 +239,11 @@ class _StyleVectorPainter extends CustomPainter {
       }
     }
 
-    if (labels.isNotEmpty) {
-      SymbolPainter(viewport: size).paint(canvas, labels);
+    if (symbols.isNotEmpty) {
+      SymbolPainter(viewport: size).paint(canvas, symbols);
     }
 
     if (clip != null) canvas.restore();
-  }
-
-  /// Resolves `text-field`; `null` when the expression yields nothing usable.
-  static String? _labelText(StyleLayer layer, ExpressionContext ctx) {
-    final value = layer.valueOf('text-field', ctx);
-    if (value == null) return null;
-    final text = '$value';
-    return text.isEmpty ? null : text;
-  }
-
-  static LabelSpec _labelSpec(
-    StyleLayer layer,
-    ExpressionContext ctx,
-    Vec2 anchor,
-    String text,
-    int order,
-  ) {
-    final haloWidth = layer.number('text-halo-width', ctx) ?? 0;
-    return LabelSpec(
-      anchor: anchor,
-      text: text,
-      fontSize: layer.number('text-size', ctx) ?? 16,
-      color: _color(layer.color('text-color', ctx) ?? const StyleColor(0, 0, 0), 1),
-      haloColor: _color(
-          layer.color('text-halo-color', ctx) ?? const StyleColor(0, 0, 0, 0), 1),
-      haloWidth: haloWidth,
-      allowOverlap: layer.valueOf('text-allow-overlap', ctx) == true,
-      ignorePlacement: layer.valueOf('text-ignore-placement', ctx) == true,
-      sortKey: layer.number('symbol-sort-key', ctx) ?? 0,
-      order: order,
-    );
   }
 
   static ui.Color _color(StyleColor c, double opacity) =>

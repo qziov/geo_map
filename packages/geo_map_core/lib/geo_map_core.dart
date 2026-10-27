@@ -30,6 +30,7 @@ export 'src/style/style_spec.dart';
 export 'src/symbol/grid_index.dart';
 export 'src/symbol/symbol_bucket.dart';
 export 'src/symbol/symbol_placement.dart';
+export 'src/symbol/sprite.dart';
 export 'src/tiles/polar_cap.dart';
 export 'src/tiles/tile_cache_policy.dart';
 export 'src/tiles/tile_fallback.dart';

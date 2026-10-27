@@ -41,8 +41,12 @@ export 'package:geo_map_core/geo_map_core.dart'
         TileFetchResult,
         TileFailureKind,
         TileRowOrder,
-        TileSchemeKind;
+        TileSchemeKind,
+        // Building a sprite atlas in code needs the index types.
+        SpriteIndex,
+        SpriteIcon;
 export 'src/style/style_controller.dart';
+export 'src/style/sprite_atlas.dart';
 export 'src/style/style_vector_layer.dart';
 export 'src/style/mvt_vector_layer.dart';
 export 'src/globe/globe_image_layer.dart';

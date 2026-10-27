@@ -84,6 +84,12 @@ const Map<String, Map<String, StylePropertyDef>> layerLayoutDefs = {
     'symbol-sort-key':
         StylePropertyDef(StylePropertyType.number, dataDriven: true),
     'icon-image': StylePropertyDef(StylePropertyType.string, dataDriven: true),
+    'icon-size': StylePropertyDef(StylePropertyType.number,
+        defaultValue: 1, dataDriven: true, interpolated: true),
+    'icon-allow-overlap':
+        StylePropertyDef(StylePropertyType.boolean, defaultValue: false),
+    'icon-ignore-placement':
+        StylePropertyDef(StylePropertyType.boolean, defaultValue: false),
     'visibility':
         StylePropertyDef(StylePropertyType.string, defaultValue: 'visible'),
   },
