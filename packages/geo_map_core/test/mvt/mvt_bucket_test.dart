@@ -159,6 +159,52 @@ void main() {
 
       expect(buildMvtLineBucket(layer).single.properties['name'], 'Equator');
     });
+
+    test('a real line along the tile border is kept', () {
+      // The International Date Line follows lon 180 = the tile border; only
+      // polygon rings may drop border segments.
+      final layer = MvtLayer(
+        name: 'geolines',
+        extent: 10,
+        version: 2,
+        features: [
+          MvtFeature(
+            type: MvtGeomType.lineString,
+            properties: const {'name': 'International Date Line'},
+            geometry: [
+              [const Vec2(10, 0), const Vec2(10, 10)],
+            ],
+          ),
+        ],
+      );
+
+      expect(buildMvtLineBucket(layer), hasLength(1));
+    });
+
+    test('a polygon ring on the tile border drops it', () {
+      final layer = MvtLayer(
+        name: 'countries',
+        extent: 10,
+        version: 2,
+        features: [
+          MvtFeature(
+            type: MvtGeomType.polygon,
+            properties: const {},
+            geometry: [
+              [
+                const Vec2(0, 0),
+                const Vec2(10, 0),
+                const Vec2(10, 10),
+                const Vec2(0, 10),
+                const Vec2(0, 0),
+              ],
+            ],
+          ),
+        ],
+      );
+
+      expect(buildMvtLineBucket(layer), isEmpty);
+    });
   });
 
   group('mvtTilePointToLatLng', () {

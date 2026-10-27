@@ -83,13 +83,16 @@ List<MvtPolyline> buildMvtLineBucket(MvtLayer layer) {
   final extent = layer.extent.toDouble();
   final out = <MvtPolyline>[];
   for (final feature in layer.features) {
+    // Only polygon rings carry synthetic tile-border edges (the encoder
+    // clipped them). A real LineString may legitimately run along a border —
+    // the International Date Line follows 180° — so its border segments must
+    // be kept, otherwise the line breaks into diagonal fragments.
+    final dropTileEdges = feature.type == MvtGeomType.polygon;
     for (final ring in feature.geometry) {
-      // Cut the tile buffer off: a line layer on a polygon source otherwise
-      // strokes the buffer edge, drawing a grid of tile boundaries.
       for (final run in clipMvtPolylineToExtent(
         ring,
         extent,
-        dropTileEdges: true,
+        dropTileEdges: dropTileEdges,
       )) {
         out.add(MvtPolyline(
           normalizeMvtRing(run, extent),
