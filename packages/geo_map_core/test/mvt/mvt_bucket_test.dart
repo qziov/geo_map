@@ -109,7 +109,7 @@ void main() {
             type: MvtGeomType.lineString,
             properties: const {},
             geometry: [
-              [const Vec2(0, 0), const Vec2(4096, 0)],
+              [const Vec2(0, 10), const Vec2(4096, 10)],
             ],
           ),
         ],
@@ -151,7 +151,7 @@ void main() {
             type: MvtGeomType.lineString,
             properties: const {'name': 'Equator'},
             geometry: [
-              [const Vec2(0, 0), const Vec2(10, 0)],
+              [const Vec2(0, 5), const Vec2(10, 5)],
             ],
           ),
         ],

@@ -11,6 +11,7 @@ export 'src/math/projections.dart';
 export 'src/mvt/mvt.dart';
 export 'src/mvt/mvt_async.dart';
 export 'src/mvt/mvt_bucket.dart';
+export 'src/mvt/mvt_clip.dart';
 export 'src/mvt/mvt_dash.dart';
 export 'src/mvt/mvt_resolution.dart';
 export 'src/projection/geo_projector.dart';

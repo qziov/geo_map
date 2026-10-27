@@ -24,6 +24,7 @@ import '../camera/camera_state.dart';
 import '../math/geo_geometry.dart';
 import '../projection/geo_projector.dart';
 import 'mvt.dart';
+import 'mvt_clip.dart';
 
 /// A fill-ready polygon: `rings.first` is the outer ring, the rest are holes.
 ///
@@ -83,11 +84,18 @@ List<MvtPolyline> buildMvtLineBucket(MvtLayer layer) {
   final out = <MvtPolyline>[];
   for (final feature in layer.features) {
     for (final ring in feature.geometry) {
-      if (ring.length < 2) continue;
-      out.add(MvtPolyline(
-        normalizeMvtRing(ring, extent),
-        properties: feature.properties,
-      ));
+      // Cut the tile buffer off: a line layer on a polygon source otherwise
+      // strokes the buffer edge, drawing a grid of tile boundaries.
+      for (final run in clipMvtPolylineToExtent(
+        ring,
+        extent,
+        dropTileEdges: true,
+      )) {
+        out.add(MvtPolyline(
+          normalizeMvtRing(run, extent),
+          properties: feature.properties,
+        ));
+      }
     }
   }
   return out;
