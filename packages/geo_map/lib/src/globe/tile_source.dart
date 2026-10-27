@@ -17,7 +17,12 @@ import 'package:geo_map_core/geo_map_core.dart'
 /// `geo_map_core`; re-export them so existing
 /// `import '../globe/tile_source.dart'` keep working.
 export 'package:geo_map_core/geo_map_core.dart'
-    show GeoTileSource, TileFetchResult, TileUrlBuilder;
+    show
+        GeoTileSource,
+        TileFetchResult,
+        TileUrlBuilder,
+        TileSchemeKind,
+        TileRowOrder;
 
 /// Backwards-compatible name for [GeoTileSource].
 typedef GlobeRasterSource = GeoTileSource;

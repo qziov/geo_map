@@ -63,6 +63,39 @@ void main() {
       expect(polygons[0].rings, hasLength(1));
       expect(polygons[1].rings, hasLength(1));
     });
+
+    test('carries feature properties for data-driven paint', () {
+      final layer = _layer([
+        MvtFeature(
+          type: MvtGeomType.polygon,
+          properties: const {'CONTINENT': 'Asia'},
+          geometry: [_rect(0, 0, 10, 10)],
+        ),
+      ]);
+
+      expect(
+        buildMvtFillBucket(layer).single.properties['CONTINENT'],
+        'Asia',
+      );
+    });
+
+    test('normalizes a hole to the opposite winding of the outer ring', () {
+      final outer = _rect(0, 0, 10, 10);
+      // Reverse the hole so it is opposite the outer ring and groups as one
+      // polygon; the bucket must keep the two orientations opposite.
+      final hole = _rect(2, 2, 4, 4).reversed.toList();
+      final layer = _layer([
+        _polygon([outer, hole]),
+      ]);
+
+      final polygons = buildMvtFillBucket(layer);
+      expect(polygons, hasLength(1));
+      final signs = polygons.single.rings
+          .map((r) => mvtRingSignedArea(r).isNegative)
+          .toList();
+      expect(signs, hasLength(2));
+      expect(signs[0], isNot(signs[1]));
+    });
   });
 
   group('buildMvtLineBucket', () {
@@ -106,6 +139,25 @@ void main() {
       );
 
       expect(buildMvtLineBucket(layer), isEmpty);
+    });
+
+    test('carries feature properties for data-driven stroke', () {
+      final layer = MvtLayer(
+        name: 'lines',
+        extent: 10,
+        version: 2,
+        features: [
+          MvtFeature(
+            type: MvtGeomType.lineString,
+            properties: const {'name': 'Equator'},
+            geometry: [
+              [const Vec2(0, 0), const Vec2(10, 0)],
+            ],
+          ),
+        ],
+      );
+
+      expect(buildMvtLineBucket(layer).single.properties['name'], 'Equator');
     });
   });
 

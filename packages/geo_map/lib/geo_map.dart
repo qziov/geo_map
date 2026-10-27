@@ -30,6 +30,7 @@ export 'package:geo_map_core/geo_map_core.dart'
         FeaturePredicate;
 export 'src/style/style_controller.dart';
 export 'src/style/style_vector_layer.dart';
+export 'src/style/mvt_vector_layer.dart';
 export 'src/globe/globe_image_layer.dart';
 export 'src/globe/geojson_vector_source.dart';
 export 'src/globe/globe_projection.dart';

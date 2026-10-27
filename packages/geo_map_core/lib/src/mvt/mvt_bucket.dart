@@ -24,17 +24,28 @@ import '../math/geo_geometry.dart';
 import 'mvt.dart';
 
 /// A fill-ready polygon: `rings.first` is the outer ring, the rest are holes.
+///
+/// Winding is normalized: the outer ring keeps its own orientation and every
+/// hole is wound the opposite way. That lets a renderer merge many polygons
+/// into one `Path` and fill with `PathFillType.nonZero` without adjacent
+/// polygons eating each other (even-odd would XOR overlaps).
 class MvtFillPolygon {
-  const MvtFillPolygon(this.rings);
+  const MvtFillPolygon(this.rings, {this.properties = const {}});
 
   final List<List<Vec2>> rings;
+
+  /// The source feature's properties, for data-driven paint evaluation.
+  final Map<String, Object?> properties;
 }
 
 /// A stroke-ready polyline.
 class MvtPolyline {
-  const MvtPolyline(this.points);
+  const MvtPolyline(this.points, {this.properties = const {}});
 
   final List<Vec2> points;
+
+  /// The source feature's properties, for data-driven paint evaluation.
+  final Map<String, Object?> properties;
 }
 
 /// Converts a ring from layer extent units to the `[0,1]` tile square.
@@ -54,9 +65,11 @@ List<MvtFillPolygon> buildMvtFillBucket(MvtLayer layer) {
   final out = <MvtFillPolygon>[];
   for (final feature in layer.features) {
     for (final polygon in classifyMvtPolygonRings(feature.geometry)) {
-      out.add(
-        MvtFillPolygon([for (final ring in polygon) normalizeMvtRing(ring, extent)]),
-      );
+      final normalized = _normalizeWinding(polygon);
+      out.add(MvtFillPolygon(
+        [for (final ring in normalized) normalizeMvtRing(ring, extent)],
+        properties: feature.properties,
+      ));
     }
   }
   return out;
@@ -69,8 +82,24 @@ List<MvtPolyline> buildMvtLineBucket(MvtLayer layer) {
   for (final feature in layer.features) {
     for (final ring in feature.geometry) {
       if (ring.length < 2) continue;
-      out.add(MvtPolyline(normalizeMvtRing(ring, extent)));
+      out.add(MvtPolyline(
+        normalizeMvtRing(ring, extent),
+        properties: feature.properties,
+      ));
     }
+  }
+  return out;
+}
+
+/// Outer ring keeps its orientation; holes are reversed to the opposite one.
+List<List<Vec2>> _normalizeWinding(List<List<Vec2>> polygon) {
+  if (polygon.isEmpty) return polygon;
+  final outerSign = mvtRingSignedArea(polygon.first) < 0 ? -1 : 1;
+  final out = <List<Vec2>>[polygon.first];
+  for (var i = 1; i < polygon.length; i++) {
+    final ring = polygon[i];
+    final sign = mvtRingSignedArea(ring) < 0 ? -1 : 1;
+    out.add(sign == outerSign ? ring.reversed.toList(growable: false) : ring);
   }
   return out;
 }
