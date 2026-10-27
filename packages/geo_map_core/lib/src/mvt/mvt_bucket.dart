@@ -25,6 +25,7 @@ import '../math/geo_geometry.dart';
 import '../projection/geo_projector.dart';
 import 'mvt.dart';
 import 'mvt_clip.dart';
+import 'mvt_subdivide.dart';
 
 /// A fill-ready polygon: `rings.first` is the outer ring, the rest are holes.
 ///
@@ -63,14 +64,24 @@ List<Vec2> normalizeMvtRing(List<Vec2> ring, double extent) {
 /// declared type, so a `fill` layer pointed at a line source-layer yields
 /// degenerate polygons rather than silently dropping them. Callers pick the
 /// right source-layer.
-List<MvtFillPolygon> buildMvtFillBucket(MvtLayer layer) {
+///
+/// [granularity] pre-splits the rings on a tile-space grid for the globe
+/// projector (see `subdivideTilePolyline`); 1 leaves the geometry untouched.
+List<MvtFillPolygon> buildMvtFillBucket(MvtLayer layer, {int granularity = 1}) {
   final extent = layer.extent.toDouble();
   final out = <MvtFillPolygon>[];
   for (final feature in layer.features) {
     for (final polygon in classifyMvtPolygonRings(feature.geometry)) {
       final normalized = _normalizeWinding(polygon);
       out.add(MvtFillPolygon(
-        [for (final ring in normalized) normalizeMvtRing(ring, extent)],
+        [
+          for (final ring in normalized)
+            subdivideTilePolyline(
+              normalizeMvtRing(ring, extent),
+              granularity: granularity,
+              closed: true,
+            ),
+        ],
         properties: feature.properties,
       ));
     }
@@ -79,7 +90,10 @@ List<MvtFillPolygon> buildMvtFillBucket(MvtLayer layer) {
 }
 
 /// Builds polylines for every ring in [layer] (>= 2 points).
-List<MvtPolyline> buildMvtLineBucket(MvtLayer layer) {
+///
+/// [granularity] pre-splits each run on a tile-space grid for the globe
+/// projector (see `subdivideTilePolyline`); 1 leaves the geometry untouched.
+List<MvtPolyline> buildMvtLineBucket(MvtLayer layer, {int granularity = 1}) {
   final extent = layer.extent.toDouble();
   final out = <MvtPolyline>[];
   for (final feature in layer.features) {
@@ -95,7 +109,10 @@ List<MvtPolyline> buildMvtLineBucket(MvtLayer layer) {
         dropTileEdges: dropTileEdges,
       )) {
         out.add(MvtPolyline(
-          normalizeMvtRing(run, extent),
+          subdivideTilePolyline(
+            normalizeMvtRing(run, extent),
+            granularity: granularity,
+          ),
           properties: feature.properties,
         ));
       }
