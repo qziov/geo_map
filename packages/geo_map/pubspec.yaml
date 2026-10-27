@@ -1,6 +1,6 @@
 name: geo_map
 description: A self-contained 2D/3D Flutter map engine (Mercator + orthographic globe), independent of flutter_map.
-version: 0.1.0
+version: 0.2.0
 publish_to: none
 
 environment:
