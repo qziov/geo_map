@@ -564,22 +564,26 @@ class _VectorPainter extends CustomPainter {
     }
   }
 
-  /// Densification is expensive (slerp per 1°) and the source lists are stable
-  /// (`late final` in the page), so results are memoised by list identity.
-  static final _densifyCache = <int, _Densified>{};
+  /// Densification is expensive (slerp per 1°) and the source lists are
+  /// stable, so results are memoised **on the list object itself**.
+  ///
+  /// An `identityHashCode` key looked cheaper but is unsound: the hash can be
+  /// reused after a list is collected, and since every meridian has the same
+  /// length the stale entry passes the length check — a line then renders with
+  /// another line's densified points and visibly kinks. An `Expando` is keyed
+  /// by object identity and is released with the object.
+  static final _densifyCache = Expando<_Densified>();
 
   static List<LatLng> _cachedDensify(
     List<LatLng> source, {
     bool closed = false,
   }) {
-    final key = identityHashCode(source) ^ (closed ? 0x9e3779b9 : 0);
-    final hit = _densifyCache[key];
+    final hit = _densifyCache[source];
     if (hit != null && hit.length == source.length && hit.closed == closed) {
       return hit.points;
     }
     final points = _densifyStatic(source, closed: closed);
-    if (_densifyCache.length > 64) _densifyCache.clear();
-    _densifyCache[key] = _Densified(source.length, closed, points);
+    _densifyCache[source] = _Densified(source.length, closed, points);
     return points;
   }
 
