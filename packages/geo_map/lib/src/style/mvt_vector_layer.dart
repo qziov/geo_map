@@ -46,6 +46,10 @@ import 'style_controller.dart';
 /// `round(camera zoom)` — not the continuous camera zoom the HUD usually shows.
 /// [readyCount] / [tileCount] say how many visible tiles are decoded, and
 /// [lastStatusCode] surfaces the transport status when the source is HTTP.
+///
+/// [firstFailed] names the tile behind [failedCount] (`z/x/y · status`). Without
+/// it a "one tile failed" report is not diagnosable — the key is what tells you
+/// whether it is an edge tile, an out-of-range coordinate or a rate limit.
 class MvtDiagnostics {
   const MvtDiagnostics({
     required this.dataZoom,
@@ -53,6 +57,7 @@ class MvtDiagnostics {
     required this.readyCount,
     required this.failedCount,
     this.lastStatusCode,
+    this.firstFailed,
   });
 
   final int dataZoom;
@@ -60,6 +65,7 @@ class MvtDiagnostics {
   final int readyCount;
   final int failedCount;
   final int? lastStatusCode;
+  final String? firstFailed;
 
   @override
   bool operator ==(Object other) =>
@@ -68,15 +74,17 @@ class MvtDiagnostics {
       other.tileCount == tileCount &&
       other.readyCount == readyCount &&
       other.failedCount == failedCount &&
-      other.lastStatusCode == lastStatusCode;
+      other.lastStatusCode == lastStatusCode &&
+      other.firstFailed == firstFailed;
 
   @override
-  int get hashCode =>
-      Object.hash(dataZoom, tileCount, readyCount, failedCount, lastStatusCode);
+  int get hashCode => Object.hash(dataZoom, tileCount, readyCount, failedCount,
+      lastStatusCode, firstFailed);
 
   @override
   String toString() => 'MvtDiagnostics(z$dataZoom, $readyCount/$tileCount, '
-      'failed $failedCount, http $lastStatusCode)';
+      'failed $failedCount${firstFailed == null ? '' : ' ($firstFailed)'}, '
+      'http $lastStatusCode)';
 }
 
 /// Vector tiles rendered through a [StyleSpec].
@@ -131,6 +139,17 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
   /// When a tile may be retried; failures are no longer permanent.
   final Map<TileKey, DateTime> _retryAfter = {};
 
+  /// How many times a key has failed, for the backoff curve.
+  final Map<TileKey, int> _failures = {};
+
+  /// Transport status of the last failure, for the HUD.
+  final Map<TileKey, int?> _failureStatus = {};
+
+  /// Ancestors fetched *as a fallback* for a hole. When one of these fails too,
+  /// the next pass climbs another level — that is how the ascent reaches a zoom
+  /// level that actually has data.
+  final Set<TileKey> _fallback = {};
+
   int _inFlight = 0;
   int _revision = 0;
   Timer? _retryTimer;
@@ -143,6 +162,9 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
       _decoded.clear();
       _pending.clear();
       _retryAfter.clear();
+      _failures.clear();
+      _failureStatus.clear();
+      _fallback.clear();
       _retryTimer?.cancel();
       _retryTimer = null;
       _revision++;
@@ -177,31 +199,55 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
         final tile = await decodeMvtTileAsync(bytes);
         if (!mounted) return;
         _decoded[key] = _DecodedTile(tile, z: key.z);
+        _failures.remove(key);
+        _failureStatus.remove(key);
+        _fallback.remove(key);
         while (_decoded.length > widget.maxCachedTiles) {
           _decoded.remove(_decoded.keys.first);
         }
         setState(() => _revision++);
       } else {
-        _retryAfter[key] = DateTime.now().add(
-          Duration(
-            milliseconds: result.isNotFound
-                ? GeoEngineTuning.notFoundTtlMs
-                : GeoEngineTuning.networkFailureTtlMs,
-          ),
-        );
-        _ensureRetryTimer();
-        // Kick the next queued tile now instead of waiting for the retry tick.
-        if (mounted) setState(() => _revision++);
+        _recordFailure(key, notFound: result.isNotFound);
       }
     } catch (_) {
-      _retryAfter[key] = DateTime.now().add(
-          const Duration(milliseconds: GeoEngineTuning.networkFailureTtlMs));
-      _ensureRetryTimer();
-      if (mounted) setState(() => _revision++);
+      _recordFailure(key, notFound: false);
     } finally {
       _pending.remove(key);
       _inFlight--;
     }
+  }
+
+  /// Records a failure and schedules the next attempt on a doubling curve.
+  ///
+  /// A fixed one-second retry against a rate-limited server is what turned one
+  /// bad tile into a permanent hole: every tick re-hit the limit and the tile
+  /// never loaded. [tileRetryDelay] backs off instead.
+  void _recordFailure(TileKey key, {required bool notFound}) {
+    final attempts = (_failures[key] ?? 0) + 1;
+    _failures[key] = attempts;
+    _failureStatus[key] = widget.source is HttpTileSource
+        ? (widget.source as HttpTileSource).lastStatusCode
+        : null;
+    final delay = tileRetryDelay(
+      attempts,
+      baseMs: notFound
+          ? GeoEngineTuning.notFoundTtlMs
+          : GeoEngineTuning.networkFailureTtlMs,
+    );
+    _retryAfter[key] = DateTime.now().add(delay);
+    _ensureRetryTimer();
+    // Kick the next queued tile now instead of waiting for the retry tick.
+    if (mounted) setState(() => _revision++);
+  }
+
+  /// `z/x/y · 429 · attempt 3` for the HUD.
+  String _describeFailure(TileKey key) {
+    final status = _failureStatus[key];
+    final attempts = _failures[key] ?? 1;
+    final buffer = StringBuffer(key.toString());
+    if (status != null) buffer.write(' · $status');
+    if (attempts > 1) buffer.write(' · try $attempts');
+    return buffer.toString();
   }
 
   /// Polls once a second while any tile is waiting for its retry window; the
@@ -261,6 +307,35 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
       _ensureTile(key);
     }
 
+    // What this frame can actually draw. Resolving here (instead of inside the
+    // painter) is what lets us answer the follow-up question: for the tiles with
+    // nothing at all, should a coarser tile be fetched so the gap gets covered?
+    final draw = resolveVectorDrawTiles(
+      visible: selection.tiles,
+      isLoaded: _decoded.containsKey,
+      sourceMinZoom: widget.source.minZoom,
+      sourceMaxZoom: widget.source.maxZoom,
+      scheme: widget.source.scheme,
+    );
+    for (final ancestor in planAncestorRequests(
+      // Only a tile that was actually requested can be "missing": one still
+      // queued behind the concurrency cap is late, not lost (MapLibre's
+      // `parentWasRequested`). A fallback ancestor that failed counts as
+      // missing too, so the ascent keeps climbing one level per pass.
+      missing: [
+        ...draw.missing.where(
+          (key) => _pending.contains(key) || _retryAfter.containsKey(key),
+        ),
+        ..._fallback.where(_retryAfter.containsKey),
+      ],
+      isAvailable: (key) =>
+          _decoded.containsKey(key) || _pending.contains(key),
+      sourceMinZoom: widget.source.minZoom,
+    )) {
+      _fallback.add(ancestor);
+      _ensureTile(ancestor);
+    }
+
     _reportDiagnostics(selection);
 
     return RepaintBoundary(
@@ -268,7 +343,7 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
         painter: _MvtPainter(
           style: spec,
           camera: camera,
-          tiles: selection.tiles,
+          drawTiles: draw,
           decoded: _decoded,
           revision: _revision,
           opacity: widget.opacity,
@@ -287,11 +362,13 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
     if (callback == null) return;
     var ready = 0;
     var failed = 0;
+    String? firstFailed;
     for (final key in selection.tiles) {
       if (_decoded.containsKey(key)) {
         ready++;
       } else if (_retryAfter.containsKey(key)) {
         failed++;
+        firstFailed ??= _describeFailure(key);
       }
     }
     final source = widget.source;
@@ -301,6 +378,7 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
       readyCount: ready,
       failedCount: failed,
       lastStatusCode: source is HttpTileSource ? source.lastStatusCode : null,
+      firstFailed: firstFailed,
     );
     if (diag == _lastDiag) return;
     _lastDiag = diag;
@@ -361,7 +439,7 @@ class _MvtPainter extends CustomPainter {
   _MvtPainter({
     required this.style,
     required this.camera,
-    required this.tiles,
+    required this.drawTiles,
     required this.decoded,
     required this.revision,
     required this.opacity,
@@ -373,7 +451,9 @@ class _MvtPainter extends CustomPainter {
 
   final StyleSpec style;
   final MapCamera camera;
-  final List<TileKey> tiles;
+
+  /// Resolved by the layer so the same pass can drive fallback requests.
+  final VectorDrawTiles drawTiles;
   final Map<TileKey, _DecodedTile> decoded;
   final int revision;
   final double opacity;
@@ -407,23 +487,16 @@ class _MvtPainter extends CustomPainter {
 
     // Placeholders (loaded ancestors) first, then exact tiles / child
     // generations, so a loaded tile always wins over its coarse stand-in.
-    final draw = resolveVectorDrawTiles(
-      visible: tiles,
-      isLoaded: decoded.containsKey,
-      sourceMinZoom: sourceMinZoom,
-      sourceMaxZoom: sourceMaxZoom,
-      scheme: scheme,
-    );
-    final drawTiles = draw.drawOrder;
+    final drawOrder = drawTiles.drawOrder;
 
     for (final layer in style.layers) {
       if (!layer.isSupported || !layer.isVisibleAt(camera.zoom)) continue;
       final sourceLayer = layer.sourceLayer;
       if (sourceLayer == null) continue;
       if (layer.type == 'fill') {
-        _paintFills(canvas, layer, sourceLayer, projector, state, flat, drawTiles);
+        _paintFills(canvas, layer, sourceLayer, projector, state, flat, drawOrder);
       } else if (layer.type == 'line') {
-        _paintLines(canvas, layer, sourceLayer, projector, state, flat, drawTiles);
+        _paintLines(canvas, layer, sourceLayer, projector, state, flat, drawOrder);
       }
     }
 
