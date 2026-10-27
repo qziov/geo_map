@@ -532,6 +532,14 @@ class _MvtPainter extends CustomPainter {
     // generations, so a loaded tile always wins over its coarse stand-in.
     final drawOrder = drawTiles.drawOrder;
 
+    // Symbol layers are deferred: they must be painted outside the disc clip.
+    // MapLibre does not clip a label at the horizon — it decides per symbol
+    // whether the anchor is on the visible hemisphere
+    // (`collision_index.ts:166`, `unplaceable = occluded`) and then draws the
+    // whole label. `project()` already returns null behind the globe, so
+    // deferring gives the same result instead of a label sliced by the limb.
+    final symbolLayers = <StyleLayer>[];
+
     for (final layer in style.layers) {
       if (!layer.isSupported || !layer.isVisibleAt(camera.zoom)) continue;
       final sourceLayer = layer.sourceLayer;
@@ -541,11 +549,23 @@ class _MvtPainter extends CustomPainter {
       } else if (layer.type == 'line') {
         _paintLines(canvas, layer, sourceLayer, projector, state, flat, drawOrder);
       } else if (layer.type == 'symbol') {
-        _paintSymbols(canvas, layer, sourceLayer, projector, state, flat, drawOrder);
+        symbolLayers.add(layer);
       }
     }
 
     if (clip != null) canvas.restore();
+
+    for (final layer in symbolLayers) {
+      _paintSymbols(
+        canvas,
+        layer,
+        layer.sourceLayer!,
+        projector,
+        state,
+        flat,
+        drawOrder,
+      );
+    }
   }
 
   // --- fill ------------------------------------------------------------------

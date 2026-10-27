@@ -239,11 +239,18 @@ class _StyleVectorPainter extends CustomPainter {
       }
     }
 
+    // Symbols are painted **outside** the disc clip, matching MapLibre: it never
+    // clips a label at the horizon, it decides per symbol whether the anchor is
+    // on the visible hemisphere (`collision_index.ts:166`: `unplaceable =
+    // occluded`) and then draws the whole label, glyphs and all. `project()`
+    // already returns null for an anchor behind the globe, so a partly visible
+    // label near the limb keeps its full outline instead of being sliced by the
+    // silhouette.
+    if (clip != null) canvas.restore();
+
     if (symbols.isNotEmpty) {
       SymbolPainter(viewport: size).paint(canvas, symbols);
     }
-
-    if (clip != null) canvas.restore();
   }
 
   static ui.Color _color(StyleColor c, double opacity) =>
