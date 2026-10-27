@@ -29,7 +29,8 @@ class GeoMapController extends ChangeNotifier {
     double initialZoom = 4.2,
     this.minZoom = 1,
     this.maxZoom = 8,
-  }) : delegate = projectionDelegate ??
+  })  : _isGlobe = useGlobe,
+        delegate = projectionDelegate ??
             (useGlobe
                 ? GlobeProjectionDelegate()
                 : FlatProjectionDelegate()) {
@@ -47,7 +48,14 @@ class GeoMapController extends ChangeNotifier {
   }
 
   MapProjectionDelegate delegate;
-  bool _isGlobe = true;
+
+  /// Whether the camera is in globe (orthographic) mode.
+  ///
+  /// Initialised from the constructor argument: a controller built with
+  /// `useGlobe: false` used to still report `true`, and the first
+  /// `setMode(true)` then returned early (`_isGlobe == globe`), leaving a flat
+  /// delegate under a globe `TileLayer` — the map rendered at the wrong scale.
+  bool _isGlobe;
   double minZoom;
   double maxZoom;
 
@@ -55,8 +63,10 @@ class GeoMapController extends ChangeNotifier {
 
   /// 外部宿主同步缩放约束（防 options 与 controller 脱节）。
   void applyConstraints({required double minZoom, required double maxZoom}) {
-    minZoom = minZoom;
-    maxZoom = maxZoom;
+    // `minZoom = minZoom;` used to assign the parameter to itself, so the host's
+    // constraints never reached the camera.
+    this.minZoom = minZoom;
+    this.maxZoom = maxZoom;
     move(_center, _zoom); // 触发 clamp + notify
   }
 
