@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
+
+import '../platform/http_get.dart';
 
 import 'package:geo_map_core/geo_map_core.dart'
     show
@@ -31,8 +32,9 @@ typedef GlobeRasterSource = GeoTileSource;
 ///
 /// URL building (templates, TMS flip, quadkey, bbox, subdomains, ratio) is
 /// delegated to the pure [TileUrlBuilder] in core, so it is unit-tested there.
-/// This class only owns transport: one shared [HttpClient], timeouts, and the
-/// 404-vs-network failure split.
+/// This class only owns the 404-vs-network failure split; the socket itself is
+/// the shared transport in `platform/http_get.dart`, which has a browser
+/// implementation so this file compiles for web.
 ///
 /// [urlTemplate] supports `{z}`, `{x}`, `{y}`, `{TileMatrix}`, `{TileRow}`,
 /// `{TileCol}`, `{prefix}`, `{ratio}`, `{quadkey}`, `{bbox}`,
@@ -96,19 +98,6 @@ class HttpTileSource implements GlobeRasterSource {
   /// Last HTTP status code that was **not** 200 (`null` after a success).
   int? lastStatusCode;
 
-  /// One shared client for the whole source.
-  ///
-  /// The old implementation created a fresh `HttpClient` per tile, which meant
-  /// a fresh TCP connection *and* a fresh TLS handshake for every tile — at
-  /// z12 that is hundreds of handshakes and a very visible stall.
-  HttpClient? _client;
-
-  HttpClient get _sharedClient => _client ??= HttpClient()
-    ..connectionTimeout =
-        const Duration(milliseconds: GeoEngineTuning.requestTimeoutMs)
-    ..idleTimeout = const Duration(seconds: 30)
-    ..maxConnectionsPerHost = GeoEngineTuning.maxParallelRequests;
-
   /// Pure URL building, delegated to core.
   late final TileUrlBuilder _urls = TileUrlBuilder(
     templates: urlTemplate,
@@ -122,46 +111,31 @@ class HttpTileSource implements GlobeRasterSource {
 
   @override
   Future<TileFetchResult> fetch(int z, int x, int y) async {
-    final client = _sharedClient;
-    try {
-      final request = await client.getUrl(Uri.parse(urlFor(z, x, y)));
-      request.headers.set(HttpHeaders.userAgentHeader, userAgent);
-      headers.forEach(request.headers.set);
-      final response = await request.close().timeout(
-            const Duration(milliseconds: GeoEngineTuning.bodyTimeoutMs),
-          );
-      lastStatusCode = response.statusCode;
-      if (response.statusCode != 200) {
-        lastError = 'HTTP ${response.statusCode}';
-        // 404 / 410: the tile genuinely does not exist. MapLibre does **not**
-        // blacklist those — it keeps falling back to parent/child tiles.
-        if (response.statusCode == 404 || response.statusCode == 410) {
-          return const TileFetchResult.failed(TileFailureKind.notFound);
-        }
-        return const TileFetchResult.failed(TileFailureKind.network);
-      }
-      final bytes = await consolidateHttpClientResponseBytes(response);
-      if (bytes.isEmpty) {
-        return const TileFetchResult.failed(TileFailureKind.empty);
-      }
-      lastError = null;
-      return TileFetchResult.ok(bytes);
-    } catch (e) {
-      lastError = '$e';
+    final result = await httpGetBytes(
+      Uri.parse(urlFor(z, x, y)),
+      headers: headers,
+      userAgent: userAgent,
+    );
+    lastStatusCode = result.statusCode;
+    if (result.error != null) {
+      lastError = result.error;
       return const TileFetchResult.failed(TileFailureKind.network);
     }
-  }
-
-  static Future<Uint8List> consolidateHttpClientResponseBytes(
-    HttpClientResponse response,
-  ) async {
-    final chunks = <List<int>>[];
-    await for (final chunk in response) {
-      chunks.add(chunk);
+    if (result.statusCode != 200) {
+      lastError = 'HTTP ${result.statusCode}';
+      // 404 / 410: the tile genuinely does not exist. MapLibre does **not**
+      // blacklist those — it keeps falling back to parent/child tiles.
+      if (result.statusCode == 404 || result.statusCode == 410) {
+        return const TileFetchResult.failed(TileFailureKind.notFound);
+      }
+      return const TileFetchResult.failed(TileFailureKind.network);
     }
-    return Uint8List.fromList(
-      chunks.expand((chunk) => chunk).toList(growable: false),
-    );
+    final bytes = result.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      return const TileFetchResult.failed(TileFailureKind.empty);
+    }
+    lastError = null;
+    return TileFetchResult.ok(bytes);
   }
 
   /// NASA GIBS daily true-colour mosaic (no API key, EPSG:4326 WMTS).
@@ -197,9 +171,8 @@ class HttpTileSource implements GlobeRasterSource {
 
   static Uint8List? decodeBase64(String value) => base64Decode(value);
 
+  /// The transport is shared and process-wide, so there is nothing per-source
+  /// to tear down here.
   @override
-  void dispose() {
-    _client?.close(force: true);
-    _client = null;
-  }
+  void dispose() {}
 }

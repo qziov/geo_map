@@ -1,5 +1,5 @@
 name: geo_map_example
-description: Minimal geo_map demo — MBTiles base map, 2D/3D switch, graticule.
+description: geo_map demo gallery — web-runnable demos plus native-only code samples.
 publish_to: none
 
 environment:
@@ -10,6 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   latlong2: ^0.9.1
+  # Native-only demos (MBTiles) need these. The web entry point never imports
+  # them, so `flutter build web` simply leaves them out.
   sqlite3_flutter_libs: ^0.5.24
   path_provider: ^2.1.0
   geo_map:
@@ -19,3 +21,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/tiles/
+    - assets/vector/
+    - assets/images/

@@ -55,8 +55,14 @@ GeoMap(
 )
 ```
 
-宿主依赖：`sqlite3_flutter_libs`（原生 SQLite）+ `path_provider`。
-完整可运行示例见 [`example/`](example/)。
+依赖：只有用到 `MbtilesTileSource` 时才需要 `sqlite3_flutter_libs`（原生 SQLite）+
+`path_provider`。HTTP 传输是条件实现（io 走 `HttpClient`，web 走 XHR），
+所以 `package:geo_map/geo_map.dart` 在浏览器里可直接 import；MBTiles 在 web 上
+是 stub，调用即抛 `UnsupportedError`。
+
+完整可运行示例见 [`example/`](example/)：
+- `lib/main.dart` —— **web 可运行**的画廊（MVT 矢量 / 样式图层 / 球面叠加 / 投影切换）；
+- `lib/native/mbtiles_demo.dart` —— 仅 native 的 MBTiles 离线底图。
 
 ## 文档
 
@@ -68,8 +74,11 @@ GeoMap(
 
 - [x] 3D globe + 2D mercator + 一键切换
 - [x] MBTiles 离线 + over/under-zoom + 父级回退
-- [ ] M1: style spec JSON + 表达式求值器（参照 maplibre-gl-js）
-- [ ] M2: 矢量瓦片 MVT + fill/line bucket（参照 maplibre-native）
+- [x] Web 可编译（HTTP 传输条件实现；MBTiles 走 stub）
+- [x] M1: style spec JSON + 表达式求值器（参照 maplibre-gl-js）
+- [x] M2: 矢量瓦片 MVT + fill/line bucket（参照 maplibre-native）
+- [ ] M2 收尾: fill-outline、symbol 前置的分桶整理
+- [ ] GPU 后端（draw plan 抽取）
 - [ ] M3: symbol 碰撞检测与标注避让
 - [ ] 三端（Android/iOS/鸿蒙）打包验证
 
@@ -77,7 +86,10 @@ GeoMap(
 
 ```bash
 cd packages/geo_map_core && dart pub get && dart analyze && dart test
-cd packages/geo_map   && flutter pub get && dart analyze
+cd packages/geo_map      && flutter pub get && flutter analyze lib
+
+# 示例：web 构建同时是“整包能不能在浏览器里编译”的验收
+cd example && flutter pub get && flutter build web --release
 ```
 
 ## License

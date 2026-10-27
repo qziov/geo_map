@@ -8,14 +8,13 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
 import '../diagnostics/geo_diagnostics.dart';
+import '../platform/http_get.dart';
 import '../globe/tile_source.dart' show GlobeRasterSource, TileFetchResult;
 import 'package:geo_map_core/geo_map_core.dart'
     show GeoEngineTuning, TileFailureKind, TileRowOrder, TileSchemeKind;
@@ -88,22 +87,19 @@ class DebugTilesSource implements GlobeRasterSource {
   Future<ui.Image?> _numberSheet(int z) async {
     final existing = _sheets[z];
     if (existing != null) return existing;
+    final result = await httpGetBytes(Uri.parse('$_base/$z.png'));
+    final bytes = result.bytes;
+    if (!result.isOk || bytes == null) {
+      debugPrint('[geo_map:debug] number sheet $z failed: ${result.error ?? result.statusCode}');
+      return null;
+    }
     try {
-      final client = HttpClient()
-        ..connectionTimeout = const Duration(seconds: 15);
-      final request = await client.getUrl(Uri.parse('$_base/$z.png'));
-      final response = await request.close();
-      if (response.statusCode != 200) return null;
-      final builder = BytesBuilder();
-      await for (final chunk in response) {
-        builder.add(chunk);
-      }
-      final codec = await ui.instantiateImageCodec(builder.takeBytes());
+      final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
       codec.dispose();
       return _sheets[z] = frame.image;
     } catch (e) {
-      debugPrint('[geo_map:debug] number sheet $z failed: $e');
+      debugPrint('[geo_map:debug] number sheet $z decode failed: $e');
       return null;
     }
   }

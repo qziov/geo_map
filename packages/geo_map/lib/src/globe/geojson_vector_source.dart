@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+
 
 import 'package:flutter/painting.dart';
+
+import '../platform/http_get.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:latlong2/latlong.dart';
 
@@ -27,20 +29,14 @@ class GeoJsonVectorSource {
     Color color = const Color(0xCCFFFFFF),
     double strokeWidth = 1.0,
   }) async {
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 20);
-    try {
-      final request = await client.getUrl(Uri.parse(url));
-      request.headers.set(HttpHeaders.userAgentHeader, 'globe_lab/0.1');
-      final response = await request.close();
-      if (response.statusCode != 200) {
-        throw HttpException('HTTP ${response.statusCode} for $url');
-      }
-      final body = await response.transform(utf8.decoder).join();
-      return parse(body, color: color, strokeWidth: strokeWidth);
-    } finally {
-      client.close(force: true);
+    final result = await httpGetBytes(Uri.parse(url), userAgent: 'geo_map/0.1');
+    final bytes = result.bytes;
+    if (!result.isOk || bytes == null) {
+      throw StateError(
+        'HTTP ${result.error ?? result.statusCode} for $url',
+      );
     }
+    return parse(utf8.decode(bytes), color: color, strokeWidth: strokeWidth);
   }
 
   /// Loads a GeoJSON file bundled as an asset (works offline).
