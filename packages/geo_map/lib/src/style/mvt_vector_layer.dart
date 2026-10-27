@@ -440,8 +440,8 @@ class _TileMapping {
   /// `dashPhaseSeed`.
   final double Function(Vec2 start, bool horizontal)? dashSeed;
 
-  /// Globe only: closes a tile-space ring **along the limb** and returns screen
-  /// points. `null` means the ring is entirely behind the globe.
+  /// Globe only: closes a tile-space ring **along the limb**. `null` means the
+  /// ring is entirely behind the globe.
   ///
   /// Plain projection is not enough here. A ring that crosses the horizon has
   /// its hidden vertices dropped and each visible run closed with a chord; with
@@ -449,7 +449,7 @@ class _TileMapping {
   /// of the polygon — measured on a limb-straddling test ring: 634 px covered
   /// by the chord version vs 2257 px by the clipped version. The visible result
   /// is a straight-edged bite taken out of the fill near the limb.
-  final List<Vec2>? Function(List<Vec2> ring)? clipRing;
+  final HorizonClippedRing? Function(List<Vec2> ring)? clipRing;
 }
 
 class _MvtPainter extends CustomPainter {
@@ -531,40 +531,26 @@ class _MvtPainter extends CustomPainter {
     bool flat,
     List<TileKey> drawTiles,
   ) {
-    final colorProp = layer.paint['fill-color'];
-    final opacityProp = layer.paint['fill-opacity'];
-    final constant = (colorProp?.isFeatureConstant ?? true) &&
-        (opacityProp?.isFeatureConstant ?? true);
+    final ctx0 = ExpressionContext(zoom: camera.zoom);
+    // MapLibre draws a fill as two programs: the fill itself, and `fill_outline`,
+    // a 1 px antialiased band along every ring edge
+    // (`shaders/glsl/fill_outline.fragment.glsl:16-18` — distance to the edge,
+    // `1 - smoothstep(0, 1, dist)`). Two consequences:
+    //
+    //  * an unset `fill-outline-color` means "outline in the fill's own colour",
+    //    not "no outline" — `style/properties.ts:616-620` leaves it undefined and
+    //    `style/style_layer/fill_style_layer.ts:30-32` copies `fill-color` in;
+    //  * `fill-antialias: false` turns the band off.
+    //
+    // Canvas has no vertex-shader trick for it, so the band becomes a 1 px
+    // `stroke` of the same rings. Close enough: same colour, same width, the
+    // stroke straddles the edge instead of hugging it.
+    final antialias = layer.valueOf('fill-antialias', ctx0) != false;
 
-    if (constant) {
-      final ctx = ExpressionContext(zoom: camera.zoom);
-      final color = layer.color('fill-color', ctx);
-      final alpha = (layer.number('fill-opacity', ctx) ?? 1) * opacity;
-      if (color == null || alpha <= 0) return;
-      final path = Path()..fillType = PathFillType.nonZero;
-      var any = false;
-      for (final key in drawTiles) {
-        final buckets = decoded[key]?.fills[sourceLayer];
-        if (buckets == null) continue;
-        final mapping = _mappingFor(key, projector, state, flat);
-        if (mapping == null) continue;
-        for (final polygon in buckets) {
-          if (!layer.filter(polygon.properties)) continue;
-          any = _addPolygon(path, polygon, mapping) || any;
-        }
-      }
-      if (!any) return;
-      canvas.drawPath(
-        path,
-        Paint()
-          ..style = PaintingStyle.fill
-          ..color = ui.Color(_argb(color, alpha)),
-      );
-      return;
-    }
+    final fills = <(int, int), Path>{};
+    final outlines = <(int, int), Path>{};
+    final order = <(int, int)>[];
 
-    // Data-driven paint: batch by resolved color.
-    final paths = <int, Path>{};
     for (final key in drawTiles) {
       final buckets = decoded[key]?.fills[sourceLayer];
       if (buckets == null) continue;
@@ -579,20 +565,43 @@ class _MvtPainter extends CustomPainter {
         final color = layer.color('fill-color', ctx);
         final alpha = (layer.number('fill-opacity', ctx) ?? 1) * opacity;
         if (color == null || alpha <= 0) continue;
-        final argb = _argb(color, alpha);
-        final path =
-            paths[argb] ??= Path()..fillType = PathFillType.nonZero;
-        _addPolygon(path, polygon, mapping);
+
+        final outlineColor = layer.color('fill-outline-color', ctx) ?? color;
+        final fillArgb = _argb(color, alpha);
+        final outlineArgb = _argb(outlineColor, alpha);
+
+        var group = (fillArgb, outlineArgb);
+        var fillPath = fills[group];
+        if (fillPath == null) {
+          fillPath = fills[group] = Path()..fillType = PathFillType.nonZero;
+          if (antialias) {
+            outlines[group] = Path()..fillType = PathFillType.nonZero;
+          }
+          order.add(group);
+        }
+        _addPolygon(fillPath, outlines[group], polygon, mapping);
       }
     }
-    paths.forEach((argb, path) {
+
+    for (final group in order) {
       canvas.drawPath(
-        path,
+        fills[group]!,
         Paint()
           ..style = PaintingStyle.fill
-          ..color = ui.Color(argb),
+          ..color = ui.Color(group.$1),
       );
-    });
+      final outline = outlines[group];
+      // Alpha 0 means "no visible band"; skip the draw call entirely.
+      if (outline != null && (group.$2 >>> 24) != 0) {
+        canvas.drawPath(
+          outline,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1
+            ..color = ui.Color(group.$2),
+        );
+      }
+    }
   }
 
   // --- line ------------------------------------------------------------------
@@ -711,10 +720,10 @@ class _MvtPainter extends CustomPainter {
         project,
         (0, 0),
         state.worldSize,
-        clipRing: (ring) {
-          final geo = [for (final p in ring) toLatLng(p)];
-          return clipRingToHorizon(geo, state)?.fill;
-        },
+        clipRing: (ring) => clipRingToHorizon(
+          [for (final p in ring) toLatLng(p)],
+          state,
+        ),
         dashSeed: (start, horizontal) => dashPhaseSeed(
           start,
           z: key.z,
@@ -763,18 +772,34 @@ class _MvtPainter extends CustomPainter {
         extent: 1,
       );
 
-  bool _addPolygon(Path path, MvtFillPolygon polygon, _TileMapping mapping) {
+  /// Adds one polygon to [fill] and, when [outline] is given, its edges to
+  /// [outline] as well.
+  ///
+  /// The two paths differ on the globe: the fill closes along the limb, while the
+  /// outline must follow only the real edges — a stroke along the limb would draw
+  /// a rim around the planet that MapLibre never shows.
+  bool _addPolygon(
+    Path fill,
+    Path? outline,
+    MvtFillPolygon polygon,
+    _TileMapping mapping,
+  ) {
     var any = false;
-
-    // Globe: every ring is closed along the limb first. Chording through the
-    // sphere both paints the back of the planet and, under nonZero, cancels a
-    // large part of the visible area (see `_TileMapping.clipRing`).
     final clipRing = mapping.clipRing;
     if (clipRing != null) {
       for (final ring in polygon.rings) {
-        final fill = clipRing(ring);
-        if (fill == null || fill.length < 3) continue;
-        path.addPolygon([for (final p in fill) Offset(p.x, p.y)], true);
+        final clipped = clipRing(ring);
+        if (clipped == null || clipped.fill.length < 3) continue;
+        fill.addPolygon([for (final p in clipped.fill) Offset(p.x, p.y)], true);
+        if (outline != null) {
+          for (final run in clipped.strokeRuns) {
+            if (run.length < 2) continue;
+            outline.moveTo(run.first.x, run.first.y);
+            for (var i = 1; i < run.length; i++) {
+              outline.lineTo(run[i].x, run[i].y);
+            }
+          }
+        }
         any = true;
       }
       return any;
@@ -783,14 +808,15 @@ class _MvtPainter extends CustomPainter {
     for (var k = mapping.copies.$1; k <= mapping.copies.$2; k++) {
       final dx = k * mapping.worldSize;
       for (final ring in polygon.rings) {
-        any = _addRing(path, ring, mapping.project, dx) || any;
+        any = _addRing(fill, outline, ring, mapping.project, dx) || any;
       }
     }
     return any;
   }
 
   bool _addRing(
-    Path path,
+    Path fill,
+    Path? outline,
     List<Vec2> ring,
     Vec2? Function(Vec2) project,
     double dx,
@@ -803,13 +829,18 @@ class _MvtPainter extends CustomPainter {
         continue;
       }
       if (!started) {
-        path.moveTo(s.x + dx, s.y);
+        fill.moveTo(s.x + dx, s.y);
+        outline?.moveTo(s.x + dx, s.y);
         started = true;
       } else {
-        path.lineTo(s.x + dx, s.y);
+        fill.lineTo(s.x + dx, s.y);
+        outline?.lineTo(s.x + dx, s.y);
       }
     }
-    if (started) path.close();
+    if (started) {
+      fill.close();
+      outline?.close();
+    }
     return started;
   }
 

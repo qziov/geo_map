@@ -168,4 +168,59 @@ void main() {
     });
     expect(spec.layers[0].isSupported, isFalse);
   });
+
+  group('fill outline', () {
+    StyleLayer fill(Map<String, Object?> paint) => StyleSpec.parse({
+          'version': 8,
+          'layers': [
+            {'id': 'f', 'type': 'fill', 'source': 's', 'paint': paint},
+          ],
+        }).layers.first;
+
+    test('is unset by default, so callers fall back to fill-color', () {
+      // MapLibre leaves `fill-outline-color` undefined and copies `fill-color`
+      // in at layer-construction time (`fill_style_layer.ts:30-32`). Keeping the
+      // "null" here is what lets the painter apply that rule; a default of
+      // "transparent" would silently mean "no outline".
+      final layer = fill({'fill-color': '#3366ff'});
+      expect(layer.color('fill-outline-color', const ExpressionContext(zoom: 5)),
+          isNull);
+      expect(
+        layer.color('fill-color', const ExpressionContext(zoom: 5))!.b,
+        0xff,
+      );
+    });
+
+    test('parses a colour', () {
+      final layer = fill({
+        'fill-color': '#3366ff',
+        'fill-outline-color': '#102030',
+      });
+      final c = layer.color('fill-outline-color', const ExpressionContext(zoom: 5));
+      expect(c, isNotNull);
+      expect(c!.r, 0x10);
+      expect(c.g, 0x20);
+      expect(c.b, 0x30);
+    });
+
+    test('can be data driven', () {
+      final layer = fill({
+        'fill-color': '#3366ff',
+        'fill-outline-color': ['get', 'edge'],
+      });
+      final red = layer.color(
+        'fill-outline-color',
+        const ExpressionContext(zoom: 5, properties: {'edge': '#ff0000'}),
+      );
+      expect(red!.r, 0xff);
+      expect(red.g, 0x00);
+    });
+
+    test('fill-antialias defaults to true and can be turned off', () {
+      const ctx = ExpressionContext(zoom: 5);
+      expect(fill({}).valueOf('fill-antialias', ctx), isTrue);
+      expect(fill({'fill-antialias': false}).valueOf('fill-antialias', ctx),
+          isFalse);
+    });
+  });
 }

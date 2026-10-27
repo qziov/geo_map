@@ -44,6 +44,10 @@ final Map<String, Object?> _styleJson = {
           '#9e9e9e',
         ],
         'fill-opacity': 0.35,
+        // MapLibre's fill outline: 1 px along every ring edge. Unset means
+        // "outline in fill-color"; here it is a dark hairline so the countries
+        // read as separate shapes instead of blobs of the same hue.
+        'fill-outline-color': '#0b0f14',
       },
     },
     {

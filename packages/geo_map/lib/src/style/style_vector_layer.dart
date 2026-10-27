@@ -153,6 +153,25 @@ class _StyleVectorPainter extends CustomPainter {
               ..style = PaintingStyle.fill
               ..color = _color(c, o),
           );
+          // `fill_outline`: a 1 px band on every ring edge, coloured by
+          // `fill-outline-color`, which **defaults to `fill-color`** rather than
+          // to nothing (MapLibre `fill_style_layer.ts:30-32`).
+          final antialias =
+              layer.valueOf('fill-antialias', layerCtx) != false;
+          if (antialias && paths.stroke.getBounds().isEmpty == false) {
+            final oc = layer.color('fill-outline-color', ctx) ?? c;
+            if (oc.a > 0) {
+              canvas.drawPath(
+                // `paths.stroke` holds the real edges only — on the globe it
+                // excludes the synthetic limb arc.
+                paths.stroke,
+                Paint()
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = 1
+                  ..color = _color(oc, o),
+              );
+            }
+          }
         } else if (layer.type == 'line') {
           final c = layer.color('line-color', ctx) ??
               layer.color('line-color', layerCtx);
