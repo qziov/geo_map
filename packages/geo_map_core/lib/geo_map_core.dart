@@ -13,6 +13,7 @@ export 'src/mvt/mvt_bucket.dart';
 export 'src/mvt/mvt_dash.dart';
 export 'src/mvt/mvt_resolution.dart';
 export 'src/projection/geo_projector.dart';
+export 'src/projection/horizon_clip.dart';
 export 'src/projection/mercator_projector.dart';
 export 'src/projection/orthographic_projector.dart';
 export 'src/style/expression.dart';

@@ -102,8 +102,8 @@ class _StyleVectorPainter extends CustomPainter {
 
       for (final feature in features) {
         if (!layer.filter(feature.properties)) continue;
-        final path = _pathFor(feature.geometry, projector, state);
-        if (path == null) continue;
+        final paths = _pathsFor(feature.geometry, projector, state, flat);
+        if (paths == null) continue;
         final ctx = ExpressionContext(
           zoom: camera.zoom,
           properties: feature.properties,
@@ -115,7 +115,7 @@ class _StyleVectorPainter extends CustomPainter {
           final o = (layer.number('fill-opacity', ctx) ?? 1) * opacity;
           if (c == null || o <= 0) continue;
           canvas.drawPath(
-            path,
+            paths.fill,
             Paint()
               ..style = PaintingStyle.fill
               ..color = _color(c, o),
@@ -127,7 +127,7 @@ class _StyleVectorPainter extends CustomPainter {
           final o = (layer.number('line-opacity', ctx) ?? 1) * opacity;
           if (c == null || o <= 0 || w <= 0) continue;
           canvas.drawPath(
-            path,
+            paths.stroke,
             Paint()
               ..style = PaintingStyle.stroke
               ..strokeWidth = w
@@ -145,11 +145,20 @@ class _StyleVectorPainter extends CustomPainter {
   static ui.Color _color(StyleColor c, double opacity) =>
       ui.Color.fromRGBO(c.r, c.g, c.b, (c.a / 255.0) * opacity);
 
-  /// Build a screen-space path; skip features entirely off-screen (any point
-  /// failing to project aborts that sub-path, which is right for the globe).
-  Path? _pathFor(GeoJsonGeometry geometry, GeoProjector projector,
-      CameraState state) {
-    final path = Path();
+  /// Screen-space paths for one feature.
+  ///
+  /// Fill and stroke differ on the globe: a fill must close along the limb
+  /// (`clipRingToHorizon`) so it never chords through the sphere, while a
+  /// stroke follows only the real edges. On the flat map both are the same
+  /// path.
+  _FeaturePaths? _pathsFor(
+    GeoJsonGeometry geometry,
+    GeoProjector projector,
+    CameraState state,
+    bool flat,
+  ) {
+    final fill = Path();
+    final stroke = Path();
     var any = false;
 
     // `GlobeVectorLayer` densifies before projecting; without it a long edge
@@ -171,14 +180,45 @@ class _StyleVectorPainter extends CustomPainter {
         }
         final o = Offset(v.x, v.y);
         if (previous == null) {
-          path.moveTo(o.dx, o.dy);
+          fill.moveTo(o.dx, o.dy);
+          stroke.moveTo(o.dx, o.dy);
         } else {
-          path.lineTo(o.dx, o.dy);
+          fill.lineTo(o.dx, o.dy);
+          stroke.lineTo(o.dx, o.dy);
         }
         previous = o;
         any = true;
       }
-      if (close && previous != null) path.close();
+      if (close && previous != null) {
+        fill.close();
+        stroke.close();
+      }
+    }
+
+    void addRing(List<LatLng> ring) {
+      if (flat) {
+        addLine(ring, close: true);
+        return;
+      }
+      final dense = densifyGreatCircle(
+        ring,
+        stepRad: stepRad > 0 ? stepRad : 0.02,
+        closed: true,
+      );
+      final clipped = clipRingToHorizon(dense, state);
+      if (clipped == null) return;
+      fill.addPolygon(
+        [for (final p in clipped.fill) Offset(p.x, p.y)],
+        true,
+      );
+      for (final run in clipped.strokeRuns) {
+        if (run.length < 2) continue;
+        stroke.moveTo(run.first.x, run.first.y);
+        for (var i = 1; i < run.length; i++) {
+          stroke.lineTo(run[i].x, run[i].y);
+        }
+      }
+      any = true;
     }
 
     switch (geometry) {
@@ -186,7 +226,7 @@ class _StyleVectorPainter extends CustomPainter {
         addLine(points, close: false);
       case PolygonGeometry(:final rings):
         for (final ring in rings) {
-          addLine(ring, close: true);
+          addRing(ring);
         }
       case MultiLineStringGeometry(:final lines):
         for (final line in lines) {
@@ -195,14 +235,14 @@ class _StyleVectorPainter extends CustomPainter {
       case MultiPolygonGeometry(:final polygons):
         for (final polygon in polygons) {
           for (final ring in polygon) {
-            addLine(ring, close: true);
+            addRing(ring);
           }
         }
       case PointGeometry():
         return null; // M1 draws fill/line only; points are M3 (symbol).
     }
 
-    return any ? path : null;
+    return any ? _FeaturePaths(fill, stroke) : null;
   }
 
   @override
@@ -211,4 +251,11 @@ class _StyleVectorPainter extends CustomPainter {
       oldDelegate.camera != camera ||
       oldDelegate.features != features ||
       oldDelegate.opacity != opacity;
+}
+
+class _FeaturePaths {
+  const _FeaturePaths(this.fill, this.stroke);
+
+  final Path fill;
+  final Path stroke;
 }
