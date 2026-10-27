@@ -211,7 +211,16 @@ class _VectorPainter extends CustomPainter {
       );
     }
 
-    for (final shape in polygons) {
+    // Repeat the flat world the same way the raster layer does
+    // (`AffineGeometry.worldCopies = 1`), so the graticule/Tissot do not stop
+    // at the first world copy while the tiles keep repeating. A globe has no
+    // seam and needs exactly one copy.
+    final copies = flat ? 1 : 0;
+    for (var copy = -copies; copy <= copies; copy++) {
+      canvas.save();
+      if (flat) canvas.translate(copy * worldSize, 0);
+
+      for (final shape in polygons) {
       if (flat) {
         final pts = unwrap(
             [for (final p in shape.points) screenOf(p)]);
@@ -300,7 +309,9 @@ class _VectorPainter extends CustomPainter {
       }
     }
 
-    canvas.restore();
+      canvas.restore(); // world-copy transform
+    }
+    canvas.restore(); // disc clip
 
     // Labels are drawn OUTSIDE the disc clip on purpose: clipping them at the
     // limb cuts the text in half. They are still hidden when their anchor is
@@ -324,7 +335,11 @@ class _VectorPainter extends CustomPainter {
       painter.paint(canvas, topLeft);
     }
 
-    for (final line in lines) {
+    for (var copy = -copies; copy <= copies; copy++) {
+      canvas.save();
+      if (flat) canvas.translate(copy * worldSize, 0);
+
+      for (final line in lines) {
       final paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = line.strokeWidth
@@ -361,6 +376,8 @@ class _VectorPainter extends CustomPainter {
 
       if (line.closed && started) path.close();
       canvas.drawPath(path, paint);
+    }
+      canvas.restore();
     }
   }
 

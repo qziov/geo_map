@@ -162,6 +162,10 @@ class _TileLayerState extends State<TileLayer>
         (_engine.hasFadingTiles(now) || _engine.isCrossFading(now))) {
       _startFade();
     }
+    // A tile that just finished loading must be painted even when its fade
+    // window already elapsed (or the ticker missed the notification). Without
+    // this the tile stays at its first-frame opacity until the camera moves.
+    if (mounted) setState(() {});
   }
 
   /// One tick of the fade loop: repaint, and stop once everything has settled.
@@ -214,6 +218,7 @@ class _TileLayerState extends State<TileLayer>
             mode: widget.mode,
             camera: camera,
             meshBuilder: _meshBuilder,
+            onFadeNeeded: _startFade,
             // A live clock: changes on every rebuild so `shouldRepaint` keeps
             // redrawing through the fade-in window.
             fadeClock: DateTime.now().microsecondsSinceEpoch,
@@ -231,12 +236,20 @@ class _TilePainter extends CustomPainter {
     required this.camera,
     required this.meshBuilder,
     required this.fadeClock,
+    this.onFadeNeeded,
   });
 
   final TileEngine engine;
   final TileLayerMode mode;
   final MapCamera camera;
   final TileMeshBuilder meshBuilder;
+
+  /// Starts the per-frame fade ticker if it is not already running.
+  ///
+  /// A tile can finish loading between engine notifications; without this the
+  /// layer would paint it once at its initial (near-zero) fade opacity and
+  /// never repaint, leaving the tile dark until the camera moves.
+  final VoidCallback? onFadeNeeded;
 
   /// Monotonic clock passed in by the fade ticker. It changes on every
   /// repaint, so the canvas is redrawn (not just relaid out) during the
@@ -254,6 +267,12 @@ class _TilePainter extends CustomPainter {
     // once per frame so every tile in this frame shares the same opacity
     // progress.
     final now = DateTime.now().millisecondsSinceEpoch;
+
+    // Any tile still inside its fade window? If not, every tile is fully
+    // opaque: never leave a loaded tile stuck at its initial ~0 opacity
+    // because the ticker did not get started.
+    final fading = engine.hasFadingTiles(now) || engine.isCrossFading(now);
+    if (fading) onFadeNeeded?.call();
 
     // ── Camera ──────────────────────────────────────────────────────────────
     // The vendored `MapCamera` speaks in screen space for the globe and in
@@ -371,7 +390,8 @@ class _TilePainter extends CustomPainter {
         }
         for (final draw in draws) {
           // Self fade-in × cross-fade progress.
-          final opacity = engine.fadeOpacity(draw.image, now) * t;
+          final opacity =
+              fading ? engine.fadeOpacity(draw.image, now) * t : 1.0;
           geometry.drawTile(canvas, draw, camera: state, opacity: opacity);
           engine.markRendered(draw.sourceKey);
           frameDraws.add(draw);
@@ -381,7 +401,8 @@ class _TilePainter extends CustomPainter {
 
       if (mode == TileLayerMode.globe) {
         for (final cap in engine.capDraws(camera: state, dataZoom: dataZoom)) {
-          final opacity = engine.fadeOpacity(cap.image, now) * t;
+          final opacity =
+              fading ? engine.fadeOpacity(cap.image, now) * t : 1.0;
           geometry.drawCap(canvas, cap, camera: state, opacity: opacity);
           engine.markRendered(cap.sourceKey);
         }
@@ -409,7 +430,7 @@ class _TilePainter extends CustomPainter {
         for (final draw in draws) {
           // Self fade-in: a freshly decoded tile rises 0→1 over
           // [TileEngine.fadeDurationMs] while the underlay shows through.
-          final opacity = engine.fadeOpacity(draw.image, now);
+          final opacity = fading ? engine.fadeOpacity(draw.image, now) : 1.0;
           geometry.drawTile(canvas, draw, camera: state, opacity: opacity);
           engine.markRendered(draw.sourceKey);
           frameDraws.add(draw);
@@ -425,7 +446,7 @@ class _TilePainter extends CustomPainter {
           camera: state,
           dataZoom: dataZoom,
         )) {
-          final opacity = engine.fadeOpacity(cap.image, now);
+          final opacity = fading ? engine.fadeOpacity(cap.image, now) : 1.0;
           geometry.drawCap(canvas, cap, camera: state, opacity: opacity);
           // The cap samples a real tile: protect it from eviction like any other
           // tile that was on screen this frame.
