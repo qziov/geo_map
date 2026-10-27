@@ -144,6 +144,20 @@ class OrthographicProjector extends GeoProjector {
       if (dLat < mostSouth) mostSouth = dLat;
     }
 
+    // Analytic horizontal bound. On an orthographic globe the visible
+    // longitude half-span at the equator is exactly
+    // `asin(min(1, dx / r))` for the rightmost screen column `dx = w/2 + m`.
+    // The 8 samples can undershoot near the limb: a corner/edge midpoint that
+    // falls off the disc snaps onto the limb, and `unproject` at the limb can
+    // return null, shrinking the east bound by tens of degrees. That is what
+    // dropped the rightmost tile column at z≈3.75 while `bruteForce` still
+    // found those tiles. The analytic span is a superset, so the per-tile
+    // visibility test still culls what is actually behind the horizon.
+    final halfSpanDeg =
+        math.asin(math.min(1.0, (w / 2 + m) / r)) * 180 / math.pi;
+    if (halfSpanDeg > mostEast) mostEast = halfSpanDeg;
+    if (-halfSpanDeg < mostWest) mostWest = -halfSpanDeg;
+
     // A pole on screen means the meridians converge there and the visible
     // longitude span opens to the full ±180 — the same case MapLibre's
     // `getBounds` patches after sampling the corners.
