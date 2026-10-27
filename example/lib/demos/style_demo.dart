@@ -10,6 +10,7 @@ import 'package:geo_map/geo_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'demo_common.dart';
+import 'grid_tile_source.dart';
 
 final StyleSpec _style = StyleSpec.parse({
   'version': 8,
@@ -48,52 +49,74 @@ final StyleSpec _style = StyleSpec.parse({
   ],
 });
 
-final List<GeoJsonFeature> _features = parseGeoJsonFeatures({
-  'type': 'FeatureCollection',
-  'features': [
-    {
-      'type': 'Feature',
-      'properties': {'use': 'park'},
-      'geometry': {
-        'type': 'Polygon',
-        'coordinates': [
-          [
-            [104.8, 30.4], [105.4, 30.4], [105.4, 30.9],
-            [104.8, 30.9], [104.8, 30.4],
+/// One feature list per style source — a `line` layer must not stroke the
+/// polygons of a different source (that shows up as a stray orange outline).
+final Map<String, List<GeoJsonFeature>> _sources = {
+  'parcels': parseGeoJsonFeatures({
+    'type': 'FeatureCollection',
+    'features': [
+      {
+        'type': 'Feature',
+        'properties': {'use': 'park'},
+        'geometry': {
+          'type': 'Polygon',
+          'coordinates': [
+            [
+              [104.8, 30.4], [105.4, 30.4], [105.4, 30.9],
+              [104.8, 30.9], [104.8, 30.4],
+            ],
           ],
-        ],
+        },
       },
-    },
-    {
-      // Filtered out by the fill layer (`use != park`): proves filters work.
-      'type': 'Feature',
-      'properties': {'use': 'water'},
-      'geometry': {
-        'type': 'Polygon',
-        'coordinates': [
-          [
-            [105.6, 30.2], [106.1, 30.2], [106.1, 30.6],
-            [105.6, 30.6], [105.6, 30.2],
+      {
+        // Filtered out by the fill layer (`use != park`): proves filters work.
+        'type': 'Feature',
+        'properties': {'use': 'water'},
+        'geometry': {
+          'type': 'Polygon',
+          'coordinates': [
+            [
+              [105.6, 30.2], [106.1, 30.2], [106.1, 30.6],
+              [105.6, 30.6], [105.6, 30.2],
+            ],
           ],
-        ],
+        },
       },
-    },
-    {
-      // A long edge with only two vertices: on the globe it must be split in
-      // Mercator space, otherwise it cuts through the sphere.
-      'type': 'Feature',
-      'properties': {'name': 'demo road'},
-      'geometry': {
-        'type': 'LineString',
-        'coordinates': [
-          [90.0, 20.0], [120.0, 35.0],
-        ],
+    ],
+  }),
+  'roads': parseGeoJsonFeatures({
+    'type': 'FeatureCollection',
+    'features': [
+      {
+        // A long edge with only two vertices: on the globe it must be split in
+        // Mercator space, otherwise it cuts through the sphere.
+        'type': 'Feature',
+        'properties': {'name': 'demo road'},
+        'geometry': {
+          'type': 'LineString',
+          'coordinates': [
+            [90.0, 20.0], [120.0, 35.0],
+          ],
+        },
       },
-    },
-  ],
-});
+      {
+        'type': 'Feature',
+        'properties': {'name': 'ring road'},
+        'geometry': {
+          'type': 'LineString',
+          'coordinates': [
+            [105.0, 30.2], [106.4, 30.2], [106.4, 31.0], [105.0, 31.0],
+            [105.0, 30.2],
+          ],
+        },
+      },
+    ],
+  }),
+};
 
 class StyleDemoPage extends StatefulWidget {
+  static const String route = "/style";
+
   const StyleDemoPage({super.key});
 
   @override
@@ -101,7 +124,7 @@ class StyleDemoPage extends StatefulWidget {
 }
 
 class _StyleDemoPageState extends State<StyleDemoPage> {
-  final DebugTilesSource _base = DebugTilesSource.labeled(maxZoom: 8);
+  final GridTileSource _base = GridTileSource();
   bool _globe = false;
 
   @override
@@ -120,8 +143,8 @@ class _StyleDemoPageState extends State<StyleDemoPage> {
       ],
       child: GeoMap(
         options: GeoMapOptions(
-          initialCenter: const LatLng(30.5, 105),
-          initialZoom: 5.2,
+          initialCenter: const LatLng(30.55, 105.2),
+          initialZoom: 6.4,
           minZoom: 0,
           maxZoom: 8,
           useGlobe: _globe,
@@ -129,7 +152,7 @@ class _StyleDemoPageState extends State<StyleDemoPage> {
         ),
         source: _base,
         children: [
-          StyleVectorLayer(style: _style, features: _features),
+          StyleVectorLayer.ofSources(style: _style, sources: _sources),
         ],
       ),
     );

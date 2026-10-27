@@ -48,6 +48,15 @@ flutter run -t lib/native/mbtiles_demo.dart -d windows
 （`flutter build web --wasm` 会报 `dart:html` 不可用）。要上 wasm 时把
 `lib/src/platform/http_get_web.dart` 换成 `package:web` + `fetch` 即可，其余代码不用动。
 
+## 已知问题（web）
+
+`/#/mvt` 在浏览器里能加载全部瓦片（HUD 显示 `11/11`），但填充与轮廓会渲染成
+大块楔形 + 长条 —— 同样的相机参数在桌面上正常。已确认不是解码差异
+（MVT 相关测试在 `dart test -p chrome` 下全通过），怀疑落在 Canvas 侧
+（`clipPath` + `addPolygon` 的 limb 裁剪），暂缓处理。
+
+其余三页（`/#/style`、`/#/overlay`、`/#/projection`）在浏览器里渲染正常。
+
 ## 放自己的 MBTiles
 
 ```bash

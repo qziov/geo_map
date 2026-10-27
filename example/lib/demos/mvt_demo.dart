@@ -2,9 +2,8 @@
 ///
 /// Everything here works in a browser: the tiles come from
 /// `demotiles.maplibre.org`, which serves CORS headers. The base map is the
-/// offline `DebugTilesSource.labeled`, so tile boundaries and the vector
-/// geometry are visible in the same frame — if they disagree, placement is
-/// wrong.
+/// offline `GridTileSource`, whose hairline borders make it obvious whether the
+/// vector geometry lands on the same tiles.
 library;
 
 import 'package:flutter/material.dart';
@@ -12,6 +11,7 @@ import 'package:geo_map/geo_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'demo_common.dart';
+import 'grid_tile_source.dart';
 
 const String _tileUrl = 'https://demotiles.maplibre.org/tiles/{z}/{x}/{y}.pbf';
 
@@ -75,6 +75,8 @@ final Map<String, Object?> _styleJson = {
 };
 
 class MvtDemoPage extends StatefulWidget {
+  static const String route = "/mvt";
+
   const MvtDemoPage({super.key});
 
   @override
@@ -90,7 +92,7 @@ class _MvtDemoPageState extends State<MvtDemoPage> {
     maxZoom: 6,
     attribution: '© MapLibre demo tiles',
   );
-  late final DebugTilesSource _base = DebugTilesSource.labeled(maxZoom: 8);
+  final GridTileSource _base = GridTileSource();
 
   late final StyleSpec _style = StyleSpec.parse(_styleJson);
 

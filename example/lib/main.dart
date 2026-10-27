@@ -37,7 +37,16 @@ class ExampleApp extends StatelessWidget {
         ),
         appBarTheme: const AppBarTheme(backgroundColor: kDemoBackground),
       ),
-      home: const _GalleryPage(),
+      // Named routes so every demo is a shareable URL (`/#/overlay`) — and so a
+      // headless screenshot can reach one page without clicking.
+      initialRoute: _GalleryPage.route,
+      routes: {
+        _GalleryPage.route: (_) => const _GalleryPage(),
+        MvtDemoPage.route: (_) => const MvtDemoPage(),
+        StyleDemoPage.route: (_) => const StyleDemoPage(),
+        OverlayDemoPage.route: (_) => const OverlayDemoPage(),
+        ProjectionDemoPage.route: (_) => const ProjectionDemoPage(),
+      },
     );
   }
 }
@@ -48,7 +57,7 @@ class _Demo {
     required this.title,
     required this.summary,
     required this.api,
-    this.page,
+    this.route,
     this.nativePath,
   });
 
@@ -58,13 +67,13 @@ class _Demo {
   /// The public API this demo is about.
   final String api;
 
-  /// Runnable page; `null` for native-only demos.
-  final Widget? page;
+  /// Route of the runnable page; `null` for native-only demos.
+  final String? route;
 
   /// Where to read the native-only implementation.
   final String? nativePath;
 
-  bool get isRunnable => page != null;
+  bool get isRunnable => route != null;
 }
 
 const List<_Demo> _demos = [
@@ -72,25 +81,25 @@ const List<_Demo> _demos = [
     title: 'MVT 矢量瓦片',
     summary: 'fill / line / 虚线 / 数据驱动着色 / 世界副本 / 地平线裁剪',
     api: 'MvtVectorLayer · HttpTileSource · StyleSpec',
-    page: MvtDemoPage(),
+    route: "/mvt",
   ),
   _Demo(
     title: '样式图层',
     summary: '内联 GeoJSON + filter + 随 zoom 插值，零网络',
     api: 'StyleVectorLayer · parseGeoJsonFeatures',
-    page: StyleDemoPage(),
+    route: "/style",
   ),
   _Demo(
     title: '球面叠加层',
     summary: '经纬网 / Tissot 指示圆 / 大圆航线 / 网格点',
     api: 'GlobeVectorLayer · buildGraticule · buildTissot · densifyPath',
-    page: OverlayDemoPage(),
+    route: "/overlay",
   ),
   _Demo(
     title: '投影切换 · 瓦片摆放',
     summary: '2D Mercator ↔ 3D 球面，两种投影共用一份瓦片缓存',
     api: 'GeoMapOptions.useGlobe · DebugTilesSource',
-    page: ProjectionDemoPage(),
+    route: "/projection",
   ),
   _Demo(
     title: 'MBTiles 离线底图',
@@ -102,6 +111,8 @@ const List<_Demo> _demos = [
 
 class _GalleryPage extends StatelessWidget {
   const _GalleryPage();
+
+  static const String route = '/';
 
   @override
   Widget build(BuildContext context) {
@@ -189,9 +200,9 @@ class _DemoCard extends StatelessWidget {
   }
 
   void _open(BuildContext context) {
-    final page = demo.page;
-    if (page != null) {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+    final route = demo.route;
+    if (route != null) {
+      Navigator.of(context).pushNamed(route);
       return;
     }
     showDialog<void>(

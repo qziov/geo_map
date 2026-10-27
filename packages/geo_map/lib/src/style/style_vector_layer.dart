@@ -5,6 +5,11 @@
 /// **same** core [GeoProjector] the tile layer uses (so 2D and 3D share the
 /// math), and draws with Canvas. It is intentionally a `children` overlay for
 /// M1; M1.3/M1.4 move it to a first-class ordered layer stack.
+///
+/// **A layer only sees the features of its own `source`.** Use
+/// [StyleVectorLayer.ofSources] for a multi-source style; the plain constructor
+/// takes one feature list and applies it to every layer, which is only correct
+/// when the style has a single source (or when the layers carry no `source`).
 library;
 
 import 'dart:ui' as ui;
@@ -23,7 +28,23 @@ class StyleVectorLayer extends StatelessWidget {
     this.controller,
     required this.features,
     this.opacity = 1.0,
-  }) : assert(style != null || controller != null,
+  })  : sources = null,
+        assert(style != null || controller != null,
+            'provide either style or controller');
+
+  /// Multi-source variant: each style layer draws only `sources[layer.source]`.
+  ///
+  /// Without this, a style with two sources draws every feature twice — a
+  /// `line` layer would happily stroke the polygons that belong to a different
+  /// source, which reads as a stray outline in the wrong colour.
+  const StyleVectorLayer.ofSources({
+    super.key,
+    this.style,
+    this.controller,
+    required Map<String, List<GeoJsonFeature>> this.sources,
+    this.opacity = 1.0,
+  })  : features = const [],
+        assert(style != null || controller != null,
             'provide either style or controller');
 
   /// A static style. Ignored when [controller] is provided.
@@ -33,6 +54,10 @@ class StyleVectorLayer extends StatelessWidget {
   final GeoStyleController? controller;
 
   final List<GeoJsonFeature> features;
+
+  /// Features keyed by style source id (see [StyleVectorLayer.ofSources]).
+  final Map<String, List<GeoJsonFeature>>? sources;
+
   final double opacity;
 
   @override
@@ -44,6 +69,7 @@ class StyleVectorLayer extends StatelessWidget {
             painter: _StyleVectorPainter(
               style: spec,
               features: features,
+              sources: sources,
               camera: camera,
               opacity: opacity,
             ),
@@ -64,12 +90,14 @@ class _StyleVectorPainter extends CustomPainter {
   _StyleVectorPainter({
     required this.style,
     required this.features,
+    required this.sources,
     required this.camera,
     required this.opacity,
   });
 
   final StyleSpec style;
   final List<GeoJsonFeature> features;
+  final Map<String, List<GeoJsonFeature>>? sources;
   final MapCamera camera;
   final double opacity;
 
@@ -100,7 +128,12 @@ class _StyleVectorPainter extends CustomPainter {
       if (!layer.isSupported || !layer.isVisibleAt(camera.zoom)) continue;
       final layerCtx = ExpressionContext(zoom: camera.zoom);
 
-      for (final feature in features) {
+      // A layer draws its own source only. `sources == null` is the
+      // single-source shorthand and keeps the old behaviour.
+      final layerFeatures = sources == null
+          ? features
+          : (sources![layer.source] ?? const <GeoJsonFeature>[]);
+      for (final feature in layerFeatures) {
         if (!layer.filter(feature.properties)) continue;
         final paths = _pathsFor(feature.geometry, projector, state, flat);
         if (paths == null) continue;

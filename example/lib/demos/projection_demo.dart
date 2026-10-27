@@ -1,5 +1,5 @@
 /// Projection switch and tile-placement debug: 2D Mercator vs 3D globe over the
-/// MapLibre "number" debug sheets (one labelled image per zoom level).
+/// offline `labeled` debug tiles, which print their own `z/x/y`.
 ///
 /// The point is what *does not* change: one `TileEngine` serves both modes, so
 /// switching reuses the decoded tiles instead of downloading them again.
@@ -12,6 +12,8 @@ import 'package:latlong2/latlong.dart';
 import 'demo_common.dart';
 
 class ProjectionDemoPage extends StatefulWidget {
+  static const String route = "/projection";
+
   const ProjectionDemoPage({super.key});
 
   @override
@@ -19,7 +21,7 @@ class ProjectionDemoPage extends StatefulWidget {
 }
 
 class _ProjectionDemoPageState extends State<ProjectionDemoPage> {
-  late final DebugTilesSource _source = DebugTilesSource.maplibreNumber();
+  late final DebugTilesSource _source = DebugTilesSource.labeled(maxZoom: 6);
   bool _globe = true;
   bool _crosshair = true;
 
@@ -45,7 +47,7 @@ class _ProjectionDemoPageState extends State<ProjectionDemoPage> {
       child: GeoMap(
         options: GeoMapOptions(
           initialCenter: const LatLng(30, 105),
-          initialZoom: 1.6,
+          initialZoom: 2.0,
           minZoom: 0,
           maxZoom: 6,
           useGlobe: _globe,

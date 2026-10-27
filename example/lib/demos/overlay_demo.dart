@@ -11,6 +11,7 @@ import 'package:geo_map/geo_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'demo_common.dart';
+import 'grid_tile_source.dart';
 
 final List<GlobePolyline> _graticule = buildGraticule();
 final List<GlobePolyline> _tissot = buildTissot();
@@ -31,6 +32,8 @@ final List<LatLng> _gridDots = [
 ];
 
 class OverlayDemoPage extends StatefulWidget {
+  static const String route = "/overlay";
+
   const OverlayDemoPage({super.key});
 
   @override
@@ -38,7 +41,7 @@ class OverlayDemoPage extends StatefulWidget {
 }
 
 class _OverlayDemoPageState extends State<OverlayDemoPage> {
-  final DebugTilesSource _base = DebugTilesSource.labeled(maxZoom: 8);
+  final GridTileSource _base = GridTileSource();
   bool _graticuleOn = true;
   bool _tissotOn = true;
   bool _routeOn = true;
@@ -76,7 +79,7 @@ class _OverlayDemoPageState extends State<OverlayDemoPage> {
       child: GeoMap(
         options: const GeoMapOptions(
           initialCenter: LatLng(20, 100),
-          initialZoom: 1.7,
+          initialZoom: 2.1,
           minZoom: 0,
           maxZoom: 8,
           useGlobe: true,

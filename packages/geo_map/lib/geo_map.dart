@@ -27,7 +27,14 @@ export 'package:geo_map_core/geo_map_core.dart'
         GeoJsonGeometry,
         parseGeoJsonFeatures,
         compileFilter,
-        FeaturePredicate;
+        FeaturePredicate,
+        // Needed to implement `GeoTileSource` outside this package.
+        GeoEngineTuning,
+        GeoTileSource,
+        TileFetchResult,
+        TileFailureKind,
+        TileRowOrder,
+        TileSchemeKind;
 export 'src/style/style_controller.dart';
 export 'src/style/style_vector_layer.dart';
 export 'src/style/mvt_vector_layer.dart';
