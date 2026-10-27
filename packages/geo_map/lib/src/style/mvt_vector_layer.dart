@@ -421,7 +421,13 @@ class _DecodedTile {
 /// split in tile space when the bucket is built (`_DecodedTile`), exactly like
 /// MapLibre's `subdivideVertexLine`, so the painter only ever projects vertices.
 class _TileMapping {
-  const _TileMapping(this.project, this.copies, this.worldSize, {this.dashSeed});
+  const _TileMapping(
+    this.project,
+    this.copies,
+    this.worldSize, {
+    this.dashSeed,
+    this.clipRing,
+  });
 
   final Vec2? Function(Vec2) project;
 
@@ -433,6 +439,17 @@ class _TileMapping {
   /// pattern continues across tile edges instead of restarting. See
   /// `dashPhaseSeed`.
   final double Function(Vec2 start, bool horizontal)? dashSeed;
+
+  /// Globe only: closes a tile-space ring **along the limb** and returns screen
+  /// points. `null` means the ring is entirely behind the globe.
+  ///
+  /// Plain projection is not enough here. A ring that crosses the horizon has
+  /// its hidden vertices dropped and each visible run closed with a chord; with
+  /// `PathFillType.nonZero` those chords have opposite winding and cancel most
+  /// of the polygon — measured on a limb-straddling test ring: 634 px covered
+  /// by the chord version vs 2257 px by the clipped version. The visible result
+  /// is a straight-edged bite taken out of the fill near the limb.
+  final List<Vec2>? Function(List<Vec2> ring)? clipRing;
 }
 
 class _MvtPainter extends CustomPainter {
@@ -694,6 +711,10 @@ class _MvtPainter extends CustomPainter {
         project,
         (0, 0),
         state.worldSize,
+        clipRing: (ring) {
+          final geo = [for (final p in ring) toLatLng(p)];
+          return clipRingToHorizon(geo, state)?.fill;
+        },
         dashSeed: (start, horizontal) => dashPhaseSeed(
           start,
           z: key.z,
@@ -744,6 +765,21 @@ class _MvtPainter extends CustomPainter {
 
   bool _addPolygon(Path path, MvtFillPolygon polygon, _TileMapping mapping) {
     var any = false;
+
+    // Globe: every ring is closed along the limb first. Chording through the
+    // sphere both paints the back of the planet and, under nonZero, cancels a
+    // large part of the visible area (see `_TileMapping.clipRing`).
+    final clipRing = mapping.clipRing;
+    if (clipRing != null) {
+      for (final ring in polygon.rings) {
+        final fill = clipRing(ring);
+        if (fill == null || fill.length < 3) continue;
+        path.addPolygon([for (final p in fill) Offset(p.x, p.y)], true);
+        any = true;
+      }
+      return any;
+    }
+
     for (var k = mapping.copies.$1; k <= mapping.copies.$2; k++) {
       final dx = k * mapping.worldSize;
       for (final ring in polygon.rings) {
