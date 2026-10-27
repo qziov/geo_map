@@ -268,6 +268,9 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
           revision: _revision,
           opacity: widget.opacity,
           renderWorldCopies: widget.renderWorldCopies,
+          sourceMinZoom: widget.source.minZoom,
+          sourceMaxZoom: widget.source.maxZoom,
+          scheme: widget.source.scheme,
         ),
         child: const SizedBox.expand(),
       ),
@@ -336,6 +339,9 @@ class _MvtPainter extends CustomPainter {
     required this.revision,
     required this.opacity,
     required this.renderWorldCopies,
+    required this.sourceMinZoom,
+    required this.sourceMaxZoom,
+    required this.scheme,
   });
 
   final StyleSpec style;
@@ -345,6 +351,9 @@ class _MvtPainter extends CustomPainter {
   final int revision;
   final double opacity;
   final bool renderWorldCopies;
+  final int sourceMinZoom;
+  final int sourceMaxZoom;
+  final TileSchemeKind scheme;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -369,14 +378,25 @@ class _MvtPainter extends CustomPainter {
         )));
     }
 
+    // Placeholders (loaded ancestors) first, then exact tiles / child
+    // generations, so a loaded tile always wins over its coarse stand-in.
+    final draw = resolveVectorDrawTiles(
+      visible: tiles,
+      isLoaded: decoded.containsKey,
+      sourceMinZoom: sourceMinZoom,
+      sourceMaxZoom: sourceMaxZoom,
+      scheme: scheme,
+    );
+    final drawTiles = draw.drawOrder;
+
     for (final layer in style.layers) {
       if (!layer.isSupported || !layer.isVisibleAt(camera.zoom)) continue;
       final sourceLayer = layer.sourceLayer;
       if (sourceLayer == null) continue;
       if (layer.type == 'fill') {
-        _paintFills(canvas, layer, sourceLayer, projector, state, flat);
+        _paintFills(canvas, layer, sourceLayer, projector, state, flat, drawTiles);
       } else if (layer.type == 'line') {
-        _paintLines(canvas, layer, sourceLayer, projector, state, flat);
+        _paintLines(canvas, layer, sourceLayer, projector, state, flat, drawTiles);
       }
     }
 
@@ -392,6 +412,7 @@ class _MvtPainter extends CustomPainter {
     GeoProjector projector,
     CameraState state,
     bool flat,
+    List<TileKey> drawTiles,
   ) {
     final colorProp = layer.paint['fill-color'];
     final opacityProp = layer.paint['fill-opacity'];
@@ -405,7 +426,7 @@ class _MvtPainter extends CustomPainter {
       if (color == null || alpha <= 0) return;
       final path = Path()..fillType = PathFillType.nonZero;
       var any = false;
-      for (final key in tiles) {
+      for (final key in drawTiles) {
         final buckets = decoded[key]?.fills[sourceLayer];
         if (buckets == null) continue;
         final mapping = _mappingFor(key, projector, state, flat);
@@ -427,7 +448,7 @@ class _MvtPainter extends CustomPainter {
 
     // Data-driven paint: batch by resolved color.
     final paths = <int, Path>{};
-    for (final key in tiles) {
+    for (final key in drawTiles) {
       final buckets = decoded[key]?.fills[sourceLayer];
       if (buckets == null) continue;
       final mapping = _mappingFor(key, projector, state, flat);
@@ -466,6 +487,7 @@ class _MvtPainter extends CustomPainter {
     GeoProjector projector,
     CameraState state,
     bool flat,
+    List<TileKey> drawTiles,
   ) {
     final ctx = ExpressionContext(zoom: camera.zoom);
     final cap = _strokeCap(layer.string('line-cap', ctx));
@@ -485,7 +507,7 @@ class _MvtPainter extends CustomPainter {
       if (color == null || alpha <= 0 || width <= 0) return;
       final path = Path();
       var any = false;
-      for (final key in tiles) {
+      for (final key in drawTiles) {
         final buckets = decoded[key]?.lines[sourceLayer];
         if (buckets == null) continue;
         final mapping = _mappingFor(key, projector, state, flat);
@@ -510,7 +532,7 @@ class _MvtPainter extends CustomPainter {
 
     // Data-driven stroke: batch by (color, width).
     final groups = <(int, double), Path>{};
-    for (final key in tiles) {
+    for (final key in drawTiles) {
       final buckets = decoded[key]?.lines[sourceLayer];
       if (buckets == null) continue;
       final mapping = _mappingFor(key, projector, state, flat);
