@@ -159,11 +159,30 @@ class TileAffine {
         origin.x + point.x * ux + point.y * vx,
         origin.y + point.x * uy + point.y * vy,
       );
+
+  /// Basis for an axis-aligned tile: [spanPx] to the east and to the south.
+  factory TileAffine.fromOrigin(Vec2 origin, double spanPx) => TileAffine(
+        origin: origin,
+        ux: spanPx,
+        uy: 0,
+        vx: 0,
+        vy: spanPx,
+      );
 }
 
 /// Builds the flat affine map for tile ([z], [x], [y]).
 ///
-/// Returns `null` when a corner does not project (only possible on a
+/// Only the north-west corner goes through [GeoProjector.project]. The east and
+/// south edges are the **constant** on-screen span `worldSize / 2^z` (Mercator
+/// tiles are square in world-t space).
+///
+/// Projecting the other corners independently is what used to break at the
+/// antimeridian: `project` wraps longitude relative to the camera, so a tile
+/// whose NW corner lands at +170° and NE at −170° produced a basis a whole
+/// world wide and stretched the tile across the screen. A constant span cannot
+/// cross the seam.
+///
+/// Returns `null` when the origin does not project (only possible on a
 /// non-affine projector; Mercator always succeeds).
 TileAffine? tileAffine(
   GeoProjector projector,
@@ -172,26 +191,16 @@ TileAffine? tileAffine(
   required int x,
   required int y,
 }) {
-  Vec2? corner(double u, double v) => projector.project(
-        mvtTilePointToLatLng(
-          Vec2(u, v),
-          z: z,
-          tileX: x,
-          tileY: y,
-          extent: 1,
-        ),
-        camera,
-      );
-
-  final nw = corner(0, 0);
-  final ne = corner(1, 0);
-  final sw = corner(0, 1);
-  if (nw == null || ne == null || sw == null) return null;
-  return TileAffine(
-    origin: nw,
-    ux: ne.x - nw.x,
-    uy: ne.y - nw.y,
-    vx: sw.x - nw.x,
-    vy: sw.y - nw.y,
+  final nw = projector.project(
+    mvtTilePointToLatLng(
+      const Vec2(0, 0),
+      z: z,
+      tileX: x,
+      tileY: y,
+      extent: 1,
+    ),
+    camera,
   );
+  if (nw == null) return null;
+  return TileAffine.fromOrigin(nw, camera.worldSize / (1 << z));
 }

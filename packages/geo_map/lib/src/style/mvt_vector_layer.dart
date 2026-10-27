@@ -7,6 +7,7 @@
 ///    raster layer uses).
 /// 2. **Fetch + decode** — the injected [GeoTileSource] returns pbf bytes;
 ///    `decodeMvtTile` parses them once and the result is cached per tile.
+///    Transient failures are retried after a TTL instead of being blacklisted.
 /// 3. **Bucket** — each source layer is classified into fill polygons (outer +
 ///    holes) and polylines at decode time, so painting does no geometry work.
 /// 4. **Batch** — all features of one style layer that share a paint value are
@@ -14,27 +15,72 @@
 ///    Canvas equivalent of MapLibre's "one vertex buffer, one draw call per
 ///    layer": constant paint collapses to one path, data-driven paint groups
 ///    by resolved color.
+/// 5. **Repeat** — on the flat map a tile is drawn once per world copy that
+///    intersects the viewport (`visibleWorldCopies`, mirroring MapLibre's
+///    `getVisibleUnwrappedCoordinates`), so panning past ±180° keeps showing
+///    data instead of empty space.
 ///
 /// Coordinates: buckets are normalized to the tile's `[0,1]` square. On the
 /// flat map a tile is an affine parallelogram, so points are mapped with a
-/// per-tile basis (exact, no per-vertex trig). On the globe a tile is a curved
-/// quad, so points go through `mvtTilePointToLatLng` + the orthographic
-/// projector, exactly like the M1 vector layer.
+/// per-tile basis built from the NW corner and the constant tile span. On the
+/// globe a tile is a curved quad, so points go through
+/// `mvtTilePointToLatLng` + the orthographic projector.
 library;
 
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:geo_map_core/geo_map_core.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 
+import '../globe/tile_source.dart' show HttpTileSource;
 import '../vendor/flutter_map_camera/flutter_map_camera.dart';
 import 'style_controller.dart';
 
-/// Supplies vector tiles as raw pbf bytes.
+/// What the layer is currently doing, for a debug HUD.
 ///
-/// The layer is transport-agnostic so it works with HTTP, MBTiles or a test
-/// fixture; picking the transport is the app's job.
+/// [dataZoom] is the level tiles are fetched at (0..source.maxZoom), which is
+/// `round(camera zoom)` — not the continuous camera zoom the HUD usually shows.
+/// [readyCount] / [tileCount] say how many visible tiles are decoded, and
+/// [lastStatusCode] surfaces the transport status when the source is HTTP.
+class MvtDiagnostics {
+  const MvtDiagnostics({
+    required this.dataZoom,
+    required this.tileCount,
+    required this.readyCount,
+    required this.failedCount,
+    this.lastStatusCode,
+  });
+
+  final int dataZoom;
+  final int tileCount;
+  final int readyCount;
+  final int failedCount;
+  final int? lastStatusCode;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MvtDiagnostics &&
+      other.dataZoom == dataZoom &&
+      other.tileCount == tileCount &&
+      other.readyCount == readyCount &&
+      other.failedCount == failedCount &&
+      other.lastStatusCode == lastStatusCode;
+
+  @override
+  int get hashCode =>
+      Object.hash(dataZoom, tileCount, readyCount, failedCount, lastStatusCode);
+
+  @override
+  String toString() => 'MvtDiagnostics(z$dataZoom, $readyCount/$tileCount, '
+      'failed $failedCount, http $lastStatusCode)';
+}
+
+/// Vector tiles rendered through a [StyleSpec].
+///
+/// Transport is injected as a [GeoTileSource] so the same layer works with
+/// HTTP, MBTiles or a test fixture.
 class MvtVectorLayer extends StatefulWidget {
   const MvtVectorLayer({
     super.key,
@@ -43,6 +89,8 @@ class MvtVectorLayer extends StatefulWidget {
     this.controller,
     this.opacity = 1.0,
     this.maxCachedTiles = 160,
+    this.renderWorldCopies = true,
+    this.onDiagnostics,
   }) : assert(style != null || controller != null,
             'provide either style or controller');
 
@@ -57,15 +105,34 @@ class MvtVectorLayer extends StatefulWidget {
   final double opacity;
   final int maxCachedTiles;
 
+  /// Draw the world once per visible copy when panning past ±180°.
+  ///
+  /// Defaults to `true` (MapLibre's `renderWorldCopies`). Set `false` for a
+  /// fixed single-world view: off-screen data is clipped instead of repeated.
+  final bool renderWorldCopies;
+
+  /// Called after a frame when the diagnostics change (for a debug HUD).
+  final ValueChanged<MvtDiagnostics>? onDiagnostics;
+
   @override
   State<MvtVectorLayer> createState() => _MvtVectorLayerState();
 }
 
 class _MvtVectorLayerState extends State<MvtVectorLayer> {
+  /// Maximum requests in flight. The public demo tile server rate-limits
+  /// bursts, so the edge tiles used to fail and never come back.
+  static const int _maxConcurrent = 6;
+
   final Map<TileKey, _DecodedTile> _decoded = {};
   final Set<TileKey> _pending = {};
-  final Set<TileKey> _failed = {};
+
+  /// When a tile may be retried; failures are no longer permanent.
+  final Map<TileKey, DateTime> _retryAfter = {};
+
+  int _inFlight = 0;
   int _revision = 0;
+  Timer? _retryTimer;
+  MvtDiagnostics? _lastDiag;
 
   @override
   void didUpdateWidget(covariant MvtVectorLayer oldWidget) {
@@ -73,16 +140,32 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
     if (oldWidget.source != widget.source) {
       _decoded.clear();
       _pending.clear();
-      _failed.clear();
+      _retryAfter.clear();
+      _retryTimer?.cancel();
+      _retryTimer = null;
       _revision++;
     }
   }
 
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _ensureTile(TileKey key) async {
-    if (_decoded.containsKey(key) || _pending.contains(key) || _failed.contains(key)) {
-      return;
+    if (_decoded.containsKey(key) || _pending.contains(key)) return;
+
+    final now = DateTime.now();
+    final until = _retryAfter[key];
+    if (until != null) {
+      if (now.isBefore(until)) return;
+      _retryAfter.remove(key);
     }
+    if (_inFlight >= _maxConcurrent) return;
+
     _pending.add(key);
+    _inFlight++;
     try {
       final result = await widget.source.fetch(key.z, key.x, key.y);
       if (!mounted) return;
@@ -94,13 +177,43 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
         }
         setState(() => _revision++);
       } else {
-        _failed.add(key);
+        _retryAfter[key] = DateTime.now().add(
+          Duration(
+            milliseconds: result.isNotFound
+                ? GeoEngineTuning.notFoundTtlMs
+                : GeoEngineTuning.networkFailureTtlMs,
+          ),
+        );
+        _ensureRetryTimer();
+        // Kick the next queued tile now instead of waiting for the retry tick.
+        if (mounted) setState(() => _revision++);
       }
     } catch (_) {
-      _failed.add(key);
+      _retryAfter[key] = DateTime.now().add(
+          const Duration(milliseconds: GeoEngineTuning.networkFailureTtlMs));
+      _ensureRetryTimer();
+      if (mounted) setState(() => _revision++);
     } finally {
       _pending.remove(key);
+      _inFlight--;
     }
+  }
+
+  /// Polls once a second while any tile is waiting for its retry window; the
+  /// TTL itself decides which tiles actually get re-requested.
+  void _ensureRetryTimer() {
+    _retryTimer ??= Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_retryAfter.isEmpty) {
+        timer.cancel();
+        _retryTimer = null;
+        return;
+      }
+      setState(() => _revision++);
+    });
   }
 
   @override
@@ -143,6 +256,8 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
       _ensureTile(key);
     }
 
+    _reportDiagnostics(selection);
+
     return RepaintBoundary(
       child: CustomPaint(
         painter: _MvtPainter(
@@ -152,10 +267,38 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
           decoded: _decoded,
           revision: _revision,
           opacity: widget.opacity,
+          renderWorldCopies: widget.renderWorldCopies,
         ),
         child: const SizedBox.expand(),
       ),
     );
+  }
+
+  void _reportDiagnostics(TileSelection selection) {
+    final callback = widget.onDiagnostics;
+    if (callback == null) return;
+    var ready = 0;
+    var failed = 0;
+    for (final key in selection.tiles) {
+      if (_decoded.containsKey(key)) {
+        ready++;
+      } else if (_retryAfter.containsKey(key)) {
+        failed++;
+      }
+    }
+    final source = widget.source;
+    final diag = MvtDiagnostics(
+      dataZoom: selection.dataZoom,
+      tileCount: selection.tiles.length,
+      readyCount: ready,
+      failedCount: failed,
+      lastStatusCode: source is HttpTileSource ? source.lastStatusCode : null,
+    );
+    if (diag == _lastDiag) return;
+    _lastDiag = diag;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) callback(diag);
+    });
   }
 }
 
@@ -173,6 +316,17 @@ class _DecodedTile {
   final Map<String, List<MvtPolyline>> lines = {};
 }
 
+/// How one tile maps to the screen: a point mapper plus the world copies.
+class _TileMapping {
+  const _TileMapping(this.project, this.copies, this.worldSize);
+
+  final Vec2? Function(Vec2) project;
+
+  /// Inclusive copy indices; each copy is offset by `k * worldSize` in x.
+  final (int, int) copies;
+  final double worldSize;
+}
+
 class _MvtPainter extends CustomPainter {
   _MvtPainter({
     required this.style,
@@ -181,6 +335,7 @@ class _MvtPainter extends CustomPainter {
     required this.decoded,
     required this.revision,
     required this.opacity,
+    required this.renderWorldCopies,
   });
 
   final StyleSpec style;
@@ -189,6 +344,7 @@ class _MvtPainter extends CustomPainter {
   final Map<TileKey, _DecodedTile> decoded;
   final int revision;
   final double opacity;
+  final bool renderWorldCopies;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -252,10 +408,11 @@ class _MvtPainter extends CustomPainter {
       for (final key in tiles) {
         final buckets = decoded[key]?.fills[sourceLayer];
         if (buckets == null) continue;
-        final project = _tileProjector(key, projector, state, flat);
+        final mapping = _mappingFor(key, projector, state, flat);
+        if (mapping == null) continue;
         for (final polygon in buckets) {
           if (!layer.filter(polygon.properties)) continue;
-          any = _addPolygon(path, polygon, project) || any;
+          any = _addPolygon(path, polygon, mapping) || any;
         }
       }
       if (!any) return;
@@ -273,7 +430,8 @@ class _MvtPainter extends CustomPainter {
     for (final key in tiles) {
       final buckets = decoded[key]?.fills[sourceLayer];
       if (buckets == null) continue;
-      final project = _tileProjector(key, projector, state, flat);
+      final mapping = _mappingFor(key, projector, state, flat);
+      if (mapping == null) continue;
       for (final polygon in buckets) {
         if (!layer.filter(polygon.properties)) continue;
         final ctx = ExpressionContext(
@@ -286,7 +444,7 @@ class _MvtPainter extends CustomPainter {
         final argb = _argb(color, alpha);
         final path =
             paths[argb] ??= Path()..fillType = PathFillType.nonZero;
-        _addPolygon(path, polygon, project);
+        _addPolygon(path, polygon, mapping);
       }
     }
     paths.forEach((argb, path) {
@@ -330,10 +488,11 @@ class _MvtPainter extends CustomPainter {
       for (final key in tiles) {
         final buckets = decoded[key]?.lines[sourceLayer];
         if (buckets == null) continue;
-        final project = _tileProjector(key, projector, state, flat);
+        final mapping = _mappingFor(key, projector, state, flat);
+        if (mapping == null) continue;
         for (final line in buckets) {
           if (!layer.filter(line.properties)) continue;
-          any = _addPolyline(path, line, project) || any;
+          any = _addPolyline(path, line, mapping) || any;
         }
       }
       if (!any) return;
@@ -354,7 +513,8 @@ class _MvtPainter extends CustomPainter {
     for (final key in tiles) {
       final buckets = decoded[key]?.lines[sourceLayer];
       if (buckets == null) continue;
-      final project = _tileProjector(key, projector, state, flat);
+      final mapping = _mappingFor(key, projector, state, flat);
+      if (mapping == null) continue;
       for (final line in buckets) {
         if (!layer.filter(line.properties)) continue;
         final fctx = ExpressionContext(
@@ -367,7 +527,7 @@ class _MvtPainter extends CustomPainter {
         if (color == null || alpha <= 0 || width <= 0) continue;
         final groupKey = (_argb(color, alpha), width);
         final path = groups.putIfAbsent(groupKey, Path.new);
-        _addPolyline(path, line, project);
+        _addPolyline(path, line, mapping);
       }
     }
     groups.forEach((group, path) {
@@ -385,25 +545,32 @@ class _MvtPainter extends CustomPainter {
 
   // --- geometry --------------------------------------------------------------
 
-  /// Returns a mapper from normalized tile space to screen space.
+  /// How a tile maps to the screen, or `null` when it cannot be projected.
   ///
-  /// Flat: one affine basis per tile — exact because Web Mercator is linear in
-  /// tile space, and it avoids a `project`/trig call per vertex.
-  /// Globe: project every point through lat/lng; points on the far side return
-  /// `null` and the caller breaks the subpath there.
-  Vec2? Function(Vec2) _tileProjector(
+  /// Flat: one affine basis per tile plus the world-copy range. Globe: a point
+  /// mapper through lat/lng and exactly one copy (the sphere has no seam).
+  _TileMapping? _mappingFor(
     TileKey key,
     GeoProjector projector,
     CameraState state,
     bool flat,
   ) {
-    final x = TileGrid.unwrapX(key.x, key.z, camera.center.longitude);
-    if (flat) {
-      final affine = tileAffine(projector, state, z: key.z, x: x, y: key.y);
-      if (affine == null) return (_) => null;
-      return affine.map;
+    if (!flat) {
+      Vec2? project(Vec2 p) =>
+          projector.project(_latLng(key, key.x, p.x, p.y), state);
+      return _TileMapping(project, (0, 0), state.worldSize);
     }
-    return (p) => projector.project(_latLng(key, x, p.x, p.y), state);
+    final affine = tileAffine(projector, state, z: key.z, x: key.x, y: key.y);
+    if (affine == null) return null;
+    final copies = renderWorldCopies
+        ? visibleWorldCopies(
+            baseX: affine.origin.x,
+            spanPx: affine.ux,
+            worldSize: state.worldSize,
+            viewportWidth: state.size.width,
+          )
+        : (0, 0);
+    return _TileMapping(affine.map, copies, state.worldSize);
   }
 
   LatLng _latLng(TileKey key, int x, double u, double v) =>
@@ -415,19 +582,23 @@ class _MvtPainter extends CustomPainter {
         extent: 1,
       );
 
-  bool _addPolygon(
-    Path path,
-    MvtFillPolygon polygon,
-    Vec2? Function(Vec2) project,
-  ) {
+  bool _addPolygon(Path path, MvtFillPolygon polygon, _TileMapping mapping) {
     var any = false;
-    for (final ring in polygon.rings) {
-      any = _addRing(path, ring, project) || any;
+    for (var k = mapping.copies.$1; k <= mapping.copies.$2; k++) {
+      final dx = k * mapping.worldSize;
+      for (final ring in polygon.rings) {
+        any = _addRing(path, ring, mapping.project, dx) || any;
+      }
     }
     return any;
   }
 
-  bool _addRing(Path path, List<Vec2> ring, Vec2? Function(Vec2) project) {
+  bool _addRing(
+    Path path,
+    List<Vec2> ring,
+    Vec2? Function(Vec2) project,
+    double dx,
+  ) {
     var started = false;
     for (final p in ring) {
       final s = project(p);
@@ -436,31 +607,34 @@ class _MvtPainter extends CustomPainter {
         continue;
       }
       if (!started) {
-        path.moveTo(s.x, s.y);
+        path.moveTo(s.x + dx, s.y);
         started = true;
       } else {
-        path.lineTo(s.x, s.y);
+        path.lineTo(s.x + dx, s.y);
       }
     }
     if (started) path.close();
     return started;
   }
 
-  bool _addPolyline(Path path, MvtPolyline line, Vec2? Function(Vec2) project) {
-    var started = false;
+  bool _addPolyline(Path path, MvtPolyline line, _TileMapping mapping) {
     var any = false;
-    for (final p in line.points) {
-      final s = project(p);
-      if (s == null) {
-        started = false;
-        continue;
-      }
-      if (!started) {
-        path.moveTo(s.x, s.y);
-        started = true;
-      } else {
-        path.lineTo(s.x, s.y);
-        any = true;
+    for (var k = mapping.copies.$1; k <= mapping.copies.$2; k++) {
+      final dx = k * mapping.worldSize;
+      var started = false;
+      for (final p in line.points) {
+        final s = mapping.project(p);
+        if (s == null) {
+          started = false;
+          continue;
+        }
+        if (!started) {
+          path.moveTo(s.x + dx, s.y);
+          started = true;
+        } else {
+          path.lineTo(s.x + dx, s.y);
+          any = true;
+        }
       }
     }
     return any;
@@ -491,5 +665,6 @@ class _MvtPainter extends CustomPainter {
       oldDelegate.revision != revision ||
       oldDelegate.style != style ||
       oldDelegate.camera != camera ||
-      oldDelegate.opacity != opacity;
+      oldDelegate.opacity != opacity ||
+      oldDelegate.renderWorldCopies != renderWorldCopies;
 }

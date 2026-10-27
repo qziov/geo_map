@@ -82,21 +82,6 @@ class TileGrid {
 
   int wrapX(int x) => ((x % cols) + cols) % cols;
 
-  /// Column [x] unwrapped to the world copy whose tile **centre** is nearest
-  /// [centerLongitude].
-  ///
-  /// Rendering a tile at its canonical column breaks across the antimeridian:
-  /// a tile east of it must be drawn on the right, not on the far left. Rounding
-  /// the tile centre (not its left edge) keeps the world copy at
-  /// `centerLongitude == 0` unchanged — rounding the edge would shift a z0 tile
-  /// one whole world east.
-  static int unwrapX(int x, int z, double centerLongitude) {
-    final cols = 1 << z;
-    final centerCol = (centerLongitude + 180) / 360 * cols;
-    final k = ((centerCol - x - 0.5) / cols).round();
-    return x + cols * k;
-  }
-
   int xOf(double lng) => ((lng + 180) / 360 * cols).floor().clamp(0, cols - 1);
 
   /// Unclamped column index — callers wrap it (a ±180 window must not collapse).
@@ -169,4 +154,31 @@ class TileKey {
 
   @override
   String toString() => '$z/$x/$y';
+}
+
+/// Inclusive range of world-copy offsets `k` whose tile copy intersects the
+/// viewport.
+///
+/// Mirrors MapLibre's `getVisibleUnwrappedCoordinates`
+/// (`mercator_transform.ts:340-360`): the copies are derived from the tile's
+/// **screen** rect, not from a fixed count, so a world narrower than the
+/// viewport repeats as many times as it fits while a world wider than the
+/// viewport still gets exactly one copy.
+///
+/// [baseX] is the screen x of the tile's left edge at `k = 0`, [spanPx] its
+/// on-screen width, [worldSize] one full world in screen pixels.
+///
+/// A copy is visible when `baseX + k*world < viewportWidth` and
+/// `baseX + k*world + span > 0`; both bounds are strict, so the returned range
+/// may be empty (`start > end`) for a tile entirely off-screen.
+(int, int) visibleWorldCopies({
+  required double baseX,
+  required double spanPx,
+  required double worldSize,
+  required double viewportWidth,
+}) {
+  if (worldSize <= 0 || spanPx <= 0 || viewportWidth <= 0) return (0, 0);
+  final start = ((-spanPx - baseX) / worldSize).floor() + 1;
+  final end = ((viewportWidth - baseX) / worldSize).ceil() - 1;
+  return (start, end);
 }
