@@ -77,7 +77,8 @@ GeoMap(
 - [x] Web 可编译（HTTP 传输条件实现；MBTiles 走 stub）
 - [x] M1: style spec JSON + 表达式求值器（参照 maplibre-gl-js）
 - [x] M2: 矢量瓦片 MVT + fill/line bucket（参照 maplibre-native）
-- [ ] M2 收尾: fill-outline、symbol 前置的分桶整理
+- [x] M2: fill-outline-color / fill-antialias（默认描边取 fill-color，与 MapLibre 一致）
+- [ ] M3 前置: symbol 分桶整理、draw plan 抽取
 - [ ] GPU 后端（draw plan 抽取）
 - [ ] M3: symbol 碰撞检测与标注避让
 - [ ] 三端（Android/iOS/鸿蒙）打包验证
