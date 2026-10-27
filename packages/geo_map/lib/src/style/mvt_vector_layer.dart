@@ -505,6 +505,9 @@ class _MvtPainter extends CustomPainter {
       final width = layer.number('line-width', ctx) ?? 1;
       final alpha = (layer.number('line-opacity', ctx) ?? 1) * opacity;
       if (color == null || alpha <= 0 || width <= 0) return;
+      final dash = _dashPattern(layer, ctx);
+      final patternPx =
+          dash == null ? null : [for (final v in dash) v * width];
       final path = Path();
       var any = false;
       for (final key in drawTiles) {
@@ -514,7 +517,7 @@ class _MvtPainter extends CustomPainter {
         if (mapping == null) continue;
         for (final line in buckets) {
           if (!layer.filter(line.properties)) continue;
-          any = _addPolyline(path, line, mapping) || any;
+          any = _addPolyline(path, line, mapping, patternPx) || any;
         }
       }
       if (!any) return;
@@ -530,8 +533,8 @@ class _MvtPainter extends CustomPainter {
       return;
     }
 
-    // Data-driven stroke: batch by (color, width).
-    final groups = <(int, double), Path>{};
+    // Data-driven stroke: batch by (color, width, dash pattern).
+    final groups = <(int, double, String), Path>{};
     for (final key in drawTiles) {
       final buckets = decoded[key]?.lines[sourceLayer];
       if (buckets == null) continue;
@@ -547,9 +550,16 @@ class _MvtPainter extends CustomPainter {
         final width = layer.number('line-width', fctx) ?? 1;
         final alpha = (layer.number('line-opacity', fctx) ?? 1) * opacity;
         if (color == null || alpha <= 0 || width <= 0) continue;
-        final groupKey = (_argb(color, alpha), width);
+        final dash = _dashPattern(layer, fctx);
+        final patternPx =
+            dash == null ? null : [for (final v in dash) v * width];
+        final groupKey = (
+          _argb(color, alpha),
+          width,
+          patternPx?.join(',') ?? '',
+        );
         final path = groups.putIfAbsent(groupKey, Path.new);
-        _addPolyline(path, line, mapping);
+        _addPolyline(path, line, mapping, patternPx);
       }
     }
     groups.forEach((group, path) {
@@ -639,27 +649,65 @@ class _MvtPainter extends CustomPainter {
     return started;
   }
 
-  bool _addPolyline(Path path, MvtPolyline line, _TileMapping mapping) {
+  bool _addPolyline(
+    Path path,
+    MvtPolyline line,
+    _TileMapping mapping, [
+    List<double>? dashPx,
+  ]) {
     var any = false;
     for (var k = mapping.copies.$1; k <= mapping.copies.$2; k++) {
       final dx = k * mapping.worldSize;
-      var started = false;
+      final run = <Vec2>[];
+
+      void flush() {
+        if (run.length < 2) {
+          run.clear();
+          return;
+        }
+        if (dashPx == null) {
+          path.moveTo(run.first.x + dx, run.first.y);
+          for (var i = 1; i < run.length; i++) {
+            path.lineTo(run[i].x + dx, run[i].y);
+          }
+          any = true;
+        } else {
+          for (final dash in dashPolyline(run, dashPx)) {
+            path.moveTo(dash.first.x + dx, dash.first.y);
+            for (var i = 1; i < dash.length; i++) {
+              path.lineTo(dash[i].x + dx, dash[i].y);
+            }
+            any = true;
+          }
+        }
+        run.clear();
+      }
+
       for (final p in line.points) {
         final s = mapping.project(p);
         if (s == null) {
-          started = false;
+          flush();
           continue;
         }
-        if (!started) {
-          path.moveTo(s.x + dx, s.y);
-          started = true;
-        } else {
-          path.lineTo(s.x + dx, s.y);
-          any = true;
-        }
+        run.add(s);
       }
+      flush();
     }
     return any;
+  }
+
+  /// Resolves `line-dasharray` (line-width multiples) to a validated list.
+  List<double>? _dashPattern(StyleLayer layer, ExpressionContext ctx) {
+    final raw = layer.valueOf('line-dasharray', ctx);
+    if (raw is! List || raw.length < 2) return null;
+    final out = <double>[];
+    var sum = 0.0;
+    for (final value in raw) {
+      if (value is! num || value < 0) return null;
+      out.add(value.toDouble());
+      sum += value;
+    }
+    return sum <= 0 ? null : out;
   }
 
   static int _argb(StyleColor color, double opacity) {
