@@ -1,19 +1,33 @@
 /// Compiles a MapLibre filter into a predicate over a feature's properties.
 ///
 /// Supports the legacy filter syntax (`["==", "class", "park"]`, `in`, `has`,
-/// `all/any/none`) and, for operands written as expressions (`["get", "x"]`),
-/// falls back to the expression evaluator. Zoom is not allowed in filters
-/// (MapLibre rejects it), so operands are evaluated with `zoom: 0`.
+/// `all/any/none`) and, for operands written as expressions (`["get", "x"]`,
+/// `["+", ["zoom"], 1]`), falls back to the expression evaluator.
+///
+/// **Filters may depend on zoom.** MapLibre evaluates a filter with
+/// `new EvaluationParameters(zoom)` (`src/data/feature_index.ts:235`,
+/// `src/tile/tile.ts:454`), so `["zoom"]` is legal inside one — a style can gate
+/// a layer by zoom without a separate `minzoom`. The predicate therefore takes
+/// the zoom as an argument; evaluating with a constant 0 (as an earlier version
+/// did) silently turns every zoom-dependent filter into "as if at z0".
 library;
 
 import 'expression.dart';
 
-typedef FeaturePredicate = bool Function(Map<String, Object?> properties);
+/// Predicate over one feature at one zoom level.
+///
+/// The zoom is optional so a caller that has no camera (a test, a filter that
+/// never mentions `["zoom"]`) can still ask `matches(props)`; it then means
+/// "zoom 0".
+typedef FeaturePredicate = bool Function(
+  Map<String, Object?> properties, [
+  double? zoom,
+]);
 
 /// Always-match predicate (a layer without a filter).
 const FeaturePredicate matchAllFeatures = _matchAll;
 
-bool _matchAll(Map<String, Object?> _) => true;
+bool _matchAll(Map<String, Object?> _, [double? __]) => true;
 
 FeaturePredicate compileFilter(Object? json) {
   if (json == null) return matchAllFeatures;
@@ -42,18 +56,18 @@ FeaturePredicate compileFilter(Object? json) {
     case '!in':
       return _in(json, negate: true);
     case 'has':
-      return (p) => p.containsKey(json[1]);
+      return (p, [_]) => p.containsKey(json[1]);
     case '!has':
-      return (p) => !p.containsKey(json[1]);
+      return (p, [_]) => !p.containsKey(json[1]);
     case 'all':
       final subs = [for (var i = 1; i < json.length; i++) compileFilter(json[i])];
-      return (p) => subs.every((f) => f(p));
+      return (p, [zoom]) => subs.every((f) => f(p, zoom));
     case 'any':
       final subs = [for (var i = 1; i < json.length; i++) compileFilter(json[i])];
-      return (p) => subs.any((f) => f(p));
+      return (p, [zoom]) => subs.any((f) => f(p, zoom));
     case 'none':
       final subs = [for (var i = 1; i < json.length; i++) compileFilter(json[i])];
-      return (p) => subs.every((f) => !f(p));
+      return (p, [zoom]) => subs.every((f) => !f(p, zoom));
     default:
       throw FormatException('unsupported filter operator: $op');
   }
@@ -65,9 +79,10 @@ FeaturePredicate _comparison(List json, bool Function(Object?, Object?) test) {
   }
   final left = json[1];
   final right = json[2];
-  return (p) {
-    final a = _left(left, p);
-    final b = _right(right, p);
+  return (p, [zoom]) {
+    final z = zoom ?? 0;
+    final a = _left(left, p, z);
+    final b = _right(right, p, z);
     // Normalize 1 vs 1.0 so numeric equality is not type-sensitive.
     if (a is num && b is num) return test(a.toDouble(), b.toDouble());
     return test(a, b);
@@ -80,9 +95,10 @@ FeaturePredicate _numeric(List json, bool Function(num, num) test) {
   }
   final left = json[1];
   final right = json[2];
-  return (p) {
-    final a = _left(left, p);
-    final b = _right(right, p);
+  return (p, [zoom]) {
+    final z = zoom ?? 0;
+    final a = _left(left, p, z);
+    final b = _right(right, p, z);
     if (a is num && b is num) return test(a, b);
     return false;
   };
@@ -99,27 +115,27 @@ FeaturePredicate _in(List json, {required bool negate}) {
       values.add(v);
     }
   }
-  return (p) {
-    final hit = values.contains(_left(key, p));
+  return (p, [zoom]) {
+    final hit = values.contains(_left(key, p, zoom ?? 0));
     return negate ? !hit : hit;
   };
 }
 
 /// Left operand: a bare string is a property key; a list is an expression.
-Object? _left(Object? v, Map<String, Object?> properties) {
+Object? _left(Object? v, Map<String, Object?> properties, double zoom) {
   if (v is List) {
     return parseExpression(v)
-        .evaluate(ExpressionContext(zoom: 0, properties: properties));
+        .evaluate(ExpressionContext(zoom: zoom, properties: properties));
   }
   if (v is String) return properties[v];
   return v;
 }
 
 /// Right operand: only a list is evaluated; scalars are literals, never keys.
-Object? _right(Object? v, Map<String, Object?> properties) {
+Object? _right(Object? v, Map<String, Object?> properties, double zoom) {
   if (v is List) {
     return parseExpression(v)
-        .evaluate(ExpressionContext(zoom: 0, properties: properties));
+        .evaluate(ExpressionContext(zoom: zoom, properties: properties));
   }
   return v;
 }

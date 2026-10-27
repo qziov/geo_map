@@ -72,10 +72,19 @@ class StyleLayer {
   final Map<String, PropertyValue> layout;
 
   /// Compiled filter over feature properties (always-true when absent).
+  ///
+  /// Call it through [matches], which supplies the zoom.
   final FeaturePredicate filter;
 
+  /// Whether this layer wants [properties] at [zoom].
+  ///
+  /// The zoom argument exists because MapLibre lets a filter reference
+  /// `["zoom"]`; see `style_filter.dart`.
+  bool matches(Map<String, Object?> properties, double zoom) =>
+      filter(properties, zoom);
+
   /// Whether the M1 renderer can draw this layer type.
-  bool get isSupported => type == 'fill' || type == 'line';
+  bool get isSupported => type == 'fill' || type == 'line' || type == 'symbol';
 
   static StyleLayer parse(Map<String, Object?> json) {
     final id = '${json['id'] ?? ''}';

@@ -213,4 +213,53 @@ void main() {
       expect(() => PropertyValue.fromJson(['zoom']), throwsFormatException);
     });
   });
+
+  group('arithmetic', () {
+    Object? eval(Object json, {double zoom = 0, Map<String, Object?>? props}) =>
+        parseExpression(json).evaluate(
+          ExpressionContext(zoom: zoom, properties: props ?? const {}),
+        );
+
+    test('adds and multiplies', () {
+      expect(eval(['+', 1, 2, 3]), 6.0);
+      expect(eval(['*', 2, 3]), 6.0);
+      expect(eval(['-', 5, 2]), 3.0);
+      expect(eval(['/', 6, 4]), 1.5);
+      expect(eval(['%', 7, 4]), 3.0);
+    });
+
+    test('works with zoom and properties', () {
+      expect(eval(['+', ['zoom'], 1], zoom: 3.5), 4.5);
+      expect(eval(['*', ['get', 'n'], 2], props: {'n': 3}), 6.0);
+    });
+
+    test('unary minus negates, unary plus is a no-op', () {
+      expect(eval(['-', 4]), -4.0);
+      expect(eval(['+', 4]), 4.0);
+    });
+
+    test('+ concatenates strings', () {
+      expect(eval(['+', 'a', 'b']), 'ab');
+    });
+
+    test('a non-numeric operand yields null', () {
+      expect(eval(['+', 'a', 1]), isNull);
+      expect(eval(['*', 2, null]), isNull);
+    });
+
+    test('division and modulo by zero yield null, not infinity', () {
+      expect(eval(['/', 1, 0]), isNull);
+      expect(eval(['%', 1, 0]), isNull);
+    });
+
+    test('constness follows the operands', () {
+      final withZoom = parseExpression(['+', ['zoom'], 1]);
+      expect(withZoom.isConstant, isFalse);
+      expect(withZoom.isFeatureConstant, isTrue);
+
+      final withProp = parseExpression(['+', ['get', 'n'], 1]);
+      expect(withProp.isFeatureConstant, isFalse);
+      expect(parseExpression(['+', 1, 2]).isConstant, isTrue);
+    });
+  });
 }

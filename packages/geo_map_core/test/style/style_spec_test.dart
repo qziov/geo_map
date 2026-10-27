@@ -163,7 +163,7 @@ void main() {
     final spec = StyleSpec.parse({
       'version': 8,
       'layers': [
-        {'id': 's', 'type': 'symbol', 'source': 's'},
+        {'id': 's', 'type': 'heatmap', 'source': 's'},
       ],
     });
     expect(spec.layers[0].isSupported, isFalse);

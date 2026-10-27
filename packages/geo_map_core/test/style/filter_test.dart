@@ -64,4 +64,29 @@ void main() {
     expect(() => compileFilter(['within', <String, Object?>{}]),
         throwsFormatException);
   });
+
+  group('zoom in filters', () {
+    // MapLibre evaluates a filter with `new EvaluationParameters(zoom)`
+    // (`data/feature_index.ts:235`), so `["zoom"]` is legal inside one. Passing
+    // a constant zoom (the old behaviour) made every such filter behave as if
+    // the map were at z0.
+    final filter = compileFilter(
+      ['<=', ['get', 'rank'], ['+', ['zoom'], 1]],
+    );
+
+    test('accepts a feature the current zoom can afford', () {
+      expect(filter({'rank': 2}, 3.6), isTrue);
+      expect(filter({'rank': 5}, 3.6), isFalse);
+    });
+
+    test('the same feature flips as the zoom grows', () {
+      expect(filter({'rank': 5}, 3.6), isFalse);
+      expect(filter({'rank': 5}, 6.0), isTrue);
+    });
+
+    test('omitting the zoom means zoom 0', () {
+      expect(filter({'rank': 1}), isTrue);
+      expect(filter({'rank': 2}), isFalse);
+    });
+  });
 }

@@ -39,6 +39,7 @@ import 'package:latlong2/latlong.dart' show LatLng;
 import '../globe/tile_source.dart' show HttpTileSource;
 import '../vendor/flutter_map_camera/flutter_map_camera.dart';
 import 'style_controller.dart';
+import 'symbol_painter.dart';
 
 /// What the layer is currently doing, for a debug HUD.
 ///
@@ -530,6 +531,8 @@ class _MvtPainter extends CustomPainter {
         _paintFills(canvas, layer, sourceLayer, projector, state, flat, drawOrder);
       } else if (layer.type == 'line') {
         _paintLines(canvas, layer, sourceLayer, projector, state, flat, drawOrder);
+      } else if (layer.type == 'symbol') {
+        _paintSymbols(canvas, layer, sourceLayer, projector, state, flat, drawOrder);
       }
     }
 
@@ -573,7 +576,7 @@ class _MvtPainter extends CustomPainter {
       final mapping = _mappingFor(key, projector, state, flat);
       if (mapping == null) continue;
       for (final polygon in buckets) {
-        if (!layer.filter(polygon.properties)) continue;
+        if (!layer.matches(polygon.properties, camera.zoom)) continue;
         final ctx = ExpressionContext(
           zoom: camera.zoom,
           properties: polygon.properties,
@@ -620,6 +623,78 @@ class _MvtPainter extends CustomPainter {
     }
   }
 
+  // --- symbol ----------------------------------------------------------------
+
+  /// Labels from every drawn tile through one placer.
+  ///
+  /// One placer per layer per frame is the point: a label in tile A has to be
+  /// able to hide a label in tile B, and only a grid shared by all of them can
+  /// arbitrate that.
+  void _paintSymbols(
+    Canvas canvas,
+    StyleLayer layer,
+    String sourceLayer,
+    GeoProjector projector,
+    CameraState state,
+    bool flat,
+    List<TileKey> drawTiles,
+  ) {
+    final labels = <LabelSpec>[];
+    var order = 0;
+    for (final key in drawTiles) {
+      final decodedTile = decoded[key];
+      if (decodedTile == null) continue;
+      final mapping = _mappingFor(key, projector, state, flat);
+      if (mapping == null) continue;
+      for (final symbol in decodedTile.symbolsFor(sourceLayer)) {
+        if (!layer.matches(symbol.properties, camera.zoom)) continue;
+        final anchor = mapping.project(symbol.anchor);
+        if (anchor == null) continue; // behind the globe
+        final ctx = ExpressionContext(
+          zoom: camera.zoom,
+          properties: symbol.properties,
+        );
+        final raw = layer.valueOf('text-field', ctx);
+        if (raw == null) continue;
+        final text = '$raw';
+        if (text.isEmpty) continue;
+        labels.add(_labelSpec(layer, ctx, anchor, text,
+            symbol.tilePriority * 1000 + order++));
+      }
+    }
+    if (labels.isEmpty) return;
+    SymbolPainter(viewport: Size(state.size.width, state.size.height))
+        .paint(canvas, labels);
+  }
+
+  static LabelSpec _labelSpec(
+    StyleLayer layer,
+    ExpressionContext ctx,
+    Vec2 anchor,
+    String text,
+    int order,
+  ) {
+    final haloWidth = layer.number('text-halo-width', ctx) ?? 0;
+    final color = layer.color('text-color', ctx) ?? const StyleColor(0, 0, 0, 255);
+    final halo = layer.color('text-halo-color', ctx) ??
+        const StyleColor(0, 0, 0, 0);
+    return LabelSpec(
+      anchor: anchor,
+      text: text,
+      fontSize: layer.number('text-size', ctx) ?? 16,
+      color: ui.Color(_argb(_withAlpha(color, 1), 1)),
+      haloColor: ui.Color(_argb(halo, 1)),
+      haloWidth: haloWidth,
+      allowOverlap: layer.valueOf('text-allow-overlap', ctx) == true,
+      ignorePlacement: layer.valueOf('text-ignore-placement', ctx) == true,
+      sortKey: layer.number('symbol-sort-key', ctx) ?? 0,
+      order: order,
+    );
+  }
+
+  static StyleColor _withAlpha(StyleColor c, int alpha) =>
+      StyleColor(c.r, c.g, c.b, alpha);
+
   // --- line ------------------------------------------------------------------
 
   void _paintLines(
@@ -658,7 +733,7 @@ class _MvtPainter extends CustomPainter {
         final mapping = _mappingFor(key, projector, state, flat);
         if (mapping == null) continue;
         for (final line in buckets) {
-          if (!layer.filter(line.properties)) continue;
+          if (!layer.matches(line.properties, camera.zoom)) continue;
           any = _addPolyline(path, line, mapping, patternPx) || any;
         }
       }
@@ -683,7 +758,7 @@ class _MvtPainter extends CustomPainter {
       final mapping = _mappingFor(key, projector, state, flat);
       if (mapping == null) continue;
       for (final line in buckets) {
-        if (!layer.filter(line.properties)) continue;
+        if (!layer.matches(line.properties, camera.zoom)) continue;
         final fctx = ExpressionContext(
           zoom: camera.zoom,
           properties: line.properties,

@@ -99,14 +99,12 @@ void main() {
           ],
         }).layers.first;
 
-    test('parses as a layer but is not drawn yet', () {
+    test('is a supported layer type now that the painter exists', () {
       final layer = symbol({
         'layout': {'text-field': ['get', 'name']},
       });
       expect(layer.type, 'symbol');
-      // The painters only handle fill/line, so advertising symbol support would
-      // silently drop the layer instead of skipping it on purpose.
-      expect(layer.isSupported, isFalse);
+      expect(layer.isSupported, isTrue);
     });
 
     test('text layout defaults follow v8.json', () {

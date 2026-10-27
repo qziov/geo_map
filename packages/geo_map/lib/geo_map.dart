@@ -25,6 +25,13 @@ export 'package:geo_map_core/geo_map_core.dart'
         ExpressionContext,
         GeoJsonFeature,
         GeoJsonGeometry,
+        // Geometry subclasses: needed to build features in code, not only by
+        // parsing a FeatureCollection.
+        PointGeometry,
+        LineStringGeometry,
+        PolygonGeometry,
+        MultiLineStringGeometry,
+        MultiPolygonGeometry,
         parseGeoJsonFeatures,
         compileFilter,
         FeaturePredicate,

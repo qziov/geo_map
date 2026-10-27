@@ -20,6 +20,7 @@ import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../vendor/flutter_map_camera/flutter_map_camera.dart';
 import 'style_controller.dart';
+import 'symbol_painter.dart';
 
 class StyleVectorLayer extends StatelessWidget {
   const StyleVectorLayer({
@@ -124,9 +125,39 @@ class _StyleVectorPainter extends CustomPainter {
         )));
     }
 
+    // Labels are collected while walking the layers but painted last: a symbol
+    // layer is meant to sit on top of the geometry regardless of where it is in
+    // the style, and one placer must see every candidate to arbitrate between
+    // them.
+    final labels = <LabelSpec>[];
+    var labelOrder = 0;
+
     for (final layer in style.layers) {
-      if (!layer.isSupported || !layer.isVisibleAt(camera.zoom)) continue;
+      if (!layer.isVisibleAt(camera.zoom)) continue;
       final layerCtx = ExpressionContext(zoom: camera.zoom);
+
+      if (layer.type == 'symbol') {
+        final feats = sources == null
+            ? features
+            : (sources![layer.source] ?? const <GeoJsonFeature>[]);
+        for (final feature in feats) {
+          if (!layer.matches(feature.properties, camera.zoom)) continue;
+          final geometry = feature.geometry;
+          if (geometry is! PointGeometry) continue;
+          final anchor = projector.project(geometry.point, state);
+          if (anchor == null) continue;
+          final ctx = ExpressionContext(
+            zoom: camera.zoom,
+            properties: feature.properties,
+          );
+          final text = _labelText(layer, ctx);
+          if (text == null) continue;
+          labels.add(_labelSpec(layer, ctx, anchor, text, labelOrder++));
+        }
+        continue;
+      }
+
+      if (!layer.isSupported) continue;
 
       // A layer draws its own source only. `sources == null` is the
       // single-source shorthand and keeps the old behaviour.
@@ -134,7 +165,7 @@ class _StyleVectorPainter extends CustomPainter {
           ? features
           : (sources![layer.source] ?? const <GeoJsonFeature>[]);
       for (final feature in layerFeatures) {
-        if (!layer.filter(feature.properties)) continue;
+        if (!layer.matches(feature.properties, camera.zoom)) continue;
         final paths = _pathsFor(feature.geometry, projector, state, flat);
         if (paths == null) continue;
         final ctx = ExpressionContext(
@@ -191,7 +222,42 @@ class _StyleVectorPainter extends CustomPainter {
       }
     }
 
+    if (labels.isNotEmpty) {
+      SymbolPainter(viewport: size).paint(canvas, labels);
+    }
+
     if (clip != null) canvas.restore();
+  }
+
+  /// Resolves `text-field`; `null` when the expression yields nothing usable.
+  static String? _labelText(StyleLayer layer, ExpressionContext ctx) {
+    final value = layer.valueOf('text-field', ctx);
+    if (value == null) return null;
+    final text = '$value';
+    return text.isEmpty ? null : text;
+  }
+
+  static LabelSpec _labelSpec(
+    StyleLayer layer,
+    ExpressionContext ctx,
+    Vec2 anchor,
+    String text,
+    int order,
+  ) {
+    final haloWidth = layer.number('text-halo-width', ctx) ?? 0;
+    return LabelSpec(
+      anchor: anchor,
+      text: text,
+      fontSize: layer.number('text-size', ctx) ?? 16,
+      color: _color(layer.color('text-color', ctx) ?? const StyleColor(0, 0, 0), 1),
+      haloColor: _color(
+          layer.color('text-halo-color', ctx) ?? const StyleColor(0, 0, 0, 0), 1),
+      haloWidth: haloWidth,
+      allowOverlap: layer.valueOf('text-allow-overlap', ctx) == true,
+      ignorePlacement: layer.valueOf('text-ignore-placement', ctx) == true,
+      sortKey: layer.number('symbol-sort-key', ctx) ?? 0,
+      order: order,
+    );
   }
 
   static ui.Color _color(StyleColor c, double opacity) =>

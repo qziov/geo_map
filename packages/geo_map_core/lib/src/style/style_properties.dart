@@ -5,9 +5,10 @@
 /// `paint_symbol`/`layout_symbol`). Defaults match `v8.json`
 /// (`fill-color` `#000000`, `line-width` 1, `text-size` 16, …).
 ///
-/// `symbol` properties are parsed but not drawn yet: the bucket
-/// (`buildMvtSymbolBucket`) and the placer (`SymbolPlacer`) exist, the glyph
-/// painter does not. That is why [StyleLayer.isSupported] still says no.
+/// `symbol` covers `text-field`/`text-size`/`text-allow-overlap`/
+/// `text-ignore-placement`/`symbol-sort-key`/`text-color`/`text-halo-*` — the
+/// subset the Canvas painter implements. Icons, `text-anchor` offsets and
+/// `symbol-placement: line` parse but are not acted on yet.
 library;
 
 enum StylePropertyType { number, color, boolean, string, array }

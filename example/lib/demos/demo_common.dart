@@ -83,13 +83,20 @@ class DemoScaffold extends StatelessWidget {
               right: 0,
               bottom: 16,
               child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: kDemoPanel,
-                    borderRadius: BorderRadius.circular(20),
+                // Horizontal scroll: four chips plus a phone width is more than
+                // fits, and a clipped toggle is worse than a scrollable one.
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: kDemoPanel,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: controls),
                   ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: controls),
                 ),
               ),
             ),

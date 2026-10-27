@@ -16,6 +16,7 @@ import 'demos/mvt_demo.dart';
 import 'demos/overlay_demo.dart';
 import 'demos/projection_demo.dart';
 import 'demos/style_demo.dart';
+import 'demos/symbol_demo.dart';
 
 void main() => runApp(const ExampleApp());
 
@@ -44,6 +45,7 @@ class ExampleApp extends StatelessWidget {
         _GalleryPage.route: (_) => const _GalleryPage(),
         MvtDemoPage.route: (_) => const MvtDemoPage(),
         StyleDemoPage.route: (_) => const StyleDemoPage(),
+        SymbolDemoPage.route: (_) => const SymbolDemoPage(),
         OverlayDemoPage.route: (_) => const OverlayDemoPage(),
         ProjectionDemoPage.route: (_) => const ProjectionDemoPage(),
       },
@@ -88,6 +90,12 @@ const List<_Demo> _demos = [
     summary: '内联 GeoJSON + filter + 随 zoom 插值，零网络',
     api: 'StyleVectorLayer · parseGeoJsonFeatures',
     route: "/style",
+  ),
+  _Demo(
+    title: '符号标注',
+    summary: 'text-field / text-halo / 25px 碰撞网格 / allow-overlap / ignore-placement',
+    api: 'symbol 图层 · buildMvtSymbolBucket · SymbolPlacer · SymbolPainter',
+    route: "/symbol",
   ),
   _Demo(
     title: '球面叠加层',

@@ -544,9 +544,83 @@ Expr _parseArray(List json) {
       return ToColorExpr(parseExpression(json[1]));
     case 'to-boolean':
       return ToBooleanExpr(parseExpression(json[1]));
+    // Arithmetic. MapLibre's v8 spec allows these in any expression, including
+    // filters (`["<=", ["get", "rank"], ["+", ["zoom"], 1]]` is a common way to
+    // gate labels by zoom).
+    case '+':
+      return ArithmeticExpr(ArithmeticOp.add, _operands(json));
+    case '-':
+      return ArithmeticExpr(ArithmeticOp.subtract, _operands(json));
+    case '*':
+      return ArithmeticExpr(ArithmeticOp.multiply, _operands(json));
+    case '/':
+      return ArithmeticExpr(ArithmeticOp.divide, _operands(json));
+    case '%':
+      return ArithmeticExpr(ArithmeticOp.modulo, _operands(json));
     default:
       throw FormatException('unsupported expression operator: $op');
   }
+}
+
+/// Operands of an n-ary arithmetic node.
+List<Expr> _operands(List json) {
+  if (json.length < 2) {
+    throw FormatException('${json.first}: needs at least one operand');
+  }
+  return [for (var i = 1; i < json.length; i++) parseExpression(json[i])];
+}
+
+enum ArithmeticOp { add, subtract, multiply, divide, modulo }
+
+/// n-ary arithmetic, folded left to right.
+///
+/// `+` doubles as string concatenation when every operand is a string (v8 spec
+/// does the same). Division and modulo by zero yield `null` instead of
+/// `Infinity`, because every consumer here treats a non-number as "no value".
+class ArithmeticExpr extends Expr {
+  const ArithmeticExpr(this.op, this.operands);
+
+  final ArithmeticOp op;
+  final List<Expr> operands;
+
+  @override
+  Object? evaluate(ExpressionContext ctx) {
+    if (operands.length == 1) {
+      final only = operands.first.evaluate(ctx);
+      if (op == ArithmeticOp.subtract) {
+        return only is num ? -only.toDouble() : null;
+      }
+      return only is num ? only.toDouble() : only;
+    }
+
+    var acc = operands.first.evaluate(ctx);
+    for (var i = 1; i < operands.length; i++) {
+      final next = operands[i].evaluate(ctx);
+      if (op == ArithmeticOp.add && acc is String && next is String) {
+        acc = acc + next;
+        continue;
+      }
+      if (acc is! num || next is! num) return null;
+      final a = acc.toDouble();
+      final b = next.toDouble();
+      acc = switch (op) {
+        ArithmeticOp.add => a + b,
+        ArithmeticOp.subtract => a - b,
+        ArithmeticOp.multiply => a * b,
+        ArithmeticOp.divide => b == 0 ? null : a / b,
+        ArithmeticOp.modulo => b == 0 ? null : a % b,
+      };
+      if (acc == null) return null;
+    }
+    return acc;
+  }
+
+  @override
+  bool get isFeatureConstant =>
+      operands.every((e) => e.isFeatureConstant);
+
+  @override
+  bool get isZoomConstant => operands.every((e) => e.isZoomConstant);
 }
 
 Expr _parseInterpolate(List json) {
