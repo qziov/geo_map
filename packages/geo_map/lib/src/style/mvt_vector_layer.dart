@@ -413,6 +413,22 @@ class _DecodedTile {
   final MvtTile tile;
   final Map<String, List<MvtFillPolygon>> fills = {};
   final Map<String, List<MvtPolyline>> lines = {};
+  final Map<String, List<MvtSymbol>> _symbols = {};
+
+  /// Label anchors for one source layer, built on first use.
+  ///
+  /// Symbols are cheap (one `Vec2` + the feature's properties per point) but
+  /// most layers never need them, so this stays lazy until the glyph painter
+  /// exists.
+  List<MvtSymbol> symbolsFor(String sourceLayer) {
+    final cached = _symbols[sourceLayer];
+    if (cached != null) return cached;
+    final layer = tile.layers
+        .where((l) => l.name == sourceLayer)
+        .firstOrNull;
+    return _symbols[sourceLayer] =
+        layer == null ? const [] : buildMvtSymbolBucket(layer);
+  }
 }
 
 /// How one tile maps to the screen: a point mapper plus the world copies.
