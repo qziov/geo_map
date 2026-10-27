@@ -152,9 +152,18 @@ class _StyleVectorPainter extends CustomPainter {
     final path = Path();
     var any = false;
 
+    // `GlobeVectorLayer` densifies before projecting; without it a long edge
+    // is drawn as a straight screen chord that cuts through the sphere (a
+    // route from Europe to Asia visibly leaves the surface). Mercator is
+    // affine, so `densifyStepRad` is 0 and the raw vertices are exact.
+    final stepRad = projector.densifyStepRad(state);
+
     void addLine(List<LatLng> points, {required bool close}) {
+      final dense = stepRad > 0
+          ? densifyGreatCircle(points, stepRad: stepRad, closed: close)
+          : points;
       Offset? previous;
-      for (final ll in points) {
+      for (final ll in dense) {
         final v = projector.project(ll, state);
         if (v == null) {
           previous = null;
