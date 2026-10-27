@@ -44,6 +44,7 @@ export 'src/globe/globe_vector_layer.dart'
         GlobeLabel,
         buildGraticule,
         buildTissot,
+        buildGreatCircle,
         densifyPath;
 export 'src/globe/tile_source.dart';
 export 'src/source/debug_tiles_source.dart';
