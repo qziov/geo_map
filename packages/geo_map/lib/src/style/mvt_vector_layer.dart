@@ -343,13 +343,18 @@ class _DecodedTile {
 /// split in tile space when the bucket is built (`_DecodedTile`), exactly like
 /// MapLibre's `subdivideVertexLine`, so the painter only ever projects vertices.
 class _TileMapping {
-  const _TileMapping(this.project, this.copies, this.worldSize);
+  const _TileMapping(this.project, this.copies, this.worldSize, {this.dashSeed});
 
   final Vec2? Function(Vec2) project;
 
   /// Inclusive copy indices; each copy is offset by `k * worldSize` in x.
   final (int, int) copies;
   final double worldSize;
+
+  /// Dash phase (px) at a tile-space point, anchored to a global origin so a
+  /// pattern continues across tile edges instead of restarting. See
+  /// `dashPhaseSeed`.
+  final double Function(Vec2 start, bool horizontal)? dashSeed;
 }
 
 class _MvtPainter extends CustomPainter {
@@ -612,7 +617,21 @@ class _MvtPainter extends CustomPainter {
     if (!flat) {
       LatLng toLatLng(Vec2 p) => _latLng(key, key.x, p.x, p.y);
       Vec2? project(Vec2 p) => projector.project(toLatLng(p), state);
-      return _TileMapping(project, (0, 0), state.worldSize);
+      return _TileMapping(
+        project,
+        (0, 0),
+        state.worldSize,
+        dashSeed: (start, horizontal) => dashPhaseSeed(
+          start,
+          z: key.z,
+          tileX: key.x,
+          tileY: key.y,
+          horizontal: horizontal,
+          sphere: true,
+          worldSize: state.worldSize,
+          radiusPx: state.radiusPx,
+        ),
+      );
     }
     final affine = tileAffine(projector, state, z: key.z, x: key.x, y: key.y);
     if (affine == null) return null;
@@ -624,7 +643,21 @@ class _MvtPainter extends CustomPainter {
             viewportWidth: state.size.width,
           )
         : (0, 0);
-    return _TileMapping(affine.map, copies, state.worldSize);
+    return _TileMapping(
+      affine.map,
+      copies,
+      state.worldSize,
+      dashSeed: (start, horizontal) => dashPhaseSeed(
+        start,
+        z: key.z,
+        tileX: key.x,
+        tileY: key.y,
+        horizontal: horizontal,
+        sphere: false,
+        worldSize: state.worldSize,
+        radiusPx: state.radiusPx,
+      ),
+    );
   }
 
   LatLng _latLng(TileKey key, int x, double u, double v) =>
@@ -681,10 +714,15 @@ class _MvtPainter extends CustomPainter {
     for (var k = mapping.copies.$1; k <= mapping.copies.$2; k++) {
       final dx = k * mapping.worldSize;
       final run = <Vec2>[];
+      // Tile-space ends of the current run, needed for the dash phase anchor.
+      Vec2? runStart;
+      Vec2? runLast;
 
       void flush() {
         if (run.length < 2) {
           run.clear();
+          runStart = null;
+          runLast = null;
           return;
         }
         if (dashPx == null) {
@@ -694,7 +732,19 @@ class _MvtPainter extends CustomPainter {
           }
           any = true;
         } else {
-          for (final dash in dashPolyline(run, dashPx)) {
+          // Without a global anchor the pattern would restart at 0 for every
+          // tile, putting a visible step in the dashes at each tile edge.
+          final seed = mapping.dashSeed;
+          final double phase;
+          if (seed == null || runStart == null || runLast == null) {
+            phase = 0;
+          } else {
+            phase = seed(
+              runStart!,
+              (runLast!.x - runStart!.x).abs() >= (runLast!.y - runStart!.y).abs(),
+            );
+          }
+          for (final dash in dashPolyline(run, dashPx, phase: phase)) {
             path.moveTo(dash.first.x + dx, dash.first.y);
             for (var i = 1; i < dash.length; i++) {
               path.lineTo(dash[i].x + dx, dash[i].y);
@@ -703,6 +753,8 @@ class _MvtPainter extends CustomPainter {
           }
         }
         run.clear();
+        runStart = null;
+        runLast = null;
       }
 
       // Points are already subdivided in tile space (see `_DecodedTile`), so
@@ -713,6 +765,8 @@ class _MvtPainter extends CustomPainter {
           flush();
           continue;
         }
+        runStart ??= p;
+        runLast = p;
         run.add(s);
       }
       flush();

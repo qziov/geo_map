@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:geo_map_core/geo_map_core.dart';
 import '../vendor/flutter_map_camera/flutter_map_camera.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -590,21 +591,7 @@ class _VectorPainter extends CustomPainter {
   static List<LatLng> _densifyStatic(
     List<LatLng> points, {
     bool closed = false,
-  }) {
-    if (points.length < 2) return points;
-    final src = closed ? [...points, points.first] : points;
-    final out = <LatLng>[];
-    for (var i = 0; i < src.length - 1; i++) {
-      final a = src[i];
-      final b = src[i + 1];
-      final steps = (_VectorPainter._angle(a, b) / 0.02).ceil().clamp(1, 180);
-      for (var s = 0; s < steps; s++) {
-        out.add(_VectorPainter._slerp(a, b, s / steps));
-      }
-    }
-    out.add(src.last);
-    return out;
-  }
+  }) => subdivideSpherePolyline(points, closed: closed);
 
   static double _angle(LatLng a, LatLng b) {
     final va = _unit(a);

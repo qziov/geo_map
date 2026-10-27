@@ -8,6 +8,7 @@ export 'src/math/geo_geometry.dart';
 export 'src/math/geodesy.dart';
 export 'src/math/fade.dart';
 export 'src/math/projections.dart';
+export 'src/math/sphere_subdivide.dart';
 export 'src/mvt/mvt.dart';
 export 'src/mvt/mvt_async.dart';
 export 'src/mvt/mvt_bucket.dart';

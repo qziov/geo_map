@@ -161,16 +161,18 @@ class _StyleVectorPainter extends CustomPainter {
     final stroke = Path();
     var any = false;
 
-    // `GlobeVectorLayer` densifies before projecting; without it a long edge
-    // is drawn as a straight screen chord that cuts through the sphere (a
-    // route from Europe to Asia visibly leaves the surface). Mercator is
-    // affine, so `densifyStepRad` is 0 and the raw vertices are exact.
+    // A long edge must be split before projecting or it is drawn as a straight
+    // screen chord that cuts through the sphere (a route from Europe to Asia
+    // visibly leaves the surface). The split is linear in **Mercator** space,
+    // like MapLibre's tile-space subdivision — a great circle would bow a
+    // constant-latitude edge towards the pole. Mercator's own projection is
+    // affine, so on the flat map the raw vertices are already exact.
     final stepRad = projector.densifyStepRad(state);
+    final onSphere = stepRad > 0;
 
     void addLine(List<LatLng> points, {required bool close}) {
-      final dense = stepRad > 0
-          ? densifyGreatCircle(points, stepRad: stepRad, closed: close)
-          : points;
+      final dense =
+          onSphere ? subdivideSpherePolyline(points, closed: close) : points;
       Offset? previous;
       for (final ll in dense) {
         final v = projector.project(ll, state);
@@ -200,11 +202,9 @@ class _StyleVectorPainter extends CustomPainter {
         addLine(ring, close: true);
         return;
       }
-      final dense = densifyGreatCircle(
-        ring,
-        stepRad: stepRad > 0 ? stepRad : 0.02,
-        closed: true,
-      );
+      // The ring is split first: `clipRingToHorizon` walks segment by segment,
+      // so a coarse ring chords across the limb instead of following it.
+      final dense = subdivideSpherePolyline(ring, closed: true);
       final clipped = clipRingToHorizon(dense, state);
       if (clipped == null) return;
       fill.addPolygon(
