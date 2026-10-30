@@ -15,6 +15,7 @@ import 'demos/demo_common.dart';
 import 'demos/mvt_demo.dart';
 import 'demos/overlay_demo.dart';
 import 'demos/projection_demo.dart';
+import 'demos/query_demo.dart';
 import 'demos/style_demo.dart';
 import 'demos/symbol_demo.dart';
 
@@ -46,6 +47,7 @@ class ExampleApp extends StatelessWidget {
         MvtDemoPage.route: (_) => const MvtDemoPage(),
         StyleDemoPage.route: (_) => const StyleDemoPage(),
         SymbolDemoPage.route: (_) => const SymbolDemoPage(),
+        QueryDemoPage.route: (_) => const QueryDemoPage(),
         OverlayDemoPage.route: (_) => const OverlayDemoPage(),
         ProjectionDemoPage.route: (_) => const ProjectionDemoPage(),
       },
@@ -96,6 +98,12 @@ const List<_Demo> _demos = [
     summary: 'text-field / text-halo / 25px 碰撞网格 / allow-overlap / ignore-placement',
     api: 'symbol 图层 · buildMvtSymbolBucket · SymbolPlacer · SymbolPainter',
     route: "/symbol",
+  ),
+  _Demo(
+    title: '要素查询',
+    summary: '注册要素 → 点击查询 → 命中列表（点=屏幕半径 / 面=地理空间）',
+    api: 'GeoFeatureRegistry · queryFeatures',
+    route: "/query",
   ),
   _Demo(
     title: '球面叠加层',

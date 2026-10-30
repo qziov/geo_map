@@ -1,7 +1,7 @@
 # geo_map API 文档
 
 > 风格参考 MapLibre GL JS 官方文档，面向 Dart / Flutter 开发者。
-> 覆盖范围：包结构、快速开始、`GeoMapController`、栅格瓦片源、图层体系、典型使用场景、样式系统（含 **symbol 符号与标注**全量属性）、约束与踩坑、与本项目（`app_client`）的落地对照。
+> 覆盖范围：包结构、快速开始、`GeoMapController`、栅格瓦片源、图层体系、**要素查询（queryRenderedFeatures）**、典型使用场景、样式系统（含 **symbol 符号与标注**全量属性）、约束与踩坑、与本项目（`app_client`）的落地对照。
 >
 > 对应版本 `0.2.0`（M1 style spec / M2 MVT / M3 符号与标注 均已落地）。
 
@@ -14,18 +14,19 @@
 - [2. GeoMapController](#2-geomapcontroller)
 - [3. 栅格瓦片源](#3-栅格瓦片源)
 - [4. 图层体系总览](#4-图层体系总览)
-- [5. 使用场景](#5-使用场景)
-- [6. 样式系统](#6-样式系统)
-  - [6.2 symbol 属性速查](#62-symbol-属性速查)
-  - [6.3 锚点九宫格](#63-锚点九宫格)
-  - [6.4 沿线标注](#64-沿线标注)
-  - [6.5 SDF 图标着色](#65-sdf-图标着色)
-  - [6.6 跨瓦片去重](#66-跨瓦片去重)
-  - [6.7 旋转与透明度](#67-旋转与透明度)
-  - [6.8 图标集 SpriteAtlas](#68-图标集-spriteatlas)
-- [7. 约束与踩坑](#7-约束与踩坑)
-  - [7.1 日界线与平面无限滚动](#71-日界线与平面无限滚动)
-- [8. 与 app_client 的落地对照](#8-与-app_client-的落地对照)
+- [5. 要素查询（queryRenderedFeatures）](#5-要素查询queryrenderedfeatures)
+- [6. 使用场景](#6-使用场景)
+- [7. 样式系统](#7-样式系统)
+  - [7.2 symbol 属性速查](#72-symbol-属性速查)
+  - [7.3 锚点九宫格](#73-锚点九宫格)
+  - [7.4 沿线标注](#74-沿线标注)
+  - [7.5 SDF 图标着色](#75-sdf-图标着色)
+  - [7.6 跨瓦片去重](#76-跨瓦片去重)
+  - [7.7 旋转与透明度](#77-旋转与透明度)
+  - [7.8 图标集 SpriteAtlas](#78-图标集-spriteatlas)
+- [8. 约束与踩坑](#8-约束与踩坑)
+  - [8.1 日界线与平面无限滚动](#81-日界线与平面无限滚动)
+- [9. 与 app_client 的落地对照](#9-与-app_client-的落地对照)
 
 ---
 
@@ -46,7 +47,7 @@
 - 3D 使用 **正交投影球面**；
 - 二者复用同一套瓦片引擎与缓存，所以离线底图、HTTP 源在两种视图下都能直接复用。
 
-**重要约束**：不要用 `GeoMapController.setMode()` 直接切换视图。正确的切换入口是状态层的 `mapUseGlobeProvider`（见 [第 8 章](#8-与-app_client-的落地对照)），由它驱动 delegate 替换。直接调 `setMode` 会绕过状态管理，导致 UI 与控制器状态不一致。
+**重要约束**：不要用 `GeoMapController.setMode()` 直接切换视图。正确的切换入口是状态层的 `mapUseGlobeProvider`（见 [第 9 章](#9-与-app_client-的落地对照)），由它驱动 delegate 替换。直接调 `setMode` 会绕过状态管理，导致 UI 与控制器状态不一致。
 
 ---
 
@@ -75,7 +76,7 @@ class MapPage extends StatelessWidget {
         ),
         source: myTileSource,         // GeoTileSource，见第 3 章
         children: const [
-          // 图层、覆盖物放在这里，见第 4、5 章
+          // 图层、覆盖物放在这里，见第 4、6 章
         ],
       ),
     );
@@ -213,7 +214,7 @@ final debug = DebugTilesSource();
 
 ### 3.4 自定义源
 
-只要实现 `GeoTileSource`，即可接入任意来源（如自研瓦片服务、内存缓存源）。`app_client` 中的 `MbtilesRegistryTileSource` 就是一个「多包路由」的自定义实现范例（见 [第 8 章](#8-与-app_client-的落地对照)）。
+只要实现 `GeoTileSource`，即可接入任意来源（如自研瓦片服务、内存缓存源）。`app_client` 中的 `MbtilesRegistryTileSource` 就是一个「多包路由」的自定义实现范例（见 [第 9 章](#9-与-app_client-的落地对照)）。
 
 ---
 
@@ -236,7 +237,132 @@ final debug = DebugTilesSource();
 
 ---
 
-## 5. 使用场景
+## 5. 要素查询（queryRenderedFeatures）
+
+把"点到了什么"交给 SDK：**注册你正在绘制的要素**，再用 `GeoFeatureRegistry` 查询。
+对标 MapLibre 的 `queryRenderedFeatures`。
+
+### 5.1 快速上手
+
+```dart
+// 注册表由宿主自己持有：它是**快照**而非 observable，数据变了就重建。
+final registry = GeoFeatureRegistry()
+  // 传与 StyleVectorLayer 用的**同一批** GeoJsonFeature
+  ..setSource('airports', airportFeatures);
+
+GeoMap(
+  options: GeoMapOptions(initialCenter: const LatLng(35, 105), initialZoom: 4),
+  source: tileSource,
+  controller: controller,
+  onTap: (latLng) {
+    final hits = registry.queryFeatures(latLng, controller: controller);
+    for (final hit in hits) {
+      debugPrint('${hit.sourceId} / ${hit.feature.id}  ${hit.distancePx}px');
+    }
+  },
+  children: const [],
+);
+```
+
+### 5.2 API
+
+| 成员 | 说明 |
+| --- | --- |
+| `GeoFeatureRegistry()` | 建一个注册表 |
+| `setSource(sourceId, features, {visible, layerId, pointRadiusPx})` | 注册/替换某个来源的要素 |
+| `removeSource(sourceId)` · `clear()` | 移除来源 / 清空 |
+| `containsSource(id)` · `sourceIds` · `length` | 查看注册状态 |
+| `queryFeatures(tap, {controller, pointRadiusPx, sourceIds, geometries, limit})` | 查询命中 |
+| `GeoQueryHit.feature` | 命中的 `GeoJsonFeature`（含 id 与 properties，原样带回） |
+| `GeoQueryHit.sourceId` | 命中的来源 id |
+| `GeoQueryHit.distancePx` | 点要素的屏幕距离（px）；面要素为 `null` |
+
+`visible: false` 的来源整体不可命中 —— 关掉的图层不该被点到。
+
+### 5.3 两种命中策略（按几何类型自动分派）
+
+| 几何 | 策略 | 半径/容差 | 为什么 |
+| --- | --- | --- | --- |
+| 点（`PointGeometry`） | **屏幕空间**：投影后比像素距离 | `pointRadiusPx`（默认 24px） | 判定与"眼睛看到的那个圆点"一致，缩放时手感不变 |
+| 面（`PolygonGeometry` / `MultiPolygonGeometry`） | **地理空间**：经纬度平面 point-in-polygon | 边界容差 `1e-7°` | 与缩放/平移/世界副本/球面遮挡无关，跨 ±180° 也准 |
+| 线（`LineStringGeometry` / `MultiLineStringGeometry`） | **v1 不命中** | — | 尚未实现；命中列表里不会出现线要素 |
+
+### 5.4 命中顺序（可以依赖）
+
+1. 按来源分组，来源顺序 = 注册顺序；
+2. 同来源内**点要素在前**，按屏幕距离升序，**等距时后注册者在前**（"上层优先"，与绘制顺序一致 —— 点到的就是眼睛看到的那一个）；
+3. 同来源内**面要素在后**，按注册顺序。
+
+所以"取最近的一个点"就是取该来源的第一条命中；"取全部重叠的面"则是该来源的全部面命中。
+
+### 5.5 边界、日界线与球面语义
+
+- **外环边界算命中**；**洞的边界不算**（洞优先）。
+- 判定用 **even-odd 规则**，环的绕向无关 —— 洞即使与外环同绕向也依然是洞。
+- 跨 ±180° 的多边形：查询经度取**落在环解缠窗口内的唯一副本**，而不是"挪到与首点同一副本"。后者在经度跨度 > 180° 的宽环上会漏命中（旧的手写实现正是如此）。
+- 平面模式下拾取用 `projectForVector`，把经度折到**最近的世界副本**：相机在 −179°、要素在 +179° 时也能点中（普通 `project` 不折，会把要素放到一整个世界之外）。
+- 球面模式下**背面的要素不会被命中**（`project` 返回的 `(−1e6, −1e6)` 哨兵会被识别）。注意 `isVisible` 的阈值与 `project` 不一致，**不能拿它替代哨兵检查**。
+
+### 5.6 与 MapLibre 的差异
+
+| MapLibre | geo_map |
+| --- | --- |
+| `queryRenderedFeatures` 按屏幕 bbox 查询 | 按几何类型分派：点 = 屏幕半径，面 = 地理空间 |
+| 结果是"渲染出的要素"（含 MVT 瓦片要素） | v1 只查**注册过的** GeoJSON 要素；MVT 瓦片要素查询尚未实现 |
+| `setFeatureState` / 高亮 | v1 未实现（选中态由宿主自己管理） |
+| 按 `layer` 过滤 | v1 支持 `sourceIds` 与 `geometries` 过滤 |
+
+### 5.7 完整例子
+
+```dart
+class MapPage extends ConsumerStatefulWidget {
+  const MapPage({super.key});
+  @override
+  ConsumerState<MapPage> createState() => _MapPageState();
+}
+
+class _MapPageState extends ConsumerState<MapPage> {
+  late final GeoMapController _controller = GeoMapController(useGlobe: false);
+  final GeoFeatureRegistry _registry = GeoFeatureRegistry();
+
+  @override
+  Widget build(BuildContext context) {
+    // 数据/可见性变了就重建注册表 —— 它是快照，永远与画面一致。
+    _registry
+      ..setSource('airports', ref.watch(airportFeaturesProvider))
+      ..setSource('sigmet', ref.watch(sigmetFeaturesProvider));
+
+    return GeoMap(
+      options: GeoMapOptions(
+        initialCenter: const LatLng(35, 105),
+        initialZoom: 4,
+      ),
+      source: ref.watch(mapTileSourceProvider),
+      controller: _controller,
+      onTap: (latLng) {
+        final hits = _registry.queryFeatures(latLng, controller: _controller);
+        if (hits.isEmpty) return;
+
+        // 点要素：取最近的一个（命中顺序保证第一条就是最近的）。
+        final dots = hits.where((h) => h.distancePx != null).toList();
+        if (dots.isNotEmpty) {
+          showAirportSheet(dots.first.feature.id!);
+        }
+        // 面要素：可能多个（重叠的 SIGMET 区域）。
+        final areas = hits.where((h) => h.distancePx == null).toList();
+        if (areas.isNotEmpty) {
+          showSigmetSheet(areas.map((h) => h.feature.id!).toList());
+        }
+      },
+      children: const [],
+    );
+  }
+}
+```
+
+---
+
+## 6. 使用场景
 
 下面给出 10 个典型场景，每个都附带可直接使用的 Dart 示例。
 
@@ -396,11 +522,11 @@ StyleVectorLayer(
 
 ---
 
-## 6. 样式系统
+## 7. 样式系统
 
 `StyleVectorLayer` 与 `MvtVectorLayer` 共享一套 MapLibre 风格的样式 API。静态声明走 `StyleSpec.parse(...)`，运行时改写走 `GeoStyleController` —— 二者等价，后者适合交互式图例/筛选。
 
-### 6.1 `GeoStyleController`
+### 7.1 `GeoStyleController`
 
 ```dart
 final style = GeoStyleController(StyleSpec.parse({...}));
@@ -421,7 +547,7 @@ final style = GeoStyleController(StyleSpec.parse({...}));
 
 > 它是 `ChangeNotifier`，图层会自动监听重建。注意 `addLayer` 收的是 **`StyleLayer` 对象**，不是 `(id, sourceId)` 两个字符串。
 
-### 6.2 symbol 属性速查
+### 7.2 symbol 属性速查
 
 `type: 'symbol'` 图层即「图标 + 文字标注」。属性分 **layout**（放不放、放哪、多大）与 **paint**（什么颜色、多透明）两组，与 MapLibre v8 一致。下表是 `geo_map` **实际实现**的子集，默认值取自 `style_properties.dart`；表外属性不会被解析。
 
@@ -459,7 +585,7 @@ final style = GeoStyleController(StyleSpec.parse({...}));
 
 > **单位差异是高频坑**：`text-offset` 用 **em**（乘 `text-size`），`icon-offset` 用 **像素**（直用）。二者同名不同义。
 
-### 6.3 锚点九宫格
+### 7.3 锚点九宫格
 
 `text-anchor` / `icon-anchor` 决定盒子从锚点往哪边展开。屏幕坐标 y 向下：
 
@@ -477,7 +603,7 @@ final style = GeoStyleController(StyleSpec.parse({...}));
 
 所以「图标在上、文字在下」是 `icon-anchor: 'bottom'` + `text-anchor: 'top'`（见场景 J）。
 
-### 6.4 沿线标注
+### 7.4 沿线标注
 
 ```json
 {
@@ -495,25 +621,25 @@ final style = GeoStyleController(StyleSpec.parse({...}));
 
 > 该能力在 **MVT**（`MvtVectorLayer`）路径上完整可用；GeoJSON（`StyleVectorLayer`）目前只处理点要素，沿线标注不会生效。
 
-### 6.5 SDF 图标着色
+### 7.5 SDF 图标着色
 
 `icon-color` 只对 **SDF** 雪碧图生效（`<sprite>.json` 中标记 `sdf: true` 的单通道图标），实现是把颜色以 `ColorFilter.mode(color, BlendMode.srcIn)` 叠到贴图通道上。
 
 普通（非 SDF）图标即使设了 `icon-color` 也**保持原样** —— 与 MapLibre 一致，避免把彩色图标误染成纯色。
 
-### 6.6 跨瓦片去重
+### 7.6 跨瓦片去重
 
 同一个 POI 落在相邻瓦片的缓冲重叠区时会被解出两份。引擎用**世界经纬度**（量化到 1e-5°，约 1 米）作去重键：两份解出同一个键时只保留**先放置的那份**，另一份标记为 `duplicate` 且不占用碰撞网格。
 
 这是自动行为，无需配置。沿线标注的中点同样会生成键，但不同瓦片对同一条线的采样相位不同、中点几乎不可能重合，因此不会误去重。
 
-### 6.7 旋转与透明度
+### 7.7 旋转与透明度
 
 - `text-rotate` / `icon-rotate` 以**度**为单位（引擎内部转弧度），且**叠加**在 `symbol-placement: line` 的线段方向之上。
 - 旋转后的碰撞盒取**轴对齐外接矩形（AABB）**。碰撞网格本身是轴对齐的，45° 时盒子会略微多占空间 —— 这是与 MapLibre 相同的近似，换取不必为旋转盒单独实现命中测试。
 - `text-opacity` 同时乘进文字填充与 halo 的 alpha，并参与布局缓存 key。
 
-### 6.8 图标集 SpriteAtlas
+### 7.8 图标集 SpriteAtlas
 
 图标不走 `StyleSpec`（它不解析 `sprite` 字段），而是单独解码后由图层持有：
 
@@ -537,7 +663,7 @@ StyleVectorLayer(style: style, features: feats, sprite: atlas);
 
 ---
 
-## 7. 约束与踩坑
+## 8. 约束与踩坑
 
 1. **`children` 不收指针事件**：手势被 `GlobeGestureOverlay` 拦截，交互 UI 必须放在 `GeoMap` 之外。
 2. **平移重建全部 `children`**：`children` 应是轻量、由 `controller` 驱动的纯绘制层，避免重组件。
@@ -550,7 +676,7 @@ StyleVectorLayer(style: style, features: feats, sprite: atlas);
 9. **`icon-color` 只染 SDF 图标**：普通彩色图标设了也不变色，这是与 MapLibre 一致的行为，见 [6.5](#65-sdf-图标着色)。
 10. **沿线标注只对 MVT 生效**：`symbol-placement: 'line'` 在 GeoJSON 源上不会旋转标注，见 [6.4](#64-沿线标注)。
 
-### 7.1 日界线与平面无限滚动
+### 8.1 日界线与平面无限滚动
 
 **平面无限滚动**：`FlatProjectionDelegate.panCenter` / `anchorCenter` 把相机经度 **wrap**
 （不 clamp 到 ±180），东西方向可无限平移；栅格 `AffineGeometry.worldCopies`（-1..1）与矢量
@@ -561,21 +687,22 @@ StyleVectorLayer(style: style, features: feats, sprite: atlas);
 一化（`_normalizeRings`）。这等价 MapLibre 的 `getVisibleUnwrappedCoordinates` + 分切片，
 跨日界线的多边形不会再被拉成一条横贯整屏的横带。
 
-**`geo_map_core` 导出的反子午线工具**（`geo_map` 的 barrel 未 re-export，需直接
-`import 'package:geo_map_core/geo_map_core.dart';`，或自行实现十几行纯数学）：
+**`geo_map_core` 导出的反子午线工具**（现已由 `geo_map` 的 barrel 一并 re-export，
+`import 'package:geo_map/geo_map.dart';` 即可拿到）：
 
 | 函数 | 说明 |
 | --- | --- |
 | `unwrapLongitudes(List<double>) → List<double>` | 顺序解缠：相邻 delta 折到 ≤180°，跨日界线的环变连续 |
 | `splitRingAtSeam(List<LatLng>, double seamLng) → List<List<LatLng>>` | 在指定经线（如 ±180°）用 Sutherland–Hodgman 把环拆成 1~2 段 |
 
-> **自己做要素命中测试时**：若在屏幕空间做 point-in-polygon，先把环按 `unwrapLongitudes`
-> 解缠、并把点击经度挪到与首点同一副本；更稳的做法是直接按**经纬度** ray-casting
-> （与相机/缩放/世界副本无关，跨日界线与球面都适用）。
+> **要素命中测试已内置**：用 SDK 的 `GeoFeatureRegistry`（见
+> [§ 5 要素查询](#5-要素查询queryrenderedfeatures)）—— 点要素按屏幕半径、面要素按
+> 地理空间 point-in-polygon，跨 ±180° / 缩放 / 世界副本 / 球面遮挡都已处理，
+> 不必自己写。
 
 ---
 
-## 8. 与 app_client 的落地对照
+## 9. 与 app_client 的落地对照
 
 `app_client`（Aero Weather）对 `geo_map` 的封装集中在 `lib/features/map/`：
 

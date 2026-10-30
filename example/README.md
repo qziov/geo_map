@@ -25,6 +25,8 @@ flutter run -t lib/native/mbtiles_demo.dart -d windows
 | --- | --- | --- |
 | `mvt_demo.dart` | `MvtVectorLayer`（fill / line / `line-dasharray` / 数据驱动着色 / 世界副本 / 地平线裁剪） | demotiles 网络瓦片 |
 | `style_demo.dart` | `StyleVectorLayer` + style spec（filter、zoom 插值） | 零网络 |
+| `symbol_demo.dart` | symbol 图层（`text-field` / `text-halo` / 25px 碰撞网格 / `allow-overlap` / `ignore-placement`） | 零网络 |
+| `query_demo.dart` | `GeoFeatureRegistry.queryFeatures`（点=屏幕半径 / 面=地理空间 / 重叠面返回多条） | 零网络 |
 | `overlay_demo.dart` | `GlobeVectorLayer`、`buildGraticule`、`buildTissot`、`buildGreatCircle`、`densifyPath` | 零网络 |
 | `projection_demo.dart` | `GeoMapOptions.useGlobe` 2D/3D 切换、`DebugTilesSource` 摆放校验 | 零网络 |
 

@@ -2,6 +2,26 @@
 
 ## 0.2.1 (unreleased)
 
+### Added — 要素查询（对标 `queryRenderedFeatures`）
+
+- core 新增 `lib/src/math/point_in_polygon.dart`：`pointInRing` / `pointInPolygon` /
+  `pointInMultiPolygon`（**even-odd** 规则，绕向无关；跨 ±180° 用"落在环解缠窗口内的
+  **唯一副本**"锚定查询经度，而非"挪到与首点同一副本" —— 后者在经度跨度 > 180° 的宽环上
+  会漏命中）、`ringSignedArea` / `normalizeRingWinding`（绕向归一化从 `StyleVectorLayer`
+  下沉到 core，渲染与查询从此共用同一套绕向语义）。
+  边界语义：外环边界算命中、**洞的边界不算**（洞优先）；零面积的退化环永不命中。
+- core 新增 `lib/src/query/feature_query.dart`：`planFeatureQuery` —— 纯规划器
+  （可见性 / source / 几何类型过滤 → 按几何类型分派 → 排序 → limit）。
+  排序契约：来源分组（注册序）→ 点要素按屏幕距离升序且**等距"上层优先"**（后注册者在前，
+  与绘制顺序一致）→ 面要素按原序。**线要素 v1 不命中**（明确文档化）。
+- 引擎新增 `lib/src/query/`：`GeoFeatureRegistry`（注册 + `queryFeatures`）、`GeoQueryHit`
+  （原样带回 `GeoJsonFeature` 的 id 与 properties、像素距离）、
+  `projectForPick`（平面折到最近世界副本；球面识别 `(-1e6,-1e6)` 背面哨兵）。
+  注册表是**快照而非 observable**，由宿主在数据变化时重建。
+- `geo_map` barrel 追加 re-export：`GeoGeometryKind` 与上述地理工具
+  （`unwrapLongitudes` / `splitRingAtSeam` 此前需直接 import core）。
+- `GeoMap.onTap` 签名与 `GeoMap` / `GeoMapController` 公开 API **零改动**。
+
 ### Fixes — 平面模式
 
 - **GeoJSON 多边形填充横跨整屏**：`StyleVectorLayer` 平面分支此前逐顶点投影
@@ -42,7 +62,13 @@
 - 修正 `style_vector_layer_test.dart`：2D 组此前 `projectionDelegate` 为 null（实际跑的是
   球面投影），现显式 `FlatProjectionDelegate`；新增跨缝回归（跨 ±180° 的环不再填满屏幕中心、
   左右两侧各一段）
-- `geo_map_core` 398 → **415**；`geo_map` 27 → **41** 项
+- 新增 `geo_map_core/test/math/point_in_polygon_test.dart`（几何判定：日界线、宽环、洞、
+  边界、退化环、绕向）与 `geo_map_core/test/query/feature_query_test.dart`（规划器：半径
+  闭区间、平局上层优先、过滤、排序契约、limit）——共 45 例
+- 新增 `geo_map/test/geo_feature_registry_test.dart`（17 例：点命中、**球面背面哨兵**、
+  **平面跨缝命中**、面命中、过滤、要素 id/properties 回传）
+- `geo_map_core` 398 → **460**；`geo_map` 27 → **41** 项（本轮另新增引擎测试 17 例，
+  需在可运行 `flutter test` 的环境执行）
 
 ## 0.2.0 (2026-10-27)
 

@@ -52,8 +52,24 @@
 | 标签不随剪影裁剪（`isOccluded` 判定） | 锚点投影为 null 即丢，其余整条绘制 | `collision_index.ts:166` |
 | sprite：`<url>.json` + `<url>.png`，尺寸 ÷ pixelRatio | `SpriteIndex` + `SpriteAtlas` | `quads.ts:133-134` |
 
-**M3 未对齐**：`symbol-placement: line`（沿线标注）、`text-anchor`/`text-offset`（当前图标上/文字下固定）、
-图标 SDF 着色、跨 tile 去重（`cross_tile_symbol_index`）。
+**M3 已全部对齐**（此前这里列的四项"未对齐"经源码核对其实都已实现，文档当时没跟上）：
+
+| MapLibre | geo_map 对应 | 实现位置 |
+| --- | --- | --- |
+| `symbol-placement: line`（沿线标注） | 沿线段角度旋转标签 | `mvt_vector_layer.dart:689`（读属性）/ `:715`（算角度）+ core `buildMvtLineSymbolBucket` |
+| `text-anchor` / `text-offset` / `icon-anchor` / `icon-offset` | 九宫格锚点 + 偏移 | `style_properties.dart`（属性定义）+ `symbol_style.dart`（解析）+ `symbol_painter.dart:34` `anchorBoxOffset` |
+| 图标 SDF 着色 | `icon-color` 对 SDF 图集染色 | `symbol_style.dart`（取色）+ `symbol_painter.dart:175`（`srcIn` 滤镜） |
+| 跨 tile 去重（`cross_tile_symbol_index`） | `crossTileKey` 跨瓦片合并 | core `symbol_placement.dart` + `mvt_vector_layer.dart:718` |
+
+## 要素查询 ✅
+
+| MapLibre | geo_map 对应 | 备注 |
+| --- | --- | --- |
+| `queryRenderedFeatures`（屏幕 bbox 查询） | `GeoFeatureRegistry.queryFeatures` | 本 SDK **按几何类型分派**：点 = 屏幕半径（24px）、面 = 地理空间 point-in-polygon |
+| `feature_filter` / `layer` 过滤 | `sourceIds` / `geometries` / `visible` | v1 不按 `layer` 过滤（一个 source 对应一个业务图层） |
+| 跨 ±180° 的面要素 | `pointInPolygon`（even-odd + 窗口内唯一副本锚定） | 查询经度取**落在环解缠窗口内的唯一副本**，不是"挪到与首点同副本" —— 后者在宽环上会漏命中 |
+| 拾取投影 | `projectForPick` | 平面折到最近世界副本（`project` 不 wrap，会把要素放到一整个世界之外）；球面识别 `(-1e6,-1e6)` 背面哨兵 |
+| `setFeatureState` / 选中高亮 | — | **v1 不做**（含 MVT 瓦片要素查询） |
 
 ## M4（可选）
 

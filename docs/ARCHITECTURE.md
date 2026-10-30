@@ -60,6 +60,11 @@ GeoMap (widget/geo_map.dart)          组装：InheritedModel(camera) + 图层 +
    - 平面 GeoJSON：先解缠经度得**连续 x**（`_projectContinuous`），每要素按 `visibleWorldCopies` 平移重绘（等价 MapLibre `getVisibleUnwrappedCoordinates`）；多环再按外环/洞归一化绕向
    - symbol：`buildMvtSymbolBucket`（点要素 → 归一化锚点）→ 每要素解析成图标+文字对
      → `SymbolPainter` 量盒 → `SymbolPlacer` 决策 → 绘制（halo 先、填充后）
+6. `GeoFeatureRegistry.queryFeatures(tap)`（要素查询，对标 MapLibre `queryRenderedFeatures`）：
+   - 引擎 `projectForPick` 归一投影（平面折到最近世界副本；球面识别 `(-1e6,-1e6)` 背面哨兵）
+   - core `planFeatureQuery`：按几何类型分派 —— 点 = 屏幕半径，面 = 地理空间
+   - core `pointInPolygon`：经度解缠 + "窗口内唯一副本"锚定 + even-odd + 边界语义
+   - 排序：来源分组（注册序）→ 点（距离升序，等距"上层优先"）→ 面（原序）
 
 ## 关键机制
 
@@ -77,6 +82,10 @@ GeoMap (widget/geo_map.dart)          组装：InheritedModel(camera) + 图层 +
 | 日界线·GeoJSON 直绘 | 逐顶点 `wrapLongitude` 会让环的两半落到相反世界副本 → 屏幕级长弦。`StyleVectorLayer` 平面分支先 `unwrapLongitudes` 解缠、锚定最近副本得到**连续 x**，再按 `visibleWorldCopies` 平移重绘；`_normalizeRings` 归一化绕向（洞正确挖空） |
 | 平面无限滚动 | `FlatProjectionDelegate.panCenter` / `anchorCenter` 把经度 **wrap**（不 clamp 到 ±180）→ 水平可无限平移；渲染侧世界副本（栅格 `AffineGeometry.worldCopies`、矢量 `visibleWorldCopies`）保证接缝无缝 |
 | 碰撞网格 | 25px 均匀网格（`CollisionIndex` 默认值）：插入写进所有相交 cell，查询先收候选再比矩形。放置期**只查阻断网格**，`text-ignore-placement` 的符号插进另一张网格（不挤别人，但仍会被挡住）|
+| 要素查询·分派 | 按几何类型分派两套策略：点走**屏幕半径**（与"看到的圆点"一致），面走**地理空间** point-in-polygon（与缩放/平移/世界副本/球面遮挡无关）。线要素 v1 不命中 |
+| 要素查询·平局 | 同距离时**后注册者在前**（"上层优先"）—— 绘制顺序即数组顺序，点到的必须是眼睛看到的那一个 |
+| 要素查询·日界线 | 查询经度取**落在环解缠窗口内的唯一副本**，不是"挪到与首点同副本"；后者在经度跨度 > 180° 的宽环上会漏命中 |
+| 要素查询·投影 | 平面拾取用 `projectForVector`（折到最近世界副本；`project` 不 wrap，会把要素放到一整个世界之外）；球面用 `project` 并识别背面哨兵（`isVisible` 阈值与 `project` 不一致，不能替代） |
 | 面要裁、标注不裁 | fill/line 在 `clipCircle` 内绘制（面不能画到球背面）；symbol 在 `restore()` 之后绘制 —— MapLibre 从不裁标签，它按符号判锚点遮挡（`collision_index.ts:166`），放下的标签整条画完 |
 | 标签布局缓存 | `TextPainter.layout` 比绘制贵得多，缓存按（文字, 字号, 颜色, halo）键控；**字体 epoch** 由 `PaintingBinding.systemFonts` 递增，否则 web 上 CJK 回退字体到达前量出的"缺字形"结果会被永久缓存 |
 | 图标尺寸 | 绘制像素 = sprite 像素 ÷ `pixelRatio`（`quads.ts:133-134`）：@2x 图集按半尺寸画，否则高分屏大一倍 |

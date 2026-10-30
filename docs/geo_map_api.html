@@ -162,10 +162,11 @@
       <li><a href="#sec2">2. GeoMapController</a></li>
       <li><a href="#sec3">3. 栅格瓦片源</a></li>
       <li><a href="#sec4">4. 图层体系总览</a></li>
-      <li><a href="#sec5">5. 使用场景</a></li>
-      <li><a href="#sec6">6. 样式系统</a></li>
-      <li><a href="#sec7">7. 约束与踩坑</a></li>
-      <li><a href="#sec8">8. 与 app_client 的落地对照</a></li>
+      <li><a href="#sec5">5. 要素查询（queryRenderedFeatures）</a></li>
+      <li><a href="#sec6">6. 使用场景</a></li>
+      <li><a href="#sec7">7. 样式系统</a></li>
+      <li><a href="#sec8">8. 约束与踩坑</a></li>
+      <li><a href="#sec9">9. 与 app_client 的落地对照</a></li>
     </ul>
   </nav>
 
@@ -178,15 +179,16 @@
         <li><a href="#sec2">2. GeoMapController</a></li>
         <li><a href="#sec3">3. 栅格瓦片源</a></li>
         <li><a href="#sec4">4. 图层体系总览</a></li>
-        <li><a href="#sec5">5. 使用场景</a></li>
-        <li><a href="#sec6">6. 样式系统</a></li>
-        <li><a href="#sec7">7. 约束与踩坑</a></li>
-        <li><a href="#sec8">8. 与 app_client 的落地对照</a></li>
+        <li><a href="#sec5">5. 要素查询（queryRenderedFeatures）</a></li>
+        <li><a href="#sec6">6. 使用场景</a></li>
+        <li><a href="#sec7">7. 样式系统</a></li>
+        <li><a href="#sec8">8. 约束与踩坑</a></li>
+        <li><a href="#sec9">9. 与 app_client 的落地对照</a></li>
       </ul>
     </div>
 
 <h1>geo_map API 文档</h1>
-<p class="lead">风格参考 MapLibre GL JS 官方文档，面向 Dart / Flutter 开发者。 覆盖范围：包结构、快速开始、<code>GeoMapController</code>、栅格瓦片源、图层体系、典型使用场景、样式系统（含 <strong>symbol 符号与标注</strong>全量属性）、约束与踩坑、与本项目（<code>app_client</code>）的落地对照。  对应版本 <code>0.2.0</code>（M1 style spec / M2 MVT / M3 符号与标注 均已落地）。</p>
+<p class="lead">风格参考 MapLibre GL JS 官方文档，面向 Dart / Flutter 开发者。 覆盖范围：包结构、快速开始、<code>GeoMapController</code>、栅格瓦片源、图层体系、<strong>要素查询（queryRenderedFeatures）</strong>、典型使用场景、样式系统（含 <strong>symbol 符号与标注</strong>全量属性）、约束与踩坑、与本项目（<code>app_client</code>）的落地对照。  对应版本 <code>0.2.0</code>（M1 style spec / M2 MVT / M3 符号与标注 均已落地）。</p>
 <h2 id="sec0">0. 这是什么</h2>
 <p><code>geo_map</code> 是一个自研的 Flutter 地图渲染包，由两层构成：</p>
 <ul>
@@ -201,7 +203,7 @@
 <li>3D 使用 <strong>正交投影球面</strong>；</li>
 <li>二者复用同一套瓦片引擎与缓存，所以离线底图、HTTP 源在两种视图下都能直接复用。</li>
 </ul>
-<p><strong>重要约束</strong>：不要用 <code>GeoMapController.setMode()</code> 直接切换视图。正确的切换入口是状态层的 <code>mapUseGlobeProvider</code>（见 <a href="#8-与-app_client-的落地对照">第 8 章</a>），由它驱动 delegate 替换。直接调 <code>setMode</code> 会绕过状态管理，导致 UI 与控制器状态不一致。</p>
+<p><strong>重要约束</strong>：不要用 <code>GeoMapController.setMode()</code> 直接切换视图。正确的切换入口是状态层的 <code>mapUseGlobeProvider</code>（见 <a href="#9-与-app_client-的落地对照">第 9 章</a>），由它驱动 delegate 替换。直接调 <code>setMode</code> 会绕过状态管理，导致 UI 与控制器状态不一致。</p>
 <h2 id="sec1">1. 快速开始</h2>
 <h3 id="11-引入与最小示例">1.1 引入与最小示例</h3>
 <pre><code>import &#x27;package:flutter/material.dart&#x27;;
@@ -224,7 +226,7 @@ class MapPage extends StatelessWidget {
         ),
         source: myTileSource,         // GeoTileSource，见第 3 章
         children: const [
-          // 图层、覆盖物放在这里，见第 4、5 章
+          // 图层、覆盖物放在这里，见第 4、6 章
         ],
       ),
     );
@@ -328,7 +330,7 @@ final custom = HttpTileSource(
 <p>绘制带坐标系的调试瓦片，用于核对瓦片编号与投影对齐：</p>
 <pre><code>final debug = DebugTilesSource();</code></pre>
 <h3 id="34-自定义源">3.4 自定义源</h3>
-<p>只要实现 <code>GeoTileSource</code>，即可接入任意来源（如自研瓦片服务、内存缓存源）。<code>app_client</code> 中的 <code>MbtilesRegistryTileSource</code> 就是一个「多包路由」的自定义实现范例（见 <a href="#8-与-app_client-的落地对照">第 8 章</a>）。</p>
+<p>只要实现 <code>GeoTileSource</code>，即可接入任意来源（如自研瓦片服务、内存缓存源）。<code>app_client</code> 中的 <code>MbtilesRegistryTileSource</code> 就是一个「多包路由」的自定义实现范例（见 <a href="#9-与-app_client-的落地对照">第 9 章</a>）。</p>
 <h2 id="sec4">4. 图层体系总览</h2>
 <table>
 <thead><tr><th>图层</th><th>适用视图</th><th>关键能力</th></tr></thead>
@@ -347,7 +349,120 @@ final custom = HttpTileSource(
 <li><code>densifyPath()</code>：路径点加密（球面插值）</li>
 <li><code>GlobePolyline</code> / <code>GlobePolygonShape</code> / <code>GlobeLabel</code>：球面几何与标注</li>
 </ul>
-<h2 id="sec5">5. 使用场景</h2>
+<h2 id="sec5">5. 要素查询（queryRenderedFeatures）</h2>
+<p>把"点到了什么"交给 SDK：<strong>注册你正在绘制的要素</strong>，再用 <code>GeoFeatureRegistry</code> 查询。 对标 MapLibre 的 <code>queryRenderedFeatures</code>。</p>
+<h3 id="51-快速上手">5.1 快速上手</h3>
+<pre><code>// 注册表由宿主自己持有：它是**快照**而非 observable，数据变了就重建。
+final registry = GeoFeatureRegistry()
+  // 传与 StyleVectorLayer 用的**同一批** GeoJsonFeature
+  ..setSource(&#x27;airports&#x27;, airportFeatures);
+
+GeoMap(
+  options: GeoMapOptions(initialCenter: const LatLng(35, 105), initialZoom: 4),
+  source: tileSource,
+  controller: controller,
+  onTap: (latLng) {
+    final hits = registry.queryFeatures(latLng, controller: controller);
+    for (final hit in hits) {
+      debugPrint(&#x27;${hit.sourceId} / ${hit.feature.id}  ${hit.distancePx}px&#x27;);
+    }
+  },
+  children: const [],
+);</code></pre>
+<h3 id="52-api">5.2 API</h3>
+<table>
+<thead><tr><th>成员</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>GeoFeatureRegistry()</code></td><td>建一个注册表</td></tr>
+<tr><td><code>setSource(sourceId, features, {visible, layerId, pointRadiusPx})</code></td><td>注册/替换某个来源的要素</td></tr>
+<tr><td><code>removeSource(sourceId)</code> · <code>clear()</code></td><td>移除来源 / 清空</td></tr>
+<tr><td><code>containsSource(id)</code> · <code>sourceIds</code> · <code>length</code></td><td>查看注册状态</td></tr>
+<tr><td><code>queryFeatures(tap, {controller, pointRadiusPx, sourceIds, geometries, limit})</code></td><td>查询命中</td></tr>
+<tr><td><code>GeoQueryHit.feature</code></td><td>命中的 <code>GeoJsonFeature</code>（含 id 与 properties，原样带回）</td></tr>
+<tr><td><code>GeoQueryHit.sourceId</code></td><td>命中的来源 id</td></tr>
+<tr><td><code>GeoQueryHit.distancePx</code></td><td>点要素的屏幕距离（px）；面要素为 <code>null</code></td></tr>
+</tbody>
+</table>
+<p><code>visible: false</code> 的来源整体不可命中 —— 关掉的图层不该被点到。</p>
+<h3 id="53-两种命中策略按几何类型自动分派">5.3 两种命中策略（按几何类型自动分派）</h3>
+<table>
+<thead><tr><th>几何</th><th>策略</th><th>半径/容差</th><th>为什么</th></tr></thead>
+<tbody>
+<tr><td>点（<code>PointGeometry</code>）</td><td><strong>屏幕空间</strong>：投影后比像素距离</td><td><code>pointRadiusPx</code>（默认 24px）</td><td>判定与"眼睛看到的那个圆点"一致，缩放时手感不变</td></tr>
+<tr><td>面（<code>PolygonGeometry</code> / <code>MultiPolygonGeometry</code>）</td><td><strong>地理空间</strong>：经纬度平面 point-in-polygon</td><td>边界容差 <code>1e-7°</code></td><td>与缩放/平移/世界副本/球面遮挡无关，跨 ±180° 也准</td></tr>
+<tr><td>线（<code>LineStringGeometry</code> / <code>MultiLineStringGeometry</code>）</td><td><strong>v1 不命中</strong></td><td>—</td><td>尚未实现；命中列表里不会出现线要素</td></tr>
+</tbody>
+</table>
+<h3 id="54-命中顺序可以依赖">5.4 命中顺序（可以依赖）</h3>
+<ol>
+<li>按来源分组，来源顺序 = 注册顺序；</li>
+<li>同来源内<strong>点要素在前</strong>，按屏幕距离升序，<strong>等距时后注册者在前</strong>（"上层优先"，与绘制顺序一致 —— 点到的就是眼睛看到的那一个）；</li>
+<li>同来源内<strong>面要素在后</strong>，按注册顺序。</li>
+</ol>
+<p>所以"取最近的一个点"就是取该来源的第一条命中；"取全部重叠的面"则是该来源的全部面命中。</p>
+<h3 id="55-边界日界线与球面语义">5.5 边界、日界线与球面语义</h3>
+<ul>
+<li><strong>外环边界算命中</strong>；<strong>洞的边界不算</strong>（洞优先）。</li>
+<li>判定用 <strong>even-odd 规则</strong>，环的绕向无关 —— 洞即使与外环同绕向也依然是洞。</li>
+<li>跨 ±180° 的多边形：查询经度取<strong>落在环解缠窗口内的唯一副本</strong>，而不是"挪到与首点同一副本"。后者在经度跨度 &gt; 180° 的宽环上会漏命中（旧的手写实现正是如此）。</li>
+<li>平面模式下拾取用 <code>projectForVector</code>，把经度折到<strong>最近的世界副本</strong>：相机在 −179°、要素在 +179° 时也能点中（普通 <code>project</code> 不折，会把要素放到一整个世界之外）。</li>
+<li>球面模式下<strong>背面的要素不会被命中</strong>（<code>project</code> 返回的 <code>(−1e6, −1e6)</code> 哨兵会被识别）。注意 <code>isVisible</code> 的阈值与 <code>project</code> 不一致，<strong>不能拿它替代哨兵检查</strong>。</li>
+</ul>
+<h3 id="56-与-maplibre-的差异">5.6 与 MapLibre 的差异</h3>
+<table>
+<thead><tr><th>MapLibre</th><th>geo_map</th></tr></thead>
+<tbody>
+<tr><td><code>queryRenderedFeatures</code> 按屏幕 bbox 查询</td><td>按几何类型分派：点 = 屏幕半径，面 = 地理空间</td></tr>
+<tr><td>结果是"渲染出的要素"（含 MVT 瓦片要素）</td><td>v1 只查<strong>注册过的</strong> GeoJSON 要素；MVT 瓦片要素查询尚未实现</td></tr>
+<tr><td><code>setFeatureState</code> / 高亮</td><td>v1 未实现（选中态由宿主自己管理）</td></tr>
+<tr><td>按 <code>layer</code> 过滤</td><td>v1 支持 <code>sourceIds</code> 与 <code>geometries</code> 过滤</td></tr>
+</tbody>
+</table>
+<h3 id="57-完整例子">5.7 完整例子</h3>
+<pre><code>class MapPage extends ConsumerStatefulWidget {
+  const MapPage({super.key});
+  @override
+  ConsumerState&lt;MapPage&gt; createState() =&gt; _MapPageState();
+}
+
+class _MapPageState extends ConsumerState&lt;MapPage&gt; {
+  late final GeoMapController _controller = GeoMapController(useGlobe: false);
+  final GeoFeatureRegistry _registry = GeoFeatureRegistry();
+
+  @override
+  Widget build(BuildContext context) {
+    // 数据/可见性变了就重建注册表 —— 它是快照，永远与画面一致。
+    _registry
+      ..setSource(&#x27;airports&#x27;, ref.watch(airportFeaturesProvider))
+      ..setSource(&#x27;sigmet&#x27;, ref.watch(sigmetFeaturesProvider));
+
+    return GeoMap(
+      options: GeoMapOptions(
+        initialCenter: const LatLng(35, 105),
+        initialZoom: 4,
+      ),
+      source: ref.watch(mapTileSourceProvider),
+      controller: _controller,
+      onTap: (latLng) {
+        final hits = _registry.queryFeatures(latLng, controller: _controller);
+        if (hits.isEmpty) return;
+
+        // 点要素：取最近的一个（命中顺序保证第一条就是最近的）。
+        final dots = hits.where((h) =&gt; h.distancePx != null).toList();
+        if (dots.isNotEmpty) {
+          showAirportSheet(dots.first.feature.id!);
+        }
+        // 面要素：可能多个（重叠的 SIGMET 区域）。
+        final areas = hits.where((h) =&gt; h.distancePx == null).toList();
+        if (areas.isNotEmpty) {
+          showSigmetSheet(areas.map((h) =&gt; h.feature.id!).toList());
+        }
+      },
+      children: const [],
+    );
+  }
+}</code></pre>
+<h2 id="sec6">6. 使用场景</h2>
 <p>下面给出 10 个典型场景，每个都附带可直接使用的 Dart 示例。</p>
 <h3 id="a-离线底图mbtiles">A. 离线底图（MBTiles）</h3>
 <pre><code>final source = await MbtilesTileSource.open(&#x27;basemap&#x27;, &#x27;assets/maps/basemap.mbtiles&#x27;);
@@ -462,9 +577,9 @@ StyleVectorLayer(
   sprite: atlas,        // 没有它也能画，只是丢掉图标
 );</code></pre>
 <div class="callout"><code>rootBundle</code> 需要 <code>import 'package:flutter/services.dart';</code>。<code>SpriteAtlas.decode</code> 在图片解码失败时返回 <code>null</code> —— 此时图层照常绘制文字，仅丢掉图标，不会整层消失。</div>
-<h2 id="sec6">6. 样式系统</h2>
+<h2 id="sec7">7. 样式系统</h2>
 <p><code>StyleVectorLayer</code> 与 <code>MvtVectorLayer</code> 共享一套 MapLibre 风格的样式 API。静态声明走 <code>StyleSpec.parse(...)</code>，运行时改写走 <code>GeoStyleController</code> —— 二者等价，后者适合交互式图例/筛选。</p>
-<h3 id="61-geostylecontroller">6.1 <code>GeoStyleController</code></h3>
+<h3 id="71-geostylecontroller">7.1 <code>GeoStyleController</code></h3>
 <pre><code>final style = GeoStyleController(StyleSpec.parse({...}));</code></pre>
 <table>
 <thead><tr><th>成员</th><th>说明</th></tr></thead>
@@ -482,7 +597,7 @@ StyleVectorLayer(
 </tbody>
 </table>
 <div class="callout">它是 <code>ChangeNotifier</code>，图层会自动监听重建。注意 <code>addLayer</code> 收的是 <strong><code>StyleLayer</code> 对象</strong>，不是 <code>(id, sourceId)</code> 两个字符串。</div>
-<h3 id="62-symbol-属性速查">6.2 symbol 属性速查</h3>
+<h3 id="72-symbol-属性速查">7.2 symbol 属性速查</h3>
 <p><code>type: 'symbol'</code> 图层即「图标 + 文字标注」。属性分 <strong>layout</strong>（放不放、放哪、多大）与 <strong>paint</strong>（什么颜色、多透明）两组，与 MapLibre v8 一致。下表是 <code>geo_map</code> <strong>实际实现</strong>的子集，默认值取自 <code>style_properties.dart</code>；表外属性不会被解析。</p>
 <p><strong>layout</strong></p>
 <table>
@@ -519,7 +634,7 @@ StyleVectorLayer(
 </tbody>
 </table>
 <div class="callout"><strong>单位差异是高频坑</strong>：<code>text-offset</code> 用 <strong>em</strong>（乘 <code>text-size</code>），<code>icon-offset</code> 用 <strong>像素</strong>（直用）。二者同名不同义。</div>
-<h3 id="63-锚点九宫格">6.3 锚点九宫格</h3>
+<h3 id="73-锚点九宫格">7.3 锚点九宫格</h3>
 <p><code>text-anchor</code> / <code>icon-anchor</code> 决定盒子从锚点往哪边展开。屏幕坐标 y 向下：</p>
 <table>
 <thead><tr><th>取值</th><th>盒子展开方向</th><th>中心相对锚点位移</th></tr></thead>
@@ -536,7 +651,7 @@ StyleVectorLayer(
 </tbody>
 </table>
 <p>所以「图标在上、文字在下」是 <code>icon-anchor: 'bottom'</code> + <code>text-anchor: 'top'</code>（见场景 J）。</p>
-<h3 id="64-沿线标注">6.4 沿线标注</h3>
+<h3 id="74-沿线标注">7.4 沿线标注</h3>
 <pre><code>{
   &quot;id&quot;: &quot;road-label&quot;,
   &quot;type&quot;: &quot;symbol&quot;,
@@ -548,19 +663,19 @@ StyleVectorLayer(
 }</code></pre>
 <p>设为 <code>'line'</code> 后不再按点取锚点，而是<strong>逐线段取中点</strong>，并把标注旋转到该段方向（<code>atan2</code>）。与 MapLibre 一致，当前是「一段一个标注」；<code>symbol-spacing</code> 仅预留参数，不做细分采样。</p>
 <div class="callout">该能力在 <strong>MVT</strong>（<code>MvtVectorLayer</code>）路径上完整可用；GeoJSON（<code>StyleVectorLayer</code>）目前只处理点要素，沿线标注不会生效。</div>
-<h3 id="65-sdf-图标着色">6.5 SDF 图标着色</h3>
+<h3 id="75-sdf-图标着色">7.5 SDF 图标着色</h3>
 <p><code>icon-color</code> 只对 <strong>SDF</strong> 雪碧图生效（<code>&lt;sprite&gt;.json</code> 中标记 <code>sdf: true</code> 的单通道图标），实现是把颜色以 <code>ColorFilter.mode(color, BlendMode.srcIn)</code> 叠到贴图通道上。</p>
 <p>普通（非 SDF）图标即使设了 <code>icon-color</code> 也<strong>保持原样</strong> —— 与 MapLibre 一致，避免把彩色图标误染成纯色。</p>
-<h3 id="66-跨瓦片去重">6.6 跨瓦片去重</h3>
+<h3 id="76-跨瓦片去重">7.6 跨瓦片去重</h3>
 <p>同一个 POI 落在相邻瓦片的缓冲重叠区时会被解出两份。引擎用<strong>世界经纬度</strong>（量化到 1e-5°，约 1 米）作去重键：两份解出同一个键时只保留<strong>先放置的那份</strong>，另一份标记为 <code>duplicate</code> 且不占用碰撞网格。</p>
 <p>这是自动行为，无需配置。沿线标注的中点同样会生成键，但不同瓦片对同一条线的采样相位不同、中点几乎不可能重合，因此不会误去重。</p>
-<h3 id="67-旋转与透明度">6.7 旋转与透明度</h3>
+<h3 id="77-旋转与透明度">7.7 旋转与透明度</h3>
 <ul>
 <li><code>text-rotate</code> / <code>icon-rotate</code> 以<strong>度</strong>为单位（引擎内部转弧度），且<strong>叠加</strong>在 <code>symbol-placement: line</code> 的线段方向之上。</li>
 <li>旋转后的碰撞盒取<strong>轴对齐外接矩形（AABB）</strong>。碰撞网格本身是轴对齐的，45° 时盒子会略微多占空间 —— 这是与 MapLibre 相同的近似，换取不必为旋转盒单独实现命中测试。</li>
 <li><code>text-opacity</code> 同时乘进文字填充与 halo 的 alpha，并参与布局缓存 key。</li>
 </ul>
-<h3 id="68-图标集-spriteatlas">6.8 图标集 SpriteAtlas</h3>
+<h3 id="78-图标集-spriteatlas">7.8 图标集 SpriteAtlas</h3>
 <p>图标不走 <code>StyleSpec</code>（它不解析 <code>sprite</code> 字段），而是单独解码后由图层持有：</p>
 <pre><code>final atlas = await SpriteAtlas.decode(
   json: spriteJsonText,        // &lt;name&gt;.json
@@ -578,7 +693,7 @@ StyleVectorLayer(style: style, features: feats, sprite: atlas);
 </tbody>
 </table>
 <p>绘制尺寸 = 精灵像素 ÷ <code>pixelRatio</code> × <code>icon-size</code>。图层拿到 <code>null</code> 时会照常绘制文字、只是丢掉图标。</p>
-<h2 id="sec7">7. 约束与踩坑</h2>
+<h2 id="sec8">8. 约束与踩坑</h2>
 <ol>
 <li><strong><code>children</code> 不收指针事件</strong>：手势被 <code>GlobeGestureOverlay</code> 拦截，交互 UI 必须放在 <code>GeoMap</code> 之外。</li>
 <li><strong>平移重建全部 <code>children</code></strong>：<code>children</code> 应是轻量、由 <code>controller</code> 驱动的纯绘制层，避免重组件。</li>
@@ -591,10 +706,10 @@ StyleVectorLayer(style: style, features: feats, sprite: atlas);
 <li><strong><code>icon-color</code> 只染 SDF 图标</strong>：普通彩色图标设了也不变色，这是与 MapLibre 一致的行为，见 <a href="#65-sdf-图标着色">6.5</a>。</li>
 <li><strong>沿线标注只对 MVT 生效</strong>：<code>symbol-placement: 'line'</code> 在 GeoJSON 源上不会旋转标注，见 <a href="#64-沿线标注">6.4</a>。</li>
 </ol>
-<h3 id="71-日界线与平面无限滚动">7.1 日界线与平面无限滚动</h3>
+<h3 id="81-日界线与平面无限滚动">8.1 日界线与平面无限滚动</h3>
 <p><strong>平面无限滚动</strong>：<code>FlatProjectionDelegate.panCenter</code> / <code>anchorCenter</code> 把相机经度 <strong>wrap</strong> （不 clamp 到 ±180），东西方向可无限平移；栅格 <code>AffineGeometry.worldCopies</code>（-1..1）与矢量 <code>visibleWorldCopies</code> 负责重复世界副本，接缝无缝。等价 MapLibre 的 <code>worldCopyJump</code>。</p>
 <p><strong>跨 ±180° 的 GeoJSON 填充</strong>：<code>StyleVectorLayer</code> 平面分支先解缠经度得到连续屏幕 x （<code>_projectContinuous</code>），再按可见世界副本平移重绘（<code>_drawWithCopies</code>），并对多环做绕向归 一化（<code>_normalizeRings</code>）。这等价 MapLibre 的 <code>getVisibleUnwrappedCoordinates</code> + 分切片， 跨日界线的多边形不会再被拉成一条横贯整屏的横带。</p>
-<p><strong><code>geo_map_core</code> 导出的反子午线工具</strong>（<code>geo_map</code> 的 barrel 未 re-export，需直接 <code>import 'package:geo_map_core/geo_map_core.dart';</code>，或自行实现十几行纯数学）：</p>
+<p><strong><code>geo_map_core</code> 导出的反子午线工具</strong>（现已由 <code>geo_map</code> 的 barrel 一并 re-export， <code>import 'package:geo_map/geo_map.dart';</code> 即可拿到）：</p>
 <table>
 <thead><tr><th>函数</th><th>说明</th></tr></thead>
 <tbody>
@@ -602,8 +717,8 @@ StyleVectorLayer(style: style, features: feats, sprite: atlas);
 <tr><td><code>splitRingAtSeam(List&lt;LatLng&gt;, double seamLng) → List&lt;List&lt;LatLng&gt;&gt;</code></td><td>在指定经线（如 ±180°）用 Sutherland–Hodgman 把环拆成 1~2 段</td></tr>
 </tbody>
 </table>
-<div class="callout"><strong>自己做要素命中测试时</strong>：若在屏幕空间做 point-in-polygon，先把环按 <code>unwrapLongitudes</code> 解缠、并把点击经度挪到与首点同一副本；更稳的做法是直接按<strong>经纬度</strong> ray-casting （与相机/缩放/世界副本无关，跨日界线与球面都适用）。</div>
-<h2 id="sec8">8. 与 app_client 的落地对照</h2>
+<div class="callout"><strong>要素命中测试已内置</strong>：用 SDK 的 <code>GeoFeatureRegistry</code>（见 <a href="#5-要素查询queryrenderedfeatures">§ 5 要素查询</a>）—— 点要素按屏幕半径、面要素按 地理空间 point-in-polygon，跨 ±180° / 缩放 / 世界副本 / 球面遮挡都已处理， 不必自己写。</div>
+<h2 id="sec9">9. 与 app_client 的落地对照</h2>
 <p><code>app_client</code>（Aero Weather）对 <code>geo_map</code> 的封装集中在 <code>lib/features/map/</code>：</p>
 <table>
 <thead><tr><th>关注点</th><th>实现位置</th><th>说明</th></tr></thead>
