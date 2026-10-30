@@ -513,20 +513,12 @@ class _VectorPainter extends CustomPainter {
     Offset toScreen((double, double, double) v) =>
         Offset(center.dx + v.$1 * radius, center.dy - v.$2 * radius);
 
-    // Rotate so the walk starts on a hidden vertex (if any): runs then never
-    // straddle the array boundary.
-    final firstHidden = view.indexWhere((v) => v.$3 <= _eps);
-    if (firstHidden > 0) {
-      final rotated = [
-        ...view.sublist(firstHidden),
-        ...view.sublist(0, firstHidden),
-      ];
-      view
-        ..clear()
-        ..addAll(rotated);
-    }
-
-    if (view.every((v) => v.$3 > _eps)) {
+    // A vertex is visible iff its depth is in front of the limb (z > 0). The
+    // crossing between a visible and a hidden vertex is the z == 0 intersection
+    // projected onto the silhouette — the same plane the visibility test uses — so
+    // there is no dropped band that would pop as the camera drifts (the old
+    // `_eps` band was the source of the horizon flicker).
+    if (view.every((v) => v.$3 > 0)) {
       final ring = [for (final v in view) toScreen(v)];
       return (
         ui.Path()..addPolygon(ring, true),
@@ -547,27 +539,52 @@ class _VectorPainter extends CustomPainter {
       return (x / len, y / len, 0);
     }
 
+    // Visible edge runs, in ring order. We also remember the source index of
+    // each run's first and last *real* (visible) vertex so we can locate the
+    // hidden gap between consecutive runs.
     final runs = <List<Offset>>[];
+    final runStartSrc = <int>[];
+    final runEndSrc = <int>[];
     List<Offset>? current;
+    int? lastRealSrc;
+
+    void startRun(int firstRealIdx) {
+      current = <Offset>[];
+      runStartSrc.add(firstRealIdx);
+      lastRealSrc = firstRealIdx;
+    }
+
+    void endRun() {
+      runs.add(current!);
+      runEndSrc.add(lastRealSrc!);
+      current = null;
+      lastRealSrc = null;
+    }
 
     for (var i = 0; i < view.length; i++) {
       final a = view[i];
       final b = view[(i + 1) % view.length];
-      final aIn = a.$3 > _eps;
-      final bIn = b.$3 > _eps;
+      final aIn = a.$3 > 0;
+      final bIn = b.$3 > 0;
 
       if (aIn && bIn) {
-        (current ??= <Offset>[]).add(toScreen(a));
+        if (current == null) startRun(i);
+        current!.add(toScreen(a));
+        lastRealSrc = i;
       } else if (aIn && !bIn) {
-        (current ??= <Offset>[]).add(toScreen(a));
-        current.add(toScreen(crossing(a, b)));
-        runs.add(current);
-        current = null;
+        if (current == null) startRun(i);
+        current!.add(toScreen(a));
+        current!.add(toScreen(crossing(a, b)));
+        lastRealSrc = i;
+        endRun();
       } else if (!aIn && bIn) {
-        current = [toScreen(crossing(a, b)), toScreen(b)];
+        startRun(i);
+        current!.add(toScreen(crossing(a, b)));
+        current!.add(toScreen(b));
+        lastRealSrc = i;
       }
     }
-    if (current != null && current.isNotEmpty) runs.add(current);
+    if (current != null && current!.isNotEmpty) endRun();
     if (runs.isEmpty) return null;
 
     final fillPath = ui.Path();
@@ -587,30 +604,74 @@ class _VectorPainter extends CustomPainter {
         fillPath.lineTo(run[i].dx, run[i].dy);
       }
       // Close the fill along the silhouette so it never cuts across the disc.
-      final next = runs[(r + 1) % runs.length];
-      _arcAlongLimb(fillPath, run.last, next.first, center, radius);
+      // The arc follows the occluded side of the limb — the side the hidden
+      // vertices sit on — chosen from their circular mean so it never flips
+      // direction frame to frame (the old firstHidden rotation was the flicker).
+      final next = (r + 1) % runs.length;
+      final hiddenAngles = <double>[];
+      var k = (runEndSrc[r] + 1) % ring.length;
+      final gapEnd = runStartSrc[next];
+      var guard = 0;
+      while (k != gapEnd && guard <= ring.length) {
+        hiddenAngles.add(math.atan2(-view[k].$2, view[k].$1));
+        k = (k + 1) % ring.length;
+        guard++;
+      }
+      _arcAlongLimb(fillPath, run.last, runs[next].first, center, radius,
+          hiddenAngles);
     }
     fillPath.close();
     return (fillPath, strokePath);
   }
 
-  /// Appends the shorter arc on the silhouette from [from] to [to].
+  /// Appends the arc on the silhouette from [from] to [to] that passes through
+  /// the occluded gap (given by the angular positions of the hidden vertices in
+  /// that gap). It picks the minor or major arc from the circular mean of those
+  /// angles, so a single noisy behind-globe projection cannot flip the seal to
+  /// the wrong side — which keeps the fill topology stable frame to frame.
   void _arcAlongLimb(
     ui.Path path,
     Offset from,
     Offset to,
     Offset center,
     double radius,
+    List<double> hiddenAngles,
   ) {
-    var a0 = math.atan2(from.dy - center.dy, from.dx - center.dx);
-    var a1 = math.atan2(to.dy - center.dy, to.dx - center.dx);
-    var delta = a1 - a0;
-    while (delta > math.pi) {
-      delta -= 2 * math.pi;
+    final a0 = math.atan2(from.dy - center.dy, from.dx - center.dx);
+    final a1 = math.atan2(to.dy - center.dy, to.dx - center.dx);
+
+    double norm(double d) {
+      while (d > math.pi) {
+        d -= 2 * math.pi;
+      }
+      while (d < -math.pi) {
+        d += 2 * math.pi;
+      }
+      return d;
     }
-    while (delta < -math.pi) {
-      delta += 2 * math.pi;
+
+    final deltaShort = norm(a1 - a0);
+    final deltaLong =
+        deltaShort > 0 ? deltaShort - 2 * math.pi : deltaShort + 2 * math.pi;
+
+    bool shortContains(double target) {
+      final d = norm(target - a0);
+      return deltaShort > 0
+          ? (d >= 0 && d <= deltaShort)
+          : (d <= 0 && d >= deltaShort);
     }
+
+    // The occluded gap lies on the side of the limb where the hidden vertices
+    // cluster. Use their circular mean — robust to a stray out-of-range angle —
+    // to decide short vs long arc.
+    final meanAngle = hiddenAngles.isEmpty
+        ? a0
+        : math.atan2(
+            hiddenAngles.fold(0.0, (s, h) => s + math.sin(h)),
+            hiddenAngles.fold(0.0, (s, h) => s + math.cos(h)),
+          );
+    final useLong = !shortContains(meanAngle);
+    final delta = useLong ? deltaLong : deltaShort;
 
     const steps = 24;
     for (var i = 1; i <= steps; i++) {
