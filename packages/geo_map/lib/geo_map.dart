@@ -44,11 +44,25 @@ export 'package:geo_map_core/geo_map_core.dart'
         TileSchemeKind,
         // Building a sprite atlas in code needs the index types.
         SpriteIndex,
-        SpriteIcon;
+        SpriteIcon,
+        // Feature query: the geometry kinds a query can filter on, plus the
+        // geographic helpers (antimeridian-safe containment, ring winding).
+        GeoGeometryKind,
+        pointInRing,
+        pointInPolygon,
+        pointInMultiPolygon,
+        ringSignedArea,
+        normalizeRingWinding,
+        unwrapLongitudes,
+        splitRingAtSeam;
 export 'src/style/style_controller.dart';
 export 'src/style/sprite_atlas.dart';
 export 'src/style/style_vector_layer.dart';
 export 'src/style/mvt_vector_layer.dart';
+// Feature query: register the features you draw, then ask what a tap hit
+// (MapLibre `queryRenderedFeatures`).
+export 'src/query/geo_feature_registry.dart';
+export 'src/query/geo_pick_projection.dart';
 export 'src/globe/globe_image_layer.dart';
 export 'src/globe/geojson_vector_source.dart';
 export 'src/globe/globe_projection.dart';

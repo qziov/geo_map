@@ -313,31 +313,12 @@ class _StyleVectorPainter extends CustomPainter {
   /// Normalise ring winding so a `nonZero` fill punches holes correctly.
   ///
   /// The outer ring keeps its orientation; holes are reversed when they share
-  /// the outer sign (MapLibre's `fill_bucket` does the same). Signed area is
-  /// measured on unwrapped longitudes so rings near ±180° do not flip sign.
-  static List<List<LatLng>> _normalizeRings(List<List<LatLng>> rings) {
-    if (rings.length < 2) return rings;
-    final outerSign = _ringSignedArea(rings.first) < 0 ? -1 : 1;
-    final out = <List<LatLng>>[rings.first];
-    for (var i = 1; i < rings.length; i++) {
-      final sign = _ringSignedArea(rings[i]) < 0 ? -1 : 1;
-      out.add(sign == outerSign
-          ? rings[i].reversed.toList(growable: false)
-          : rings[i]);
-    }
-    return out;
-  }
-
-  static double _ringSignedArea(List<LatLng> ring) {
-    if (ring.length < 3) return 0;
-    final lons = unwrapLongitudes([for (final p in ring) p.longitude]);
-    var area = 0.0;
-    for (var i = 0; i < ring.length; i++) {
-      final j = (i + 1) % ring.length;
-      area += lons[i] * ring[j].latitude - lons[j] * ring[i].latitude;
-    }
-    return area * 0.5;
-  }
+  /// the outer sign (MapLibre's `fill_bucket` does the same). The algorithm
+  /// lives in `geo_map_core` so the renderer and the feature query read the
+  /// same winding semantics — signed area is measured on unwrapped longitudes
+  /// so rings near ±180° do not flip sign.
+  static List<List<LatLng>> _normalizeRings(List<List<LatLng>> rings) =>
+      normalizeRingWinding(rings);
 
   /// Screen-space paths for one feature.
   ///

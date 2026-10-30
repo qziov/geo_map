@@ -9,8 +9,10 @@ Vec2 _project(LatLng point) => Vec2(point.longitude * 10, -point.latitude * 10);
 
 QueryFeature _point(String id, double lat, double lng, {String source = ''}) =>
     QueryFeature(
-      id: id,
-      geometry: PointGeometry(LatLng(lat, lng)),
+      feature: GeoJsonFeature(
+        id: id,
+        geometry: PointGeometry(LatLng(lat, lng)),
+      ),
       sourceId: source,
     );
 
@@ -23,6 +25,12 @@ final _square = PolygonGeometry(<List<LatLng>>[
     const LatLng(0, 0),
   ],
 ]);
+
+QueryFeature _area(String id, {String source = '', GeoJsonGeometry? geometry}) =>
+    QueryFeature(
+      feature: GeoJsonFeature(id: id, geometry: geometry ?? _square),
+      sourceId: source,
+    );
 
 void main() {
   group('planFeatureQuery — point features', () {
@@ -82,8 +90,10 @@ void main() {
 
     test('a per-feature radius overrides the query default', () {
       final far = QueryFeature(
-        id: 'a',
-        geometry: PointGeometry(const LatLng(0, 3)),
+        feature: GeoJsonFeature(
+          id: 'a',
+          geometry: PointGeometry(const LatLng(0, 3)),
+        ),
         pointRadiusPx: 40,
       );
       final hits = planFeatureQuery(
@@ -151,11 +161,7 @@ void main() {
     test('areas come after the points of the same source', () {
       final hits = planFeatureQuery(
         features: <QueryFeature>[
-          QueryFeature(
-            id: 'area',
-            geometry: _square,
-            sourceId: 's',
-          ),
+          _area('area', source: 's'),
           _point('dot', 5, 5.1, source: 's'),
         ],
         tap: const LatLng(5, 5),
@@ -192,8 +198,10 @@ void main() {
       final hits = planFeatureQuery(
         features: <QueryFeature>[
           const QueryFeature(
-            id: 'a',
-            geometry: PointGeometry(LatLng(0, 0)),
+            feature: GeoJsonFeature(
+              id: 'a',
+              geometry: PointGeometry(LatLng(0, 0)),
+            ),
             visible: false,
           ),
         ],
@@ -224,7 +232,7 @@ void main() {
       // decides what comes back.
       final features = <QueryFeature>[
         _point('dot', 5, 5),
-        QueryFeature(id: 'area', geometry: _square),
+        _area('area'),
       ];
       final tap = const LatLng(5, 5);
       final screen = _project(tap);
@@ -258,7 +266,7 @@ void main() {
   group('planFeatureQuery — area features', () {
     test('a polygon containing the tap hits', () {
       final hits = planFeatureQuery(
-        features: <QueryFeature>[QueryFeature(id: 'area', geometry: _square)],
+        features: <QueryFeature>[_area('area')],
         tap: const LatLng(5, 5),
         tapScreen: _project(const LatLng(5, 5)),
         project: _project,
@@ -269,7 +277,7 @@ void main() {
 
     test('a polygon not containing the tap misses', () {
       final hits = planFeatureQuery(
-        features: <QueryFeature>[QueryFeature(id: 'area', geometry: _square)],
+        features: <QueryFeature>[_area('area')],
         tap: const LatLng(20, 5),
         tapScreen: _project(const LatLng(20, 5)),
         project: _project,
@@ -289,8 +297,8 @@ void main() {
       ]);
       final hits = planFeatureQuery(
         features: <QueryFeature>[
-          QueryFeature(id: 'a', geometry: _square),
-          QueryFeature(id: 'b', geometry: other),
+          _area('a'),
+          _area('b', geometry: other),
         ],
         tap: const LatLng(5, 7),
         tapScreen: _project(const LatLng(5, 7)),
@@ -304,7 +312,7 @@ void main() {
 
     test('areas are picked even without a tap screen', () {
       final hits = planFeatureQuery(
-        features: <QueryFeature>[QueryFeature(id: 'area', geometry: _square)],
+        features: <QueryFeature>[_area('area')],
         tap: const LatLng(5, 5),
         tapScreen: null,
         project: _project,
@@ -318,11 +326,13 @@ void main() {
       final hits = planFeatureQuery(
         features: <QueryFeature>[
           QueryFeature(
-            id: 'line',
-            geometry: const LineStringGeometry(<LatLng>[
-              LatLng(0, 0),
-              LatLng(0, 10),
-            ]),
+            feature: GeoJsonFeature(
+              id: 'line',
+              geometry: const LineStringGeometry(<LatLng>[
+                LatLng(0, 0),
+                LatLng(0, 10),
+              ]),
+            ),
           ),
         ],
         tap: const LatLng(0, 5),

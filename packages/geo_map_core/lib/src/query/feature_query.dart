@@ -42,19 +42,19 @@ GeoGeometryKind geometryKindOf(GeoJsonGeometry geometry) => switch (geometry) {
 
 /// A feature registered for querying.
 ///
-/// [id] is the caller's business key — the engine passes the GeoJSON
-/// feature's id through, so a host can map a hit back to its own object.
+/// It wraps the host's own [GeoJsonFeature], so a hit carries the feature's
+/// id **and** its properties back to the caller — the registry does not have
+/// to keep a second lookup table, and two sources may reuse the same id
+/// without colliding.
 class QueryFeature {
   const QueryFeature({
-    required this.id,
-    required this.geometry,
+    required this.feature,
     this.sourceId = '',
     this.visible = true,
     this.pointRadiusPx,
   });
 
-  final String id;
-  final GeoJsonGeometry geometry;
+  final GeoJsonFeature feature;
 
   /// Groups features by origin. Sources are reported in registration order.
   final String sourceId;
@@ -64,6 +64,9 @@ class QueryFeature {
 
   /// Overrides the query's default pick radius for this feature.
   final double? pointRadiusPx;
+
+  /// The feature's id, or the empty string when it has none.
+  String get id => feature.id ?? '';
 }
 
 /// A feature that answered the query.
@@ -110,7 +113,7 @@ List<QueryHit> planFeatureQuery({
     if (!feature.visible) continue;
     if (sourceIds != null && !sourceIds.contains(feature.sourceId)) continue;
     if (geometries != null &&
-        !geometries.contains(geometryKindOf(feature.geometry))) {
+        !geometries.contains(geometryKindOf(feature.feature.geometry))) {
       continue;
     }
     candidates.add(feature);
@@ -122,7 +125,7 @@ List<QueryHit> planFeatureQuery({
   final areas = <QueryFeature>[];
   for (var i = 0; i < candidates.length; i++) {
     final feature = candidates[i];
-    final geometry = feature.geometry;
+    final geometry = feature.feature.geometry;
     if (geometry is PointGeometry) {
       if (tapScreen == null) continue;
       final screen = project(geometry.point);
