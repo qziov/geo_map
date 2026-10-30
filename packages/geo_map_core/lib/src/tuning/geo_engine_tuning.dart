@@ -128,4 +128,28 @@ class GeoEngineTuning {
   /// cheap, and the smeared regime is only reached where the cap is a
   /// featureless blob anyway.
   static const int maxPolarCapColumns = 64;
+
+  // --- feature picking --------------------------------------------------------
+
+  /// Default screen-space pick radius (px) for point features.
+  ///
+  /// 24 px is roughly twice the on-screen diameter of a 12 px symbol, so a
+  /// dot is grabbable without demanding pixel accuracy. Hosts may override it
+  /// per query or per feature.
+  static const double featurePickRadiusPx = 24;
+
+  /// Magnitude at which a projected screen coordinate is treated as the
+  /// "not drawable" sentinel.
+  ///
+  /// The globe projector returns `(-1e6, -1e6)` for the far side of the
+  /// sphere. Such a coordinate is finite, so a naive distance check would
+  /// treat it as "very far away" rather than "not pickable" — both are
+  /// rejected, but the sentinel must be detected explicitly.
+  static const double hiddenPointSentinelPx = 1e6;
+
+  /// Tolerance (degrees) for "the tap is exactly on the ring boundary".
+  ///
+  /// 1e-7° is about a centimetre — it only absorbs floating-point noise, it
+  /// does not widen the shape.
+  static const double featureBoundaryEpsilonDeg = 1e-7;
 }
