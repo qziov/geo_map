@@ -14,6 +14,8 @@
 /// because its bucket belongs to one layer, not to one tile.
 library;
 
+import 'dart:math' as math;
+
 import '../math/geo_geometry.dart';
 import '../mvt/mvt.dart';
 
@@ -23,6 +25,9 @@ class MvtSymbol {
     required this.anchor,
     this.properties = const {},
     this.tilePriority = 0,
+    this.angle = 0,
+    this.placement = MvtSymbolPlacement.point,
+    this.crossTileKey,
   });
 
   /// Normalized tile-space position (`[0,1]²`), like every other bucket.
@@ -36,6 +41,28 @@ class MvtSymbol {
   /// (`symbol_layout.ts` assigns it while walking features). Without a stable
   /// order, two candidates that cannot both fit would flicker.
   final int tilePriority;
+
+  /// Local segment angle in radians (tile space, y down). Non-zero only for
+  /// `symbol-placement: line`; the painter rotates the label to the line.
+  final double angle;
+
+  /// Whether this anchor came from a point or a line feature.
+  final MvtSymbolPlacement placement;
+
+  /// Stable cross-tile identity: the anchor's **world** longitude/latitude,
+  /// quantized to ~1e-5° (~1 m). Same logical feature duplicated across
+  /// neighbouring tiles' buffer overlap shares a key, so the placer can keep one.
+  /// Null when [z]/[x]/[y] were not supplied (e.g. synthetic tests).
+  final String? crossTileKey;
+}
+
+/// How a symbol anchor was produced.
+enum MvtSymbolPlacement {
+  /// One anchor per point feature (or per point of a MultiPoint).
+  point,
+
+  /// One anchor per line-segment midpoint, rotated to the segment.
+  line,
 }
 
 /// Builds symbol anchors for every point feature in [layer].
@@ -46,8 +73,17 @@ class MvtSymbol {
 /// Points are **not** filtered by tile edges: a label anchored just outside the
 /// tile (the MVT buffer) is legitimate — its box may still overlap the tile, and
 /// the collision step is what decides. Lines and polygons are skipped; converting
-/// them to labels needs `symbol-placement: line` and its own shaping path.
-List<MvtSymbol> buildMvtSymbolBucket(MvtLayer layer) {
+/// them to labels needs [buildMvtLineSymbolBucket].
+///
+/// [z]/[x]/[y] are the tile's coordinates; they feed [MvtSymbol.crossTileKey] so
+/// the same POI drawn from two tiles collapses to one. Pass 0 when there is no
+/// tile (unit tests).
+List<MvtSymbol> buildMvtSymbolBucket(
+  MvtLayer layer, {
+  required int z,
+  required int x,
+  required int y,
+}) {
   final extent = layer.extent.toDouble();
   if (extent <= 0) return const [];
   final out = <MvtSymbol>[];
@@ -64,10 +100,69 @@ List<MvtSymbol> buildMvtSymbolBucket(MvtLayer layer) {
           anchor: Vec2(point.x / extent, point.y / extent),
           properties: feature.properties,
           tilePriority: priority,
+          crossTileKey: _worldKey(point, z, x, y, extent),
         ));
       }
     }
     priority++;
   }
   return out;
+}
+
+/// Builds one symbol per line-segment midpoint in [layer], rotated to the
+/// local segment angle — the M3 `symbol-placement: line` path
+/// (`get_anchors.ts` samples along the line; we place one label per segment,
+/// which MapLibre also does at the default `symbol-spacing`).
+///
+/// Polygons are still skipped; [spacing] is reserved for finer sampling.
+List<MvtSymbol> buildMvtLineSymbolBucket(
+  MvtLayer layer, {
+  required int z,
+  required int x,
+  required int y,
+  double spacing = 0,
+}) {
+  final extent = layer.extent.toDouble();
+  if (extent <= 0) return const [];
+  final out = <MvtSymbol>[];
+  var priority = 0;
+  for (final feature in layer.features) {
+    if (feature.type != MvtGeomType.lineString) {
+      priority++;
+      continue;
+    }
+    for (final ring in feature.geometry) {
+      for (var i = 1; i < ring.length; i++) {
+        final a = ring[i - 1];
+        final b = ring[i];
+        final mx = (a.x + b.x) / 2;
+        final my = (a.y + b.y) / 2;
+        final angle = math.atan2(b.y - a.y, b.x - a.x);
+        out.add(MvtSymbol(
+          anchor: Vec2(mx / extent, my / extent),
+          properties: feature.properties,
+          tilePriority: priority,
+          angle: angle,
+          placement: MvtSymbolPlacement.line,
+          crossTileKey: _worldKey(Vec2(mx, my), z, x, y, extent),
+        ));
+      }
+    }
+    priority++;
+  }
+  return out;
+}
+
+/// World longitude/latitude of [point] (raw extent coordinates) quantized to a
+/// stable key. Mirrors `mvtTilePointToLatLng` in `mvt_bucket.dart` so a feature
+/// at the same place in two tiles produces the same string.
+String? _worldKey(Vec2 point, int z, int x, int y, double extent) {
+  if (z == 0 && x == 0 && y == 0) return null;
+  final size = extent * (1 << z);
+  final x0 = extent * x;
+  final y0 = extent * y;
+  final lon = (point.x + x0) * 360.0 / size - 180.0;
+  final y2 = 180.0 - (point.y + y0) * 360.0 / size;
+  final lat = math.atan(math.exp(y2 * math.pi / 180.0)) * 360.0 / math.pi - 90.0;
+  return '${lon.toStringAsFixed(5)}:${lat.toStringAsFixed(5)}';
 }

@@ -73,3 +73,6 @@ export 'src/source/mbtiles_source.dart'
 export 'src/vendor/flutter_map_camera/flutter_map_camera.dart'
     hide CrsWithStaticTransformation, Projection;
 export 'src/widget/geo_map.dart';
+// Anchor-following popup: re-projects a LatLng on every camera change so a
+// business card can ride along with pan/zoom (MapLibre `Popup.setLngLat`).
+export 'src/widget/geo_anchored_popup.dart';

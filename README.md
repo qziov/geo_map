@@ -12,6 +12,10 @@ A self-contained 2D/3D Flutter map engine — **zero flutter_map dependency**.
   （MapLibre overscale 语义），缺失瓦片自动回退父级（UV 子矩形）
 - **404 不拉黑**：失败分级 + 退避重试，缺瓦只会变模糊，不会变黑
 - **矢量瓦片（MVT）**：fill / line / 虚线 / 数据驱动着色 / 世界副本，球面沿剪影封口
+- **平面无限滚动**：2D 水平方向可无限平移（相机经度 wrap，不 clamp 到 ±180），
+  栅格/矢量按世界副本重复，接缝无缝（等价 MapLibre `worldCopyJump`）
+- **GeoJSON 日界线安全**：跨 ±180° 的多边形填充走“解缠连续 x + 世界副本 + 绕向归一化”，
+  不再横跨整屏（等价 MapLibre `getVisibleUnwrappedCoordinates`）
 - **样式驱动（M1）**：`StyleSpec` + 表达式求值器（含 `["zoom"]` 过滤、算术语义），
   `fill-outline-color` 等按 MapLibre 默认值对齐
 - **标注（M3）**：`text-field` / `icon-image`（sprite 图集）/ halo / 25px 碰撞避让，
@@ -22,7 +26,7 @@ A self-contained 2D/3D Flutter map engine — **zero flutter_map dependency**.
 | 包 | 内容 |
 | --- | --- |
 | `packages/geo_map` | Flutter 壳：`GeoMap` widget、统一渲染栈、手势、MBTiles 源、vendored camera |
-| `packages/geo_map_core` | 纯 Dart 核心：投影/相机/网格/选片/极帽/请求计划/回退/URL + MVT 解码与分桶 + style spec/表达式/过滤器 + 符号分桶与碰撞放置 + sprite 索引。**398 项测试**，无 `dart:ui` |
+| `packages/geo_map_core` | 纯 Dart 核心：投影/相机/网格/选片/极帽/请求计划/回退/URL + MVT 解码与分桶 + style spec/表达式/过滤器 + 符号分桶与碰撞放置 + sprite 索引 + 反子午线工具。**415 项测试**，无 `dart:ui` |
 
 `packages/geo_map_core` 里的投影、网格与选片是**唯一的真相源**：2D 与 3D
 共用同一条 `TileDraw` 管线，只有"像素落在哪里"由几何后端决定
@@ -86,6 +90,8 @@ GeoMap(
 - [x] M3: symbol 分桶 + 碰撞避让 + 文字/图标绘制（25px 网格，照 `CollisionIndex` 移植）
 - [x] M3: `icon-image` + sprite 图集（`<sprite>.json` + `.png`）
 - [ ] M3 剩余: `symbol-placement: line`（沿线标注）、`text-anchor`/`text-offset`、图标 SDF 染色
+- [x] 平面无限滚动（经度 wrap + 世界副本）
+- [x] GeoJSON 跨 ±180° 填充（解缠连续 x + 世界副本 + 绕向归一化）
 - [ ] draw plan 抽取（GPU 后端前置）
 - [ ] 三端（Android/iOS/鸿蒙）打包验证
 

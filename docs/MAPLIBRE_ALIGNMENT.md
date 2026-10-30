@@ -23,6 +23,9 @@
 | `feature_filter`（可读 `["zoom"]`，`data/feature_index.ts:235`） | `compileFilter` → `FeaturePredicate(props, zoom)` | 此前恒按 z0 求值（bug，已修） |
 | `fill_outline` 程序（1px 抗锯齿带，`fill_outline.fragment.glsl`） | 同环 1px `stroke`，独立 Path | 未设 `fill-outline-color` 时取 `fill-color`（`fill_style_layer.ts:30-32`）；球面只描真实边 |
 | `fill-antialias` | 关闭时跳过描边 | — |
+| `renderWorldCopies`（GeoJSON 直绘路径） | `StyleVectorLayer._drawWithCopies` + `visibleWorldCopies` | 平面每要素按可见世界副本平移重绘；此前只有 MVT 路径有 |
+| 反子午线（geojson-vt 在 ±180° 切片） | `unwrapLongitudes` + `_projectContinuous`（core `antimeridian.dart`） | 逐顶点 wrap 会把环撕成两半；解缠后得连续 x，跨 ±180° 不再横跨整屏 |
+| `fill` 绕向（外环 / 洞） | `_normalizeRings` | 外环保持、洞反向，`nonzero` 才正确挖洞 |
 
 ## M2（MVT + bucket）✅
 
@@ -33,6 +36,10 @@
 | 桶按颜色分组批渲染（`fill_bucket` 的 program 变体） | 每图层一个 `Path` + 一次 `drawPath`，按 (fill, outline) 颜色分组合批 | Canvas 后端 |
 | `renderWorldCopies` | `MvtVectorLayer.renderWorldCopies` | 2D 生效 |
 | 球面裁剪（`_projection_globe` 的 clip/discard） | `clipRingToHorizon`（CPU） | Canvas 没有 depth/clipAntimeridian |
+
+> **平面无限滚动（`worldCopyJump`）**：`FlatProjectionDelegate.panCenter` / `anchorCenter`
+> 把相机经度 **wrap**（不 clamp 到 ±180），东西方向可无限平移；渲染侧栅格
+> （`AffineGeometry.worldCopies`）与矢量（`visibleWorldCopies`）都按世界副本重复，接缝无缝。
 
 ## M3（symbol 避让）✅
 

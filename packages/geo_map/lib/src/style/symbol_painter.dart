@@ -22,16 +22,49 @@
 library;
 
 import 'dart:collection';
+import 'dart:math' show cos, sin;
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
 import 'package:geo_map_core/geo_map_core.dart';
+
+/// Offset of a box's *center* from its anchor, in pixels, for a MapLibre
+/// `text-anchor` / `icon-anchor` position. x points right, y points down, so the
+/// result matches `anchor_commons.ts` `anchorTranslate`.
+Vec2 anchorBoxOffset(String anchor, double w, double h) {
+  final hw = w / 2;
+  final hh = h / 2;
+  switch (anchor) {
+    case 'top':
+      return Vec2(0, hh);
+    case 'bottom':
+      return Vec2(0, -hh);
+    case 'left':
+      return Vec2(hw, 0);
+    case 'right':
+      return Vec2(-hw, 0);
+    case 'top-left':
+      return Vec2(hw, hh);
+    case 'top-right':
+      return Vec2(-hw, hh);
+    case 'bottom-left':
+      return Vec2(hw, -hh);
+    case 'bottom-right':
+      return Vec2(-hw, -hh);
+    case 'center':
+    default:
+      return Vec2(0, 0);
+  }
+}
 
 /// A symbol that can be placed and drawn.
 sealed class SymbolSpec {
   const SymbolSpec({
     required this.anchor,
     this.offset = const Vec2(0, 0),
+    this.rotation = 0,
+    this.anchorName = 'center',
+    this.crossTileKey,
     this.allowOverlap = false,
     this.ignorePlacement = false,
     this.sortKey = 0,
@@ -42,11 +75,25 @@ sealed class SymbolSpec {
   /// Screen position of the symbol's anchor.
   final Vec2 anchor;
 
-  /// Shift applied to both the drawn position and the collision box.
+  /// Shift applied to both the drawn position and the collision box, in pixels.
   ///
-  /// MapLibre gets this from `text-offset` (em units) and from the icon/text
-  /// pair layout; here the caller computes it in pixels.
+  /// MapLibre gets this from `text-offset` / `icon-offset` (em units); the
+  /// caller converts em to pixels and passes the result here. The `text-anchor`
+  /// / `icon-anchor` box centering is applied separately in [_prepare].
   final Vec2 offset;
+
+  /// Rotation applied around the box center, in radians. For `symbol-placement:
+  /// line` it is the local segment angle; `text-rotate` / `icon-rotate` add on
+  /// top. The collision box uses the axis-aligned bounds of the rotated rect.
+  final double rotation;
+
+  /// MapLibre `text-anchor` / `icon-anchor` position; decides where the box sits
+  /// relative to [anchor]. Combined with [offset] to find the box center.
+  final String anchorName;
+
+  /// Stable identity used for cross-tile deduplication (same logical feature
+  /// drawn from two adjacent tiles). Null disables dedup for that symbol.
+  final String? crossTileKey;
 
   final bool allowOverlap;
   final bool ignorePlacement;
@@ -66,7 +113,11 @@ class LabelSpec extends SymbolSpec {
     this.color = const Color(0xFF000000),
     this.haloColor = const Color(0x00000000),
     this.haloWidth = 0,
+    this.opacity = 1,
     super.offset,
+    super.rotation,
+    super.anchorName,
+    super.crossTileKey,
     super.allowOverlap,
     super.ignorePlacement,
     super.sortKey,
@@ -82,6 +133,9 @@ class LabelSpec extends SymbolSpec {
   /// Halo width in logical pixels. MapLibre's `text-halo-width` is a radius; the
   /// stroke is twice as wide, which [_LabelCache.styleFor] applies.
   final double haloWidth;
+
+  /// `text-opacity`; multiplies the fill and halo alpha.
+  final double opacity;
 }
 
 /// An icon taken from a sprite atlas.
@@ -91,7 +145,12 @@ class IconSpec extends SymbolSpec {
     required this.image,
     required this.source,
     required this.size,
+    this.sdf = false,
+    this.tint,
     super.offset,
+    super.rotation,
+    super.anchorName,
+    super.crossTileKey,
     super.allowOverlap,
     super.ignorePlacement,
     super.sortKey,
@@ -108,6 +167,14 @@ class IconSpec extends SymbolSpec {
   /// On-screen size, i.e. sprite pixels divided by density and multiplied by
   /// `icon-size`.
   final Size size;
+
+  /// True when the sprite is an SDF (single-channel) icon and should be recoloured
+  /// by [tint] — see `SpriteIcon.sdf`. Ignored when [tint] is null.
+  final bool sdf;
+
+  /// `icon-color`, applied to an SDF icon via a `srcIn` color filter. Null means
+  /// draw the sprite as-is (MapLibre only tints SDF sprites).
+  final Color? tint;
 }
 
 /// A prepared symbol: measured box plus everything needed to draw it.
@@ -196,6 +263,7 @@ class SymbolPainter {
           allowOverlap: p.spec.allowOverlap,
           ignorePlacement: p.spec.ignorePlacement,
           collisionGroup: p.spec.collisionGroup,
+          crossTileKey: p.spec.crossTileKey,
         ),
     ]);
 
@@ -215,44 +283,94 @@ class SymbolPainter {
         final text = _cache.painterFor(spec);
         final halo = spec.haloWidth > 0 ? _cache.haloPainterFor(spec) : null;
         final size = text.size;
-        final left = spec.anchor.x + spec.offset.x - size.width / 2;
-        final top = spec.anchor.y + spec.offset.y - size.height / 2;
+        final center = _symbolCenter(spec, size.width, size.height);
         return _Prepared.label(
           spec,
           text,
           halo,
-          Rect.fromLTWH(left, top, size.width, size.height),
+          _rotatedBounds(center, size.width, size.height, spec.rotation),
         );
       case IconSpec():
+        final center = _symbolCenter(spec, spec.size.width, spec.size.height);
         return _Prepared.icon(
           spec,
           spec.image,
           spec.source,
           spec.size,
-          Rect.fromCenter(
-            center: Offset(
-              spec.anchor.x + spec.offset.x,
-              spec.anchor.y + spec.offset.y,
-            ),
-            width: spec.size.width,
-            height: spec.size.height,
-          ),
+          _rotatedBounds(center, spec.size.width, spec.size.height, spec.rotation),
         );
     }
+  }
+
+  /// Box center from the anchor, the `text-anchor`/`icon-anchor` offset and the
+  /// pixel [offset] (`text-offset`/`icon-offset` converted by the caller).
+  static Vec2 _symbolCenter(SymbolSpec spec, double w, double h) {
+    final anchorOffset = anchorBoxOffset(spec.anchorName, w, h);
+    return Vec2(
+      spec.anchor.x + spec.offset.x + anchorOffset.x,
+      spec.anchor.y + spec.offset.y + anchorOffset.y,
+    );
+  }
+
+  /// Axis-aligned bounds of a rectangle of size [w]×[h] centred at [center] and
+  /// rotated by [rotation] — the collision grid is axis-aligned, so a rotated
+  /// label reserves its bounding box. At 45° this slightly over-reserves space,
+  /// which is the standard MapLibre approximation.
+  static Rect _rotatedBounds(Vec2 center, double w, double h, double rotation) {
+    if (rotation == 0) {
+      return Rect.fromCenter(
+        center: Offset(center.x, center.y),
+        width: w,
+        height: h,
+      );
+    }
+    final c = cos(rotation).abs();
+    final s = sin(rotation).abs();
+    final ex = w / 2 * c + h / 2 * s;
+    final ey = w / 2 * s + h / 2 * c;
+    return Rect.fromLTRB(
+      center.x - ex,
+      center.y - ey,
+      center.x + ex,
+      center.y + ey,
+    );
   }
 
   void _draw(Canvas canvas, _Prepared item) {
     switch (item.spec) {
       case LabelSpec():
-        item.halo?.paint(canvas, item.box.topLeft);
-        item.text?.paint(canvas, item.box.topLeft);
-      case IconSpec():
+        final center = item.box.center;
+        canvas.save();
+        canvas.translate(center.dx, center.dy);
+        if (item.spec.rotation != 0) canvas.rotate(item.spec.rotation);
+        final o = Offset(
+          -item.text!.size.width / 2,
+          -item.text!.size.height / 2,
+        );
+        item.halo?.paint(canvas, o);
+        item.text?.paint(canvas, o);
+        canvas.restore();
+      // Destructured rather than read off `item.spec`: that is a field, so it
+      // does not promote to `IconSpec` inside the case body, and `sdf`/`tint`
+      // only exist on the subclass.
+      case IconSpec(:final sdf, :final tint):
+        final center = item.box.center;
+        canvas.save();
+        canvas.translate(center.dx, center.dy);
+        if (item.spec.rotation != 0) canvas.rotate(item.spec.rotation);
+        final paint = Paint()..filterQuality = FilterQuality.medium;
+        // SDF icon + `icon-color` → recolour the (single-colour) sprite.
+        if (sdf && tint != null) {
+          paint.colorFilter = ColorFilter.mode(tint, BlendMode.srcIn);
+        }
+        final size = item.iconSize!;
         canvas.drawImageRect(
           item.iconImage!,
           item.iconSource!,
-          item.box,
-          Paint()..filterQuality = FilterQuality.medium,
+          Rect.fromLTWH(-size.width / 2, -size.height / 2, size.width, size.height),
+          paint,
         );
+        canvas.restore();
     }
   }
 }
@@ -270,7 +388,7 @@ class _LabelCache {
 
   TextPainter painterFor(LabelSpec label) {
     final key = '${SymbolPainter._fontEpoch}|${label.text}'
-        '|${label.fontSize}|${label.color.value}';
+        '|${label.fontSize}|${label.color.value}|${label.opacity}';
     final hit = _painters[key];
     if (hit != null) return hit;
     final painter = TextPainter(
@@ -287,7 +405,8 @@ class _LabelCache {
 
   TextPainter haloPainterFor(LabelSpec label) {
     final key = '${SymbolPainter._fontEpoch}|${label.text}'
-        '|${label.fontSize}|${label.haloColor.value}|${label.haloWidth}';
+        '|${label.fontSize}|${label.haloColor.value}|${label.haloWidth}'
+        '|${label.opacity}';
     final hit = _haloPainters[key];
     if (hit != null) return hit;
     final painter = TextPainter(
@@ -328,11 +447,13 @@ class _LabelCache {
   /// MapLibre draws the halo by stroking the glyph outline
   /// (`text-halo-width` is a radius, so the stroke is twice as wide) and then
   /// filling on top. Flutter exposes the same idea through `foreground`.
+  /// [LabelSpec.opacity] multiplies both alphas (`text-opacity`).
   static TextStyle styleFor(LabelSpec label, {required bool halo}) {
+    final opacity = label.opacity;
     if (!halo) {
       return TextStyle(
         fontSize: label.fontSize,
-        color: label.color,
+        color: label.color.withOpacity(label.color.opacity * opacity),
         height: 1.2,
       );
     }
@@ -343,7 +464,8 @@ class _LabelCache {
         ..style = PaintingStyle.stroke
         ..strokeWidth = label.haloWidth * 2
         ..strokeJoin = StrokeJoin.round
-        ..color = label.haloColor,
+        ..color = label.haloColor
+            .withOpacity(label.haloColor.opacity * opacity),
     );
   }
 }

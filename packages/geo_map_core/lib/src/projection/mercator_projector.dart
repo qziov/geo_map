@@ -28,6 +28,12 @@ class MercatorProjector extends GeoProjector {
     // the camera at 179° lands 1° east of the camera instead of jumping a
     // whole world to the left — which is what the antimeridian needs, and what
     // the renderer draws (the tile is repeated at every world copy).
+    //
+    // NOTE: this per-vertex wrap is correct for **points and lines**. It is NOT
+    // sufficient for a polygon *ring*: if consecutive vertices straddle the
+    // seam they land in different world copies and a chord spans the screen.
+    // Rings must be kept continuous in the path layer — see
+    // `StyleVectorLayer` (`_projectContinuous`) and `antimeridian.dart`.
     final dx = wrapLongitude(geo.longitude - camera.center.longitude);
     final x = dx / 360 * world;
     final y = mercatorTAt(lat) * world;

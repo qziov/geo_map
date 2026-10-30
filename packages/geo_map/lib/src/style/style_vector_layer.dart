@@ -168,6 +168,13 @@ class _StyleVectorPainter extends CustomPainter {
             sprite: sprite,
             order: symbolOrder,
             collisionGroup: ++collisionGroup,
+            // A GeoJSON source is drawn once per layer, so there is no
+            // cross-tile duplicate to suppress; the feature id still seeds the
+            // key so two symbol layers over the same source stay distinct, and
+            // point features are upright (no local segment to follow).
+            lineAngle: 0,
+            baseKey: feature.id,
+            sourceLayer: layer.source ?? '',
           ));
           symbolOrder += 2;
         }
@@ -195,20 +202,24 @@ class _StyleVectorPainter extends CustomPainter {
               layer.color('fill-color', layerCtx);
           final o = (layer.number('fill-opacity', ctx) ?? 1) * opacity;
           if (c == null || o <= 0) continue;
-          canvas.drawPath(
-            paths.fill,
-            Paint()
-              ..style = PaintingStyle.fill
-              ..color = _color(c, o),
-          );
           // `fill_outline`: a 1 px band on every ring edge, coloured by
           // `fill-outline-color`, which **defaults to `fill-color`** rather than
           // to nothing (MapLibre `fill_style_layer.ts:30-32`).
           final antialias =
               layer.valueOf('fill-antialias', layerCtx) != false;
-          if (antialias && paths.stroke.getBounds().isEmpty == false) {
-            final oc = layer.color('fill-outline-color', ctx) ?? c;
-            if (oc.a > 0) {
+          final outline =
+              (antialias && paths.stroke.getBounds().isEmpty == false)
+                  ? (layer.color('fill-outline-color', ctx) ?? c)
+                  : null;
+          void draw() {
+            canvas.drawPath(
+              paths.fill,
+              Paint()
+                ..style = PaintingStyle.fill
+                ..color = _color(c, o),
+            );
+            final oc = outline;
+            if (oc != null && oc.a > 0) {
               canvas.drawPath(
                 // `paths.stroke` holds the real edges only — on the globe it
                 // excludes the synthetic limb arc.
@@ -220,21 +231,27 @@ class _StyleVectorPainter extends CustomPainter {
               );
             }
           }
+
+          _drawWithCopies(draw, paths, flat, state, size, canvas);
         } else if (layer.type == 'line') {
           final c = layer.color('line-color', ctx) ??
               layer.color('line-color', layerCtx);
           final w = layer.number('line-width', ctx) ?? 1;
           final o = (layer.number('line-opacity', ctx) ?? 1) * opacity;
           if (c == null || o <= 0 || w <= 0) continue;
-          canvas.drawPath(
-            paths.stroke,
-            Paint()
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = w
-              ..strokeCap = StrokeCap.round
-              ..strokeJoin = StrokeJoin.round
-              ..color = _color(c, o),
-          );
+          void draw() {
+            canvas.drawPath(
+              paths.stroke,
+              Paint()
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = w
+                ..strokeCap = StrokeCap.round
+                ..strokeJoin = StrokeJoin.round
+                ..color = _color(c, o),
+            );
+          }
+
+          _drawWithCopies(draw, paths, flat, state, size, canvas);
         }
       }
     }
@@ -255,6 +272,72 @@ class _StyleVectorPainter extends CustomPainter {
 
   static ui.Color _color(StyleColor c, double opacity) =>
       ui.Color.fromRGBO(c.r, c.g, c.b, (c.a / 255.0) * opacity);
+
+  /// Draw [draw] once per visible world copy when flat.
+  ///
+  /// The geometry is built with continuous (unwrapped) screen x, so a shape that
+  /// extends past one world edge never jumps; repeating it at `k * worldSize`
+  /// is exactly MapLibre's `getVisibleUnwrappedCoordinates` behaviour (the tile
+  /// path already does this). The globe has a single copy.
+  void _drawWithCopies(
+    void Function() draw,
+    _FeaturePaths paths,
+    bool flat,
+    CameraState state,
+    Size size,
+    Canvas canvas,
+  ) {
+    if (!flat) {
+      draw();
+      return;
+    }
+    final b = paths.bounds;
+    if (b.isEmpty) {
+      draw();
+      return;
+    }
+    final (k0, k1) = visibleWorldCopies(
+      baseX: b.left,
+      spanPx: b.width,
+      worldSize: state.worldSize,
+      viewportWidth: size.width,
+    );
+    for (var k = k0; k <= k1; k++) {
+      canvas.save();
+      canvas.translate(k * state.worldSize, 0);
+      draw();
+      canvas.restore();
+    }
+  }
+
+  /// Normalise ring winding so a `nonZero` fill punches holes correctly.
+  ///
+  /// The outer ring keeps its orientation; holes are reversed when they share
+  /// the outer sign (MapLibre's `fill_bucket` does the same). Signed area is
+  /// measured on unwrapped longitudes so rings near ±180° do not flip sign.
+  static List<List<LatLng>> _normalizeRings(List<List<LatLng>> rings) {
+    if (rings.length < 2) return rings;
+    final outerSign = _ringSignedArea(rings.first) < 0 ? -1 : 1;
+    final out = <List<LatLng>>[rings.first];
+    for (var i = 1; i < rings.length; i++) {
+      final sign = _ringSignedArea(rings[i]) < 0 ? -1 : 1;
+      out.add(sign == outerSign
+          ? rings[i].reversed.toList(growable: false)
+          : rings[i]);
+    }
+    return out;
+  }
+
+  static double _ringSignedArea(List<LatLng> ring) {
+    if (ring.length < 3) return 0;
+    final lons = unwrapLongitudes([for (final p in ring) p.longitude]);
+    var area = 0.0;
+    for (var i = 0; i < ring.length; i++) {
+      final j = (i + 1) % ring.length;
+      area += lons[i] * ring[j].latitude - lons[j] * ring[i].latitude;
+    }
+    return area * 0.5;
+  }
 
   /// Screen-space paths for one feature.
   ///
@@ -281,17 +364,52 @@ class _StyleVectorPainter extends CustomPainter {
     final stepRad = projector.densifyStepRad(state);
     final onSphere = stepRad > 0;
 
+    Offset? projectOrNull(LatLng ll) {
+      final v = projector.project(ll, state);
+      return v == null ? null : Offset(v.x, v.y);
+    }
+
+    /// Flat-only projection with continuous x.
+    ///
+    /// Unwrap the longitudes, anchor the whole sequence to the world copy
+    /// nearest the camera, then map longitude → x linearly. Latitude (y) has no
+    /// wrap, so it comes straight from the projector.
+    List<Offset?> projectContinuous(List<LatLng> pts) {
+      if (pts.isEmpty) return const <Offset?>[];
+      final lons = unwrapLongitudes([for (final p in pts) p.longitude]);
+      final m = ((lons.first - state.center.longitude) / 360.0).round();
+      final world = state.worldSize;
+      final cx = state.size.width / 2;
+      final out = <Offset?>[];
+      for (var i = 0; i < pts.length; i++) {
+        final v = projector.project(pts[i], state);
+        if (v == null) {
+          out.add(null);
+          continue;
+        }
+        final x = cx +
+            ((lons[i] - 360.0 * m) - state.center.longitude) / 360.0 * world;
+        out.add(Offset(x, v.y));
+      }
+      return out;
+    }
+
     void addLine(List<LatLng> points, {required bool close}) {
       final dense =
           onSphere ? subdivideSpherePolyline(points, closed: close) : points;
+      // Flat: build a continuous screen polyline from unwrapped longitudes
+      // instead of trusting the projector's per-vertex world wrap. Otherwise a
+      // ring/line whose vertices straddle the camera-relative seam gets a chord
+      // spanning a whole world — the "fill across the screen" bug.
+      final offsets = onSphere
+          ? [for (final ll in dense) projectOrNull(ll)]
+          : projectContinuous(dense);
       Offset? previous;
-      for (final ll in dense) {
-        final v = projector.project(ll, state);
-        if (v == null) {
+      for (final o in offsets) {
+        if (o == null) {
           previous = null;
           continue;
         }
-        final o = Offset(v.x, v.y);
         if (previous == null) {
           fill.moveTo(o.dx, o.dy);
           stroke.moveTo(o.dx, o.dy);
@@ -336,7 +454,7 @@ class _StyleVectorPainter extends CustomPainter {
       case LineStringGeometry(:final points):
         addLine(points, close: false);
       case PolygonGeometry(:final rings):
-        for (final ring in rings) {
+        for (final ring in _normalizeRings(rings)) {
           addRing(ring);
         }
       case MultiLineStringGeometry(:final lines):
@@ -345,7 +463,7 @@ class _StyleVectorPainter extends CustomPainter {
         }
       case MultiPolygonGeometry(:final polygons):
         for (final polygon in polygons) {
-          for (final ring in polygon) {
+          for (final ring in _normalizeRings(polygon)) {
             addRing(ring);
           }
         }
@@ -369,4 +487,14 @@ class _FeaturePaths {
 
   final Path fill;
   final Path stroke;
+
+  /// Union of the fill and stroke bounding boxes (used to pick visible world
+  /// copies in flat mode).
+  Rect get bounds {
+    final a = fill.getBounds();
+    final b = stroke.getBounds();
+    if (a.isEmpty) return b;
+    if (b.isEmpty) return a;
+    return a.expandToInclude(b);
+  }
 }

@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.2.1 (unreleased)
+
+### Fixes — 平面模式
+
+- **GeoJSON 多边形填充横跨整屏**：`StyleVectorLayer` 平面分支此前逐顶点投影
+  （`MercatorProjector` 逐点 `wrapLongitude`），跨“相机经度 + 180°”剪切线的环被拉出
+  满屏长弦、`nonZero` 填成横带。现在先 `unwrapLongitudes` 解缠得到**连续 x**（锚定最近
+  世界副本），再按 `visibleWorldCopies` **平移重绘世界副本**，并对多环做绕向归一化
+  （`_normalizeRings`）。等价 MapLibre `getVisibleUnwrappedCoordinates`。
+- **平面无限水平平移**：`FlatProjectionDelegate.panCenter` / `anchorCenter` 把经度
+  **wrap**（此前被 `_inclusiveLng` clamp 到 ±180，平移到边界即卡死）。栅格/矢量的
+  世界副本保证接缝无缝。
+
+### Added — 反子午线工具
+
+- `packages/geo_map_core/lib/src/math/antimeridian.dart`：`unwrapLongitudes`（顺序解缠）、
+  `splitRingAtSeam`（Sutherland–Hodgman 拆环），由 `geo_map_core.dart` 导出。
+
+### Added — 跟随视角的气泡
+
+- 新增 `GeoAnchoredPopup`（`src/widget/geo_anchored_popup.dart`，由 `geo_map.dart` 导出）：
+  锚定一个 `LatLng`、在每次相机变化（平移/缩放/2D↔3D）时重新投影并重定位的纯展示浮层，
+  对标 MapLibre `new Popup().setLngLat()`。配套导出 `AnchoredPopupLayout` 与
+  `layoutAnchoredPopup`（纯布局：卡片底边中点对准锚点、夹入 `keepOut`、出屏/背半球哨兵判
+  `visible:false`）。平面用 `projectForVector`（折回最近世界副本），球面用 `project`（背半球
+  哨兵）→ 跨日界线/球面都准。
+- 在 `GeoAnchoredPopup` 之上再封一层通用状态 + 接口，进一步解耦业务：
+  - `GeoMapPopupController`（`ChangeNotifier`）：只持有**锚点**，`show/hide/toggle/isOpen`，
+    对标 MapLibre `Popup` 的 open/close。状态与内容分离，SIGMET / 机场 / POI 等任意图层共用。
+  - `GeoMapPopup`：自监听 `GeoMapPopupController`、自动在 `anchor==null` 时折叠，业务内容经
+    `builder(context, anchor)` 注入（保留给宿主的"接口"）。
+  - 复用时宿主只需：提供 `builder` 卡片、`keepOut`、点空白调 `hide()`、卡片关闭按钮调
+    `hide()`；无需自己维护 `ValueNotifier<LatLng?>` 与 `if (anchor!=null) …` 样板。
+
+### Tests
+
+- 新增 `geo_map_core/test/math/antimeridian_test.dart`、`geo_map/test/flat_infinite_pan_test.dart`
+- 新增 `geo_map/test/geo_anchored_popup_test.dart`：`layoutAnchoredPopup` 纯函数 6 例 +
+  `GeoAnchoredPopup` 控件 2 例 + `GeoMapPopupController` 4 例 + `GeoMapPopup` 控件 2 例
+- 修正 `style_vector_layer_test.dart`：2D 组此前 `projectionDelegate` 为 null（实际跑的是
+  球面投影），现显式 `FlatProjectionDelegate`；新增跨缝回归（跨 ±180° 的环不再填满屏幕中心、
+  左右两侧各一段）
+- `geo_map_core` 398 → **415**；`geo_map` 27 → **41** 项
+
 ## 0.2.0 (2026-10-27)
 
 ### M1 — style spec + 表达式
@@ -37,6 +81,21 @@
   绘制尺寸 = 像素 ÷ `pixelRatio`（`quads.ts:133-134`）；图标与文字作为一对参与碰撞
 - **标注不参与地平线裁剪**：与 MapLibre 一致，按符号判遮挡（`collision_index.ts:166`），
   放下的标签整条画完，不会被剪影切半
+
+### M3 — 符号收尾（标注几何与着色）
+
+- **`symbol-placement: line`**：线要素逐段取中点、`atan2` 求段方向，标注沿线旋转
+  （`buildMvtLineSymbolBucket`）；MVT 路径完整可用，`symbol-spacing` 仅预留参数
+- **`text-anchor` / `icon-anchor` 九宫格** + **`text-offset` / `icon-offset`**：
+  由 `anchorBoxOffset` 解出盒子相对锚点的位移；`text-offset` 单位是 **em**（乘
+  `text-size`），`icon-offset` 是**像素** —— 同名不同义
+- **`icon-color` 染 SDF 图标**：仅对 `sdf: true` 的精灵生效，走
+  `ColorFilter.mode(color, BlendMode.srcIn)`；普通图标保持原样（对齐 MapLibre）
+- **跨瓦片去重**：世界经纬度键（量化 1e-5°≈1m，`mvtTilePointToLatLng` 口径），同键只保留
+  先放置者、其余标记 `SymbolPlacementResult.duplicate` 且**不占**碰撞网格
+- **`text-rotate` / `icon-rotate`**：度 → 弧度，叠加在线段方向之上；旋转后的碰撞盒取
+  轴对齐外接矩形（AABB），与 MapLibre 同一近似
+- **`text-opacity`**：同时乘进文字填充与 halo 的 alpha，并参与布局缓存 key
 
 ### Web
 

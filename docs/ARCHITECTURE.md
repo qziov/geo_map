@@ -34,7 +34,7 @@ GeoMap (widget/geo_map.dart)          组装：InheritedModel(camera) + 图层 +
 `packages/geo_map_core/` 是纯 Dart 核心（无 `dart:ui`），负责投影、相机数学、
 瓦片网格、选片、网格构建、极帽、请求计划、回退决策、URL 构建与缓存策略；
 以及 MVT 解码/分桶、style spec + 表达式 + 过滤器、符号分桶与碰撞放置、sprite 索引 ——
-**398 项 `dart test` 覆盖**。
+**415 项 `dart test` 覆盖**。
 
 > 凡是"该不该请求 / 该回退到哪一级"这类决策，一律下沉到 core 的纯函数
 > （如 `planTileRequest`），因为引擎本身依赖 `dart:ui`、在 `dart test` 下跑不起来。
@@ -57,6 +57,7 @@ GeoMap (widget/geo_map.dart)          组装：InheritedModel(camera) + 图层 +
    - 相机 → core `CameraState`；投影委托（2D 仿射 / 3D 正交）给出屏幕点
    - 逐图层遍历（fill / line 先画；**symbol 延后到剪影裁剪之外**）
    - fill：环沿剪影封口后 `addPolygon`；描边单独一条 Path（`fill-outline-color`）
+   - 平面 GeoJSON：先解缠经度得**连续 x**（`_projectContinuous`），每要素按 `visibleWorldCopies` 平移重绘（等价 MapLibre `getVisibleUnwrappedCoordinates`）；多环再按外环/洞归一化绕向
    - symbol：`buildMvtSymbolBucket`（点要素 → 归一化锚点）→ 每要素解析成图标+文字对
      → `SymbolPainter` 量盒 → `SymbolPlacer` 决策 → 绘制（halo 先、填充后）
 
@@ -72,7 +73,9 @@ GeoMap (widget/geo_map.dart)          组装：InheritedModel(camera) + 图层 +
 | 字节预算缓存 | 按字节而非条数淘汰；当前与上一帧的渲染集受保护 |
 | 极帽·可见区间 | 解析求解（闭式），不采样：视口 = 角半径 `α` 的圆盘，极帽 = 极半径 `4.95°` 的圆盘，逐经线的最近点由 `tan φ* = tan φ_c / cos δ` 闭式给出，弧边靠二分。采样版在 z12 会漏掉整个极冠（8 个纬度样本 0.6° 间距 vs 0.2° 高的视口）|
 | 极帽·两种 regimes | 需要列数 ≤ 64：逐列楔形（各自贴图、清晰）；否则**一整条带、单张贴图**（相机在极冠内、弧绕极一圈时）。逐列楔形在这个区间意味着每帧 4096 个 mesh、4096 张不同图片拼在一起 —— 即"放射状铺满视口" |
-| 日界线 | 墨卡托投影按**相机相对经度**计算，跨 ±180° 的瓦片不会被劈成两半 |
+| 日界线·瓦片 | 墨卡托投影按**相机相对经度**计算，跨 ±180° 的瓦片不会被劈成两半（每 tile 一个仿射基，`tileAffine`） |
+| 日界线·GeoJSON 直绘 | 逐顶点 `wrapLongitude` 会让环的两半落到相反世界副本 → 屏幕级长弦。`StyleVectorLayer` 平面分支先 `unwrapLongitudes` 解缠、锚定最近副本得到**连续 x**，再按 `visibleWorldCopies` 平移重绘；`_normalizeRings` 归一化绕向（洞正确挖空） |
+| 平面无限滚动 | `FlatProjectionDelegate.panCenter` / `anchorCenter` 把经度 **wrap**（不 clamp 到 ±180）→ 水平可无限平移；渲染侧世界副本（栅格 `AffineGeometry.worldCopies`、矢量 `visibleWorldCopies`）保证接缝无缝 |
 | 碰撞网格 | 25px 均匀网格（`CollisionIndex` 默认值）：插入写进所有相交 cell，查询先收候选再比矩形。放置期**只查阻断网格**，`text-ignore-placement` 的符号插进另一张网格（不挤别人，但仍会被挡住）|
 | 面要裁、标注不裁 | fill/line 在 `clipCircle` 内绘制（面不能画到球背面）；symbol 在 `restore()` 之后绘制 —— MapLibre 从不裁标签，它按符号判锚点遮挡（`collision_index.ts:166`），放下的标签整条画完 |
 | 标签布局缓存 | `TextPainter.layout` 比绘制贵得多，缓存按（文字, 字号, 颜色, halo）键控；**字体 epoch** 由 `PaintingBinding.systemFonts` 递增，否则 web 上 CJK 回退字体到达前量出的"缺字形"结果会被永久缓存 |

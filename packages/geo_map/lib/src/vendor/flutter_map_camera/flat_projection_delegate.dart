@@ -100,10 +100,17 @@ class FlatProjectionDelegate implements MapProjectionDelegate {
   LatLng panCenter(LatLng from, Offset delta, double zoom) {
     // 内容跟手指（与 globe 的 dLng=-dx/dLat=+dy 同约定）：手指右移，
     // 世界坐标中心左移。
-    final world = _worldOf(from, zoom) -
-        Point<double>(delta.dx, delta.dy);
-    final ll = crs.pointToLatLng(world, zoom);
-    return _clamp(ll);
+    final size = crs.scale(zoom);
+    final world = _worldOf(from, zoom) - Point<double>(delta.dx, delta.dy);
+    final lat = crs.pointToLatLng(world, zoom).latitude;
+    // 经度 **wrap** 而非 clamp：向东/西平移可无限进行（MapLibre 的
+    // renderWorldCopies 行为）。渲染侧重复世界副本（栅格
+    // AffineGeometry.worldCopies、矢量 visibleWorldCopies），接缝无跳变。
+    final lng = from.longitude - delta.dx / size * 360.0;
+    return LatLng(
+      lat.clamp(-maxMercatorLatitude, maxMercatorLatitude),
+      _wrapLng(lng),
+    );
   }
 
   @override
@@ -122,11 +129,12 @@ class FlatProjectionDelegate implements MapProjectionDelegate {
     final nC0 = _worldOf(center, fromZoom) / scaleFrom;
     final nC1 = nA - (nA - nC0) / s;
     final world = nC1 * crs.scale(toZoom);
-    return _clamp(crs.pointToLatLng(world, toZoom));
+    final lat = crs.pointToLatLng(world, toZoom).latitude;
+    // Wrap (not clamp) so a zoom near the seam keeps panning infinitely.
+    final lng = nC1.x * 360.0 - 180.0;
+    return LatLng(
+      lat.clamp(-maxMercatorLatitude, maxMercatorLatitude),
+      _wrapLng(lng),
+    );
   }
-
-  LatLng _clamp(LatLng p) => LatLng(
-        p.latitude.clamp(-maxMercatorLatitude, maxMercatorLatitude),
-        p.longitude,
-      );
 }

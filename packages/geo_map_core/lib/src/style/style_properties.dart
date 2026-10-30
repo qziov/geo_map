@@ -5,10 +5,12 @@
 /// `paint_symbol`/`layout_symbol`). Defaults match `v8.json`
 /// (`fill-color` `#000000`, `line-width` 1, `text-size` 16, …).
 ///
-/// `symbol` covers `text-field`/`text-size`/`text-allow-overlap`/
-/// `text-ignore-placement`/`symbol-sort-key`/`text-color`/`text-halo-*` — the
-/// subset the Canvas painter implements. Icons, `text-anchor` offsets and
-/// `symbol-placement: line` parse but are not acted on yet.
+/// `symbol` covers the v8 symbol subset the Canvas painter implements:
+/// `text-field`/`text-size`/`text-allow-overlap`/`text-ignore-placement`/
+/// `symbol-sort-key`/`text-color`/`text-halo-*`/`text-opacity`, plus icons
+/// (`icon-image`/`icon-size`/`icon-color`/`icon-allow-overlap`/
+/// `icon-ignore-placement`), `text-anchor`/`icon-anchor` (+ offsets), rotation
+/// (`text-rotate`/`icon-rotate`), and `symbol-placement: line`.
 library;
 
 enum StylePropertyType { number, color, boolean, string, array }
@@ -58,6 +60,8 @@ const Map<String, Map<String, StylePropertyDef>> layerPaintDefs = {
         defaultValue: 'rgba(0,0,0,0)', dataDriven: true, interpolated: true),
     'text-halo-width': StylePropertyDef(StylePropertyType.number,
         defaultValue: 0, dataDriven: true, interpolated: true),
+    'icon-color': StylePropertyDef(StylePropertyType.color,
+        defaultValue: '#000000', dataDriven: true, interpolated: true),
   },
 };
 
@@ -79,6 +83,7 @@ const Map<String, Map<String, StylePropertyDef>> layerLayoutDefs = {
         StylePropertyDef(StylePropertyType.boolean, defaultValue: false),
     'text-anchor':
         StylePropertyDef(StylePropertyType.string, defaultValue: 'center'),
+    'text-offset': StylePropertyDef(StylePropertyType.array, defaultValue: [0, 0]),
     'symbol-placement':
         StylePropertyDef(StylePropertyType.string, defaultValue: 'point'),
     'symbol-sort-key':
@@ -86,10 +91,15 @@ const Map<String, Map<String, StylePropertyDef>> layerLayoutDefs = {
     'icon-image': StylePropertyDef(StylePropertyType.string, dataDriven: true),
     'icon-size': StylePropertyDef(StylePropertyType.number,
         defaultValue: 1, dataDriven: true, interpolated: true),
+    'icon-anchor':
+        StylePropertyDef(StylePropertyType.string, defaultValue: 'center'),
+    'icon-offset': StylePropertyDef(StylePropertyType.array, defaultValue: [0, 0]),
     'icon-allow-overlap':
         StylePropertyDef(StylePropertyType.boolean, defaultValue: false),
     'icon-ignore-placement':
         StylePropertyDef(StylePropertyType.boolean, defaultValue: false),
+    'text-rotate': StylePropertyDef(StylePropertyType.number, defaultValue: 0),
+    'icon-rotate': StylePropertyDef(StylePropertyType.number, defaultValue: 0),
     'visibility':
         StylePropertyDef(StylePropertyType.string, defaultValue: 'visible'),
   },

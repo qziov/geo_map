@@ -205,7 +205,7 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
         // Parse off the UI isolate: a z0 world tile is ~34k vertices.
         final tile = await decodeMvtTileAsync(bytes);
         if (!mounted) return;
-        _decoded[key] = _DecodedTile(tile, z: key.z);
+        _decoded[key] = _DecodedTile(tile, z: key.z, x: key.x, y: key.y);
         _failures.remove(key);
         _failureStatus.remove(key);
         _fallback.remove(key);
@@ -405,7 +405,12 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
 /// the tile's zoom — so the work happens once per tile, never per frame. We use
 /// the same presets, which is why buckets are built with [z] here.
 class _DecodedTile {
-  _DecodedTile(this.tile, {required int z}) {
+  _DecodedTile(
+    this.tile, {
+    required this.z,
+    required this.x,
+    required this.y,
+  }) {
     final lineGranularity = mvtSubdivisionGranularity(z);
     final fillGranularity = mvtSubdivisionGranularity(
       z,
@@ -423,19 +428,29 @@ class _DecodedTile {
   final Map<String, List<MvtPolyline>> lines = {};
   final Map<String, List<MvtSymbol>> _symbols = {};
 
+  /// Tile coordinates, kept so symbol buckets can derive stable cross-tile keys.
+  final int z;
+  final int x;
+  final int y;
+
   /// Label anchors for one source layer, built on first use.
   ///
   /// Symbols are cheap (one `Vec2` + the feature's properties per point) but
   /// most layers never need them, so this stays lazy until the glyph painter
-  /// exists.
-  List<MvtSymbol> symbolsFor(String sourceLayer) {
-    final cached = _symbols[sourceLayer];
+  /// exists. [placement] selects point vs line anchors and is part of the cache
+  /// key, because the two share the source layer but produce different anchors.
+  List<MvtSymbol> symbolsFor(String sourceLayer, {String placement = 'point'}) {
+    final cacheKey = '$sourceLayer|$placement';
+    final cached = _symbols[cacheKey];
     if (cached != null) return cached;
     final layer = tile.layers
         .where((l) => l.name == sourceLayer)
         .firstOrNull;
-    return _symbols[sourceLayer] =
-        layer == null ? const [] : buildMvtSymbolBucket(layer);
+    if (layer == null) return _symbols[cacheKey] = const [];
+    final bucket = placement == 'line'
+        ? buildMvtLineSymbolBucket(layer, z: z, x: x, y: y)
+        : buildMvtSymbolBucket(layer, z: z, x: x, y: y);
+    return _symbols[cacheKey] = bucket;
   }
 }
 
@@ -668,6 +683,11 @@ class _MvtPainter extends CustomPainter {
     bool flat,
     List<TileKey> drawTiles,
   ) {
+    // `symbol-placement` depends only on zoom, so read it once per layer and let
+    // `_DecodedTile` pick the matching sampler (point vs. line midpoints).
+    final placement =
+        layer.string('symbol-placement', ExpressionContext(zoom: camera.zoom)) ??
+            'point';
     final symbols = <SymbolSpec>[];
     var order = 0;
     var collisionGroup = 0;
@@ -676,7 +696,8 @@ class _MvtPainter extends CustomPainter {
       if (decodedTile == null) continue;
       final mapping = _mappingFor(key, projector, state, flat);
       if (mapping == null) continue;
-      for (final symbol in decodedTile.symbolsFor(sourceLayer)) {
+      for (final symbol
+          in decodedTile.symbolsFor(sourceLayer, placement: placement)) {
         if (!layer.matches(symbol.properties, camera.zoom)) continue;
         final anchor = mapping.project(symbol.anchor);
         if (anchor == null) continue; // behind the globe
@@ -691,6 +712,11 @@ class _MvtPainter extends CustomPainter {
           sprite: sprite,
           order: order,
           collisionGroup: ++collisionGroup,
+          // `symbol-placement: line` rotates the label to the segment; the
+          // world key seeds cross-tile dedup for point features.
+          lineAngle: symbol.angle,
+          baseKey: symbol.crossTileKey,
+          sourceLayer: sourceLayer,
         ));
         order += 2;
       }

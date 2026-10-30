@@ -38,6 +38,11 @@ enum SymbolPlacementResult {
   /// Hidden because something already occupies its box.
   collision,
 
+  /// Hidden as a cross-tile duplicate: the same logical feature (same
+  /// [SymbolCandidate.crossTileKey]) was already placed from another tile, so
+  /// this copy must not draw or reserve grid space.
+  duplicate,
+
   /// Hidden because it is entirely outside the padded viewport — MapLibre
   /// refuses those before the grid test, since a label no one can see must not
   /// occupy grid cells that visible labels need.
@@ -59,6 +64,7 @@ class SymbolCandidate {
     this.allowOverlap = false,
     this.ignorePlacement = false,
     this.collisionGroup = 0,
+    this.crossTileKey,
   });
 
   /// Caller-defined identity, echoed back in the decision.
@@ -86,6 +92,11 @@ class SymbolCandidate {
   /// MapLibre's `collisionGroupID`; symbols in the same group are allowed to
   /// overlap each other.
   final int collisionGroup;
+
+  /// Cross-tile identity for deduplication. Symbols sharing a non-null key keep
+  /// only the first placed one; later copies are marked [SymbolPlacementResult.
+  /// duplicate]. Null means the symbol is never deduplicated.
+  final String? crossTileKey;
 }
 
 /// The decision for one candidate.
@@ -135,7 +146,21 @@ class SymbolPlacer {
       });
 
     final result = <SymbolCandidate, SymbolPlacement>{};
+    final seen = <String>{};
     for (final candidate in sorted) {
+      final key = candidate.crossTileKey;
+      if (key != null) {
+        // Cross-tile dedup (`cross_tile_symbol_index.ts`): the same logical
+        // feature decoded from two adjacent tiles shares a key. Keep the first
+        // placed copy and suppress the rest *without* reserving grid space, so
+        // a duplicate cannot hide a label that is only visible from this tile.
+        if (seen.contains(key)) {
+          result[candidate] =
+              SymbolPlacement(candidate, SymbolPlacementResult.duplicate);
+          continue;
+        }
+        seen.add(key);
+      }
       result[candidate] = SymbolPlacement(candidate, _placeOne(candidate));
     }
     return [for (final c in candidates) result[c]!];

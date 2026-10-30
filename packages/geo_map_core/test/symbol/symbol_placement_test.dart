@@ -13,6 +13,7 @@ SymbolCandidate _at(
   bool allowOverlap = false,
   bool ignorePlacement = false,
   int group = 0,
+  String? crossTileKey,
 }) =>
     SymbolCandidate(
       key: id,
@@ -24,6 +25,7 @@ SymbolCandidate _at(
       allowOverlap: allowOverlap,
       ignorePlacement: ignorePlacement,
       collisionGroup: group,
+      crossTileKey: crossTileKey,
     );
 
 const double _w = 400;
@@ -195,6 +197,65 @@ void main() {
       ];
       final decisions = placer.place(input);
       expect(decisions.map((d) => d.candidate.key), [9, 1, 5]);
+    });
+  });
+
+  group('cross-tile dedup', () {
+    test('the first candidate with a key wins, later copies are duplicates', () {
+      final placer = SymbolPlacer(width: _w, height: _h);
+      final decisions = placer.place([
+        _at(1, 100, 100, crossTileKey: 'k', order: 0),
+        _at(2, 100, 100, crossTileKey: 'k', order: 1),
+      ]);
+      expect(decisions[0].isPlaced, isTrue);
+      // Not `collision`: dedup runs before the grid test, so a caller can tell a
+      // cross-tile duplicate apart from ordinary occlusion.
+      expect(decisions[1].result, SymbolPlacementResult.duplicate);
+    });
+
+    test('a duplicate does not reserve grid space', () {
+      final placer = SymbolPlacer(width: _w, height: _h);
+      final decisions = placer.place([
+        _at(1, 100, 100, crossTileKey: 'k', order: 0),
+        // A duplicate of 1, but sitting somewhere else entirely.
+        _at(2, 300, 300, crossTileKey: 'k', order: 1),
+        // Same spot as the duplicate: free only because 2 reserved nothing.
+        _at(3, 300, 300, order: 2),
+      ]);
+      expect(decisions[0].isPlaced, isTrue);
+      expect(decisions[1].result, SymbolPlacementResult.duplicate);
+      expect(decisions[2].isPlaced, isTrue);
+    });
+
+    test('different keys are not deduped and still collide', () {
+      final placer = SymbolPlacer(width: _w, height: _h);
+      final decisions = placer.place([
+        _at(1, 100, 100, crossTileKey: 'a', order: 0),
+        _at(2, 100, 100, crossTileKey: 'b', order: 1),
+      ]);
+      expect(decisions[0].isPlaced, isTrue);
+      expect(decisions[1].result, SymbolPlacementResult.collision);
+    });
+
+    test('a null key opts out of dedup entirely', () {
+      final placer = SymbolPlacer(width: _w, height: _h);
+      final decisions = placer.place([
+        _at(1, 100, 100, order: 0),
+        _at(2, 300, 300, order: 1),
+      ]);
+      expect(decisions.every((d) => d.isPlaced), isTrue);
+    });
+
+    test('dedup follows sortKey, so the higher-priority copy survives', () {
+      final placer = SymbolPlacer(width: _w, height: _h);
+      final decisions = placer.place([
+        _at(1, 100, 100, crossTileKey: 'k', sortKey: 10, order: 0),
+        _at(2, 100, 100, crossTileKey: 'k', sortKey: 1, order: 1),
+      ]);
+      // Lower sortKey is placed first, so candidate 2 is the survivor and the
+      // lower-priority copy becomes the duplicate.
+      expect(decisions[1].isPlaced, isTrue);
+      expect(decisions[0].result, SymbolPlacementResult.duplicate);
     });
   });
 }

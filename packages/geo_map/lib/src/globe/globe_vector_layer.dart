@@ -13,12 +13,16 @@ class GlobePolyline {
     required this.color,
     this.strokeWidth = 1.2,
     this.closed = false,
+    this.dashPattern,
   });
 
   final List<LatLng> points;
   final Color color;
   final double strokeWidth;
   final bool closed;
+
+  /// 屏幕像素的虚线样式：`[2, 2]` 表示实 2px / 空 2px 交替。null 为实线。
+  final List<double>? dashPattern;
 }
 
 /// A filled polygon on the sphere (fill + border), used in globe mode instead
@@ -74,6 +78,7 @@ class GlobeVectorLayer extends StatelessWidget {
     required this.lines,
     this.polygons = const [],
     this.dots = const [],
+    this.dotColors,
     this.labels = const [],
     this.dotRadius = 1.6,
     this.dotColor = const Color(0x803DDC97),
@@ -86,6 +91,10 @@ class GlobeVectorLayer extends StatelessWidget {
   /// Points (e.g. graticule intersections) drawn in the same projection as the
   /// lines — avoids the mismatch you get from mixing in a separate layer.
   final List<LatLng> dots;
+
+  /// Per-dot override colors. Length must match [dots] or be null (all use
+  /// [dotColor]). Entries can be [dotColor] for individual dots to fall back.
+  final List<Color>? dotColors;
   final List<GlobeLabel> labels;
   final double dotRadius;
   final Color dotColor;
@@ -102,6 +111,7 @@ class GlobeVectorLayer extends StatelessWidget {
           lines: lines,
           polygons: polygons,
           dots: dots,
+          dotColors: dotColors,
           labels: labels,
           dotRadius: dotRadius,
           dotColor: dotColor,
@@ -118,6 +128,7 @@ class _VectorPainter extends CustomPainter {
     required this.lines,
     required this.polygons,
     required this.dots,
+    this.dotColors,
     required this.labels,
     required this.dotRadius,
     required this.dotColor,
@@ -128,6 +139,7 @@ class _VectorPainter extends CustomPainter {
   final List<GlobePolyline> lines;
   final List<GlobePolygonShape> polygons;
   final List<LatLng> dots;
+  final List<Color>? dotColors;
   final List<GlobeLabel> labels;
   final double dotRadius;
   final Color dotColor;
@@ -141,6 +153,7 @@ class _VectorPainter extends CustomPainter {
       oldDelegate.lines != lines ||
       oldDelegate.polygons != polygons ||
       oldDelegate.dots != dots ||
+      oldDelegate.dotColors != dotColors ||
       oldDelegate.labels != labels ||
       oldDelegate.dotRadius != dotRadius ||
       oldDelegate.dotColor != dotColor ||
@@ -301,12 +314,19 @@ class _VectorPainter extends CustomPainter {
     }
 
     if (dots.isNotEmpty) {
-      final painter = Paint()
-        ..isAntiAlias = true
-        ..color = dotColor.withValues(alpha: dotColor.a * opacity);
-      for (final p in dots) {
+      for (var i = 0; i < dots.length; i++) {
+        final p = dots[i];
         if (hidden(p)) continue;
-        canvas.drawCircle(screenOf(p), dotRadius, painter);
+        final color = (dotColors != null && i < dotColors!.length)
+            ? dotColors![i]
+            : dotColor;
+        canvas.drawCircle(
+          screenOf(p),
+          dotRadius,
+          Paint()
+            ..isAntiAlias = true
+            ..color = color.withValues(alpha: color.a * opacity),
+        );
       }
     }
 
@@ -376,9 +396,46 @@ class _VectorPainter extends CustomPainter {
       }
 
       if (line.closed && started) path.close();
-      canvas.drawPath(path, paint);
+      final dash = line.dashPattern;
+      if (dash == null) {
+        canvas.drawPath(path, paint);
+      } else {
+        _drawDashed(canvas, path, paint, dash);
+      }
     }
       canvas.restore();
+    }
+  }
+
+  /// 按 [pattern]（屏幕像素，实/空交替）把 [path] 切成虚线后绘制。
+  void _drawDashed(
+    Canvas canvas,
+    ui.Path path,
+    Paint paint,
+    List<double> pattern,
+  ) {
+    final total = pattern.fold<double>(0, (sum, v) => sum + v);
+    if (total <= 0) {
+      canvas.drawPath(path, paint);
+      return;
+    }
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      var index = 0;
+      while (distance < metric.length) {
+        final len = pattern[index % pattern.length];
+        if (index.isEven && len > 0) {
+          canvas.drawPath(
+            metric.extractPath(
+              distance,
+              math.min(distance + len, metric.length),
+            ),
+            paint,
+          );
+        }
+        distance += len;
+        index++;
+      }
     }
   }
 

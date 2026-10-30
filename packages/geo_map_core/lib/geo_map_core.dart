@@ -7,6 +7,7 @@ export 'src/hud/hud_snapshot.dart';
 export 'src/math/geo_geometry.dart';
 export 'src/math/geodesy.dart';
 export 'src/math/fade.dart';
+export 'src/math/antimeridian.dart';
 export 'src/math/projections.dart';
 export 'src/math/sphere_subdivide.dart';
 export 'src/mvt/mvt.dart';
