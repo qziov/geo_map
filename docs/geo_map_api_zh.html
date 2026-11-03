@@ -1,0 +1,2874 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>geo_map API 参考（中文版）</title>
+<style>
+  :root {
+    --maplibre-blue: #3a7afe;
+    --maplibre-ink: #1c1e21;
+    --maplibre-muted: #6b7280;
+    --maplibre-border: #e6e8eb;
+    --sidebar-bg: #0f1b2d;
+    --sidebar-fg: #c8d2e0;
+    --sidebar-active: #3a7afe;
+    --code-bg: #f6f8fa;
+    --code-border: #e6e8eb;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    color: var(--maplibre-ink);
+    background: #fff;
+    line-height: 1.65;
+    font-size: 15px;
+  }
+  a { color: var(--maplibre-blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Layout */
+  .layout { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 280px;
+    background: var(--sidebar-bg);
+    color: var(--sidebar-fg);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 24px 18px;
+    flex-shrink: 0;
+  }
+  .sidebar h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: #8aa0bd;
+    margin: 22px 0 10px;
+  }
+  .sidebar .brand {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+  .sidebar .brand small { display:block; font-weight:400; font-size:12px; color:#8aa0bd; }
+  .sidebar ul { list-style: none; padding: 0; margin: 0; }
+  .sidebar li a {
+    display: block;
+    padding: 7px 10px;
+    border-radius: 6px;
+    color: var(--sidebar-fg);
+    font-size: 14px;
+  }
+  .sidebar li a:hover { background: rgba(255,255,255,.06); text-decoration: none; }
+  .sidebar li a.active { background: var(--sidebar-active); color: #fff; }
+
+  .content {
+    flex: 1;
+    max-width: 880px;
+    padding: 48px 56px 96px;
+    margin: 0 auto;
+  }
+  .content h1 { font-size: 32px; margin: 0 0 8px; }
+  .content .lead { color: var(--maplibre-muted); font-size: 15px; margin-bottom: 32px; }
+  .content h2 {
+    font-size: 24px;
+    margin: 48px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--maplibre-border);
+  }
+  .content h3 { font-size: 18px; margin: 28px 0 10px; }
+  .content p { margin: 12px 0; }
+  .content ul { margin: 12px 0; padding-left: 22px; }
+  .content li { margin: 6px 0; }
+
+  /* Code */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  p code, li code {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 13px;
+  }
+  pre code { background: none; border: none; padding: 0; }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0 24px;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid var(--maplibre-border);
+    padding: 9px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #f0f3f7; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #fafbfc; }
+
+  /* Callout */
+  .callout {
+    background: #fff8e6;
+    border-left: 4px solid #f0b429;
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin: 18px 0;
+  }
+  .callout strong { color: #92670a; }
+
+  .toc {
+    background: #f6f8fa;
+    border: 1px solid var(--maplibre-border);
+    border-radius: 8px;
+    padding: 16px 22px;
+    margin: 24px 0 8px;
+  }
+  .toc ul { columns: 2; }
+  .footer { margin-top: 64px; color: var(--maplibre-muted); font-size: 13px; border-top: 1px solid var(--maplibre-border); padding-top: 16px; }
+
+  @media (max-width: 860px) {
+    .sidebar { display: none; }
+    .content { padding: 32px 20px 64px; }
+    .toc ul { columns: 1; }
+  }
+/* --- API reference additions --- */
+  .sidebar .lib {
+    font-size: 12px; color: #ffd28a; margin: 20px 0 6px;
+    font-family: Consolas, monospace; font-weight: 600;
+  }
+  .sidebar details { margin: 2px 0; }
+  .sidebar summary {
+    cursor: pointer; font-size: 13px; font-weight: 600; color: #8aa0bd;
+    padding: 5px 10px; user-select: none;
+  }
+  .sidebar summary .cnt {
+    font-weight: 400; color: #64778f; margin-left: 6px; font-size: 12px;
+  }
+  .sidebar summary:hover { color: #c8d2e0; }
+  h3 .cnt, h4 .cnt {
+    font-size: 12px; font-weight: 500; color: var(--maplibre-muted);
+    margin-left: 8px; vertical-align: middle;
+  }
+  h3 { border-bottom: 1px solid var(--maplibre-border); padding-bottom: 6px; margin-top: 44px; }
+  .chips { margin: 10px 0 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-size: 12.5px; background: #f2f5fa; border: 1px solid var(--maplibre-border);
+    border-radius: 999px; padding: 2px 10px; color: #2b62d9;
+  }
+  .chip:hover { background: #e6edfb; text-decoration: none; }
+  section.symbol { margin: 36px 0 8px; padding-top: 8px; }
+  h4.sym {
+    font-size: 20px; margin: 0 0 6px; display: flex; align-items: center; gap: 10px;
+    scroll-margin-top: 16px;
+  }
+  h4.sym .nm { font-family: Consolas, monospace; }
+  .badge {
+    font-size: 11.5px; background: #eaf1ff; color: #2b62d9;
+    border: 1px solid #c9d9fb; padding: 1px 9px; border-radius: 999px; font-weight: 600;
+    flex-shrink: 0;
+  }
+  pre.sig { margin: 8px 0 10px; }
+  h5.doc-sub { font-size: 15px; margin: 18px 0 6px; }
+  .members { margin-top: 10px; }
+  .members h5 {
+    font-size: 13px; color: var(--maplibre-muted); margin: 20px 0 4px;
+    border-bottom: 1px solid var(--maplibre-border); padding-bottom: 4px;
+    text-transform: none; letter-spacing: 0;
+  }
+  .members h6 {
+    font-size: 12px; color: #51607a; margin: 14px 0 4px; font-weight: 700;
+  }
+  .members ul { list-style: none; padding: 0; margin: 0; }
+  .members li {
+    padding: 7px 0 7px 12px; border-left: 2px solid #eef1f5; margin: 0;
+  }
+  .members li:hover { border-left-color: var(--maplibre-blue); background: #fafbfd; }
+  .members pre.msig { padding: 8px 12px; margin: 2px 0; display: inline-block; min-width: 60%; }
+  .members li > code { font-size: 13px; }
+  .mdoc { color: var(--maplibre-muted); font-size: 13.5px; margin-left: 8px; }
+  .members li pre.msig + .mdoc { display: block; margin-left: 0; margin-top: 4px; }
+  .footer { margin-top: 72px; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="sidebar">
+    <div class="brand">geo_map<small>API 参考 · 中文版 · 只列定义</small></div>
+    <div class="lib">package:geo_map</div>
+    <details open>
+      <summary>类<span class="cnt">43</span></summary>
+      <ul>
+        <li><a href="#gm-AffineGeometry">AffineGeometry</a></li>
+        <li><a href="#gm-AnchoredPopupLayout">AnchoredPopupLayout</a></li>
+        <li><a href="#gm-CapDraw">CapDraw</a></li>
+        <li><a href="#gm-DebugTilesSource">DebugTilesSource</a></li>
+        <li><a href="#gm-FlatTileLayer">FlatTileLayer</a></li>
+        <li><a href="#gm-GeoAnchoredPopup">GeoAnchoredPopup</a></li>
+        <li><a href="#gm-GeoDiagnostics">GeoDiagnostics</a></li>
+        <li><a href="#gm-GeoFeatureRegistry">GeoFeatureRegistry</a></li>
+        <li><a href="#gm-GeoJsonVectorSource">GeoJsonVectorSource</a></li>
+        <li><a href="#gm-GeoMap">GeoMap</a></li>
+        <li><a href="#gm-GeoMapController">GeoMapController</a></li>
+        <li><a href="#gm-GeoMapOptions">GeoMapOptions</a></li>
+        <li><a href="#gm-GeoMapPopup">GeoMapPopup</a></li>
+        <li><a href="#gm-GeoMapPopupController">GeoMapPopupController</a></li>
+        <li><a href="#gm-GeoMapPopupHost">GeoMapPopupHost</a></li>
+        <li><a href="#gm-GeoMapScope">GeoMapScope</a></li>
+        <li><a href="#gm-GeoPopupBinding">GeoPopupBinding</a></li>
+        <li><a href="#gm-GeoPopupCard">GeoPopupCard</a></li>
+        <li><a href="#gm-GeoPopupController">GeoPopupController</a></li>
+        <li><a href="#gm-GeoStyleController">GeoStyleController</a></li>
+        <li><a href="#gm-GeoTileDefaults">GeoTileDefaults</a></li>
+        <li><a href="#gm-GlobeGestureOverlay">GlobeGestureOverlay</a></li>
+        <li><a href="#gm-GlobeImageLayer">GlobeImageLayer</a></li>
+        <li><a href="#gm-GlobeLabel">GlobeLabel</a></li>
+        <li><a href="#gm-GlobePolygonShape">GlobePolygonShape</a></li>
+        <li><a href="#gm-GlobePolyline">GlobePolyline</a></li>
+        <li><a href="#gm-GlobeProjectionDelegate">GlobeProjectionDelegate</a></li>
+        <li><a href="#gm-GlobeTileLayer">GlobeTileLayer</a></li>
+        <li><a href="#gm-GlobeVectorLayer">GlobeVectorLayer</a></li>
+        <li><a href="#gm-HttpTileSource">HttpTileSource</a></li>
+        <li><a href="#gm-LatLngBounds">LatLngBounds</a></li>
+        <li><a href="#gm-MbtilesTileSource">MbtilesTileSource</a></li>
+        <li><a href="#gm-MvtDiagnostics">MvtDiagnostics</a></li>
+        <li><a href="#gm-MvtVectorLayer">MvtVectorLayer</a></li>
+        <li><a href="#gm-SphericalGeometry">SphericalGeometry</a></li>
+        <li><a href="#gm-SpriteAtlas">SpriteAtlas</a></li>
+        <li><a href="#gm-StyleVectorLayer">StyleVectorLayer</a></li>
+        <li><a href="#gm-TileDraw">TileDraw</a></li>
+        <li><a href="#gm-TileEngine">TileEngine</a></li>
+        <li><a href="#gm-TileGeometry">TileGeometry</a></li>
+        <li><a href="#gm-TileImage">TileImage</a></li>
+        <li><a href="#gm-TileLayer">TileLayer</a></li>
+        <li><a href="#gm-TileResolution">TileResolution</a></li>
+      </ul>
+    </details>
+    <details open>
+      <summary>枚举<span class="cnt">3</span></summary>
+      <ul>
+        <li><a href="#gm-DebugTilesMode">DebugTilesMode</a></li>
+        <li><a href="#gm-PopupAnchor">PopupAnchor</a></li>
+        <li><a href="#gm-TileLayerMode">TileLayerMode</a></li>
+      </ul>
+    </details>
+    <details open>
+      <summary>类型定义<span class="cnt">1</span></summary>
+      <ul>
+        <li><a href="#gm-GlobeRasterSource">GlobeRasterSource</a></li>
+      </ul>
+    </details>
+    <details open>
+      <summary>函数<span class="cnt">7</span></summary>
+      <ul>
+        <li><a href="#gm-anchorOffsetFor">anchorOffsetFor</a></li>
+        <li><a href="#gm-buildGraticule">buildGraticule</a></li>
+        <li><a href="#gm-buildGreatCircle">buildGreatCircle</a></li>
+        <li><a href="#gm-buildTissot">buildTissot</a></li>
+        <li><a href="#gm-densifyPath">densifyPath</a></li>
+        <li><a href="#gm-layoutAnchoredPopup">layoutAnchoredPopup</a></li>
+        <li><a href="#gm-projectForPick">projectForPick</a></li>
+      </ul>
+    </details>
+    <div class="lib">package:geo_map_core</div>
+    <details open>
+      <summary>类<span class="cnt">19</span></summary>
+      <ul>
+        <li><a href="#core-Expr">Expr</a></li>
+        <li><a href="#core-ExpressionContext">ExpressionContext</a></li>
+        <li><a href="#core-GeoEngineTuning">GeoEngineTuning</a></li>
+        <li><a href="#core-GeoJsonFeature">GeoJsonFeature</a></li>
+        <li><a href="#core-GeoJsonGeometry">GeoJsonGeometry</a></li>
+        <li><a href="#core-GeoTileSource">GeoTileSource</a></li>
+        <li><a href="#core-LineStringGeometry">LineStringGeometry</a></li>
+        <li><a href="#core-MultiLineStringGeometry">MultiLineStringGeometry</a></li>
+        <li><a href="#core-MultiPolygonGeometry">MultiPolygonGeometry</a></li>
+        <li><a href="#core-PointGeometry">PointGeometry</a></li>
+        <li><a href="#core-PolygonGeometry">PolygonGeometry</a></li>
+        <li><a href="#core-PropertyValue">PropertyValue</a></li>
+        <li><a href="#core-SpriteIcon">SpriteIcon</a></li>
+        <li><a href="#core-SpriteIndex">SpriteIndex</a></li>
+        <li><a href="#core-StyleColor">StyleColor</a></li>
+        <li><a href="#core-StyleDocument">StyleDocument</a></li>
+        <li><a href="#core-StyleLayer">StyleLayer</a></li>
+        <li><a href="#core-StyleSpec">StyleSpec</a></li>
+        <li><a href="#core-TileFetchResult">TileFetchResult</a></li>
+      </ul>
+    </details>
+    <details open>
+      <summary>枚举<span class="cnt">4</span></summary>
+      <ul>
+        <li><a href="#core-GeoGeometryKind">GeoGeometryKind</a></li>
+        <li><a href="#core-TileFailureKind">TileFailureKind</a></li>
+        <li><a href="#core-TileRowOrder">TileRowOrder</a></li>
+        <li><a href="#core-TileSchemeKind">TileSchemeKind</a></li>
+      </ul>
+    </details>
+    <details open>
+      <summary>类型定义<span class="cnt">1</span></summary>
+      <ul>
+        <li><a href="#core-FeaturePredicate">FeaturePredicate</a></li>
+      </ul>
+    </details>
+    <details open>
+      <summary>函数<span class="cnt">9</span></summary>
+      <ul>
+        <li><a href="#core-compileFilter">compileFilter</a></li>
+        <li><a href="#core-normalizeRingWinding">normalizeRingWinding</a></li>
+        <li><a href="#core-parseGeoJsonFeatures">parseGeoJsonFeatures</a></li>
+        <li><a href="#core-pointInMultiPolygon">pointInMultiPolygon</a></li>
+        <li><a href="#core-pointInPolygon">pointInPolygon</a></li>
+        <li><a href="#core-pointInRing">pointInRing</a></li>
+        <li><a href="#core-ringSignedArea">ringSignedArea</a></li>
+        <li><a href="#core-splitRingAtSeam">splitRingAtSeam</a></li>
+        <li><a href="#core-unwrapLongitudes">unwrapLongitudes</a></li>
+      </ul>
+    </details>
+  </nav>
+
+  <main class="content">
+    <h1>geo_map API 参考（中文版）</h1>
+    <p class="lead">由源码自动提取生成，等价于 dartdoc 在线参考
+    （<a href="https://qziov.github.io/geo_map/api/geo_map/">qziov.github.io/geo_map/api/geo_map</a>），
+    只保留<strong>类 / 接口 / 枚举 / 类型定义 / 函数 / 常量</strong>及其签名，不含使用示例。</p>
+    <p class="lead">符号说明为源码 <code>///</code> 文档的中文译注；成员级说明保留原文（简洁且引用参数名，便于对照）。</p>
+<h2 id="gm-lib">库 <code>package:geo_map</code></h2>
+<h3 id="gm-grp-class">类（Classes）<span class="cnt">43</span></h3>
+<div class="chips"><a class="chip" href="#gm-AffineGeometry">AffineGeometry</a><a class="chip" href="#gm-AnchoredPopupLayout">AnchoredPopupLayout</a><a class="chip" href="#gm-CapDraw">CapDraw</a><a class="chip" href="#gm-DebugTilesSource">DebugTilesSource</a><a class="chip" href="#gm-FlatTileLayer">FlatTileLayer</a><a class="chip" href="#gm-GeoAnchoredPopup">GeoAnchoredPopup</a><a class="chip" href="#gm-GeoDiagnostics">GeoDiagnostics</a><a class="chip" href="#gm-GeoFeatureRegistry">GeoFeatureRegistry</a><a class="chip" href="#gm-GeoJsonVectorSource">GeoJsonVectorSource</a><a class="chip" href="#gm-GeoMap">GeoMap</a><a class="chip" href="#gm-GeoMapController">GeoMapController</a><a class="chip" href="#gm-GeoMapOptions">GeoMapOptions</a><a class="chip" href="#gm-GeoMapPopup">GeoMapPopup</a><a class="chip" href="#gm-GeoMapPopupController">GeoMapPopupController</a><a class="chip" href="#gm-GeoMapPopupHost">GeoMapPopupHost</a><a class="chip" href="#gm-GeoMapScope">GeoMapScope</a><a class="chip" href="#gm-GeoPopupBinding">GeoPopupBinding</a><a class="chip" href="#gm-GeoPopupCard">GeoPopupCard</a><a class="chip" href="#gm-GeoPopupController">GeoPopupController</a><a class="chip" href="#gm-GeoStyleController">GeoStyleController</a><a class="chip" href="#gm-GeoTileDefaults">GeoTileDefaults</a><a class="chip" href="#gm-GlobeGestureOverlay">GlobeGestureOverlay</a><a class="chip" href="#gm-GlobeImageLayer">GlobeImageLayer</a><a class="chip" href="#gm-GlobeLabel">GlobeLabel</a><a class="chip" href="#gm-GlobePolygonShape">GlobePolygonShape</a><a class="chip" href="#gm-GlobePolyline">GlobePolyline</a><a class="chip" href="#gm-GlobeProjectionDelegate">GlobeProjectionDelegate</a><a class="chip" href="#gm-GlobeTileLayer">GlobeTileLayer</a><a class="chip" href="#gm-GlobeVectorLayer">GlobeVectorLayer</a><a class="chip" href="#gm-HttpTileSource">HttpTileSource</a><a class="chip" href="#gm-LatLngBounds">LatLngBounds</a><a class="chip" href="#gm-MbtilesTileSource">MbtilesTileSource</a><a class="chip" href="#gm-MvtDiagnostics">MvtDiagnostics</a><a class="chip" href="#gm-MvtVectorLayer">MvtVectorLayer</a><a class="chip" href="#gm-SphericalGeometry">SphericalGeometry</a><a class="chip" href="#gm-SpriteAtlas">SpriteAtlas</a><a class="chip" href="#gm-StyleVectorLayer">StyleVectorLayer</a><a class="chip" href="#gm-TileDraw">TileDraw</a><a class="chip" href="#gm-TileEngine">TileEngine</a><a class="chip" href="#gm-TileGeometry">TileGeometry</a><a class="chip" href="#gm-TileImage">TileImage</a><a class="chip" href="#gm-TileLayer">TileLayer</a><a class="chip" href="#gm-TileResolution">TileResolution</a></div>
+<section class="symbol" id="gm-AffineGeometry">
+<h4 class="sym"><span class="nm">AffineGeometry</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class AffineGeometry extends TileGeometry</code></pre>
+<p>Web Mercator（2D）几何：世界像素矩形。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const AffineGeometry({required this.scheme})</code></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>void drawTile(
+  Canvas canvas,
+  TileDraw draw, {
+  required CameraState camera,
+  required double opacity,
+})</code></pre></li>
+<li><pre class="msig"><code>void drawCap(
+  Canvas canvas,
+  CapDraw cap, {
+  required CameraState camera,
+  required double opacity,
+})</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final TileSchemeKind scheme</code></li>
+<li><code>static const int worldCopies = 1</code> <span class="mdoc">How many world copies are drawn around the camera longitude.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-AnchoredPopupLayout">
+<h4 class="sym"><span class="nm">AnchoredPopupLayout</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class AnchoredPopupLayout</code></pre>
+<p>纯布局结果（<code>left/top</code> 为逻辑像素）。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const AnchoredPopupLayout({
+  required this.left,
+  required this.top,
+  required this.visible,
+})</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final double left</code> <span class="mdoc">卡片左上角相对视口的偏移。</span></li>
+<li><code>final double top</code> <span class="mdoc">卡片左上角相对视口的偏移。</span></li>
+<li><code>final bool visible</code> <span class="mdoc">是否应显示（锚点出屏/非有限/被遮挡时为 false）。</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-CapDraw">
+<h4 class="sym"><span class="nm">CapDraw</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class CapDraw</code></pre>
+<p>极冠绘制指令（仅 Web Mercator）。</p>
+<p>一条极冠指令覆盖一个<strong>经度区间</strong>，而非单一列，因此两种情形形状一致：</p>
+<ul><li>单列宽（<code>spanLng == grid.tileWidthDeg</code>）— 一条清晰的楔形，用该列自身瓦片贴图；</li><li>最宽至 <code>360°</code> — 一条被涂抹的条带，用单张图像贴图，用于相机身处极冠内部时。</li></ul>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const CapDraw({
+  required this.zoom,
+  required this.north,
+  required this.startLng,
+  required this.spanLng,
+  required this.sourceKey,
+  required this.image,
+  required this.u0,
+  required this.spanU,
+  required this.v0,
+  required this.vSpan,
+})</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final int zoom</code> <span class="mdoc">The data-zoom level the cap belongs to.</span></li>
+<li><code>final bool north</code> <span class="mdoc">Northern or southern cap.</span></li>
+<li><code>final double startLng</code> <span class="mdoc">West edge of the interval (degrees, unwrapped).</span></li>
+<li><code>final double spanLng</code> <span class="mdoc">Width of the interval (degrees).</span></li>
+<li><code>final TileKey sourceKey</code> <span class="mdoc">The tile the [image] was decoded from (for eviction protection).</span></li>
+<li><code>final TileImage image</code></li>
+<li><code>final double u0</code> <span class="mdoc">Texture region (image pixels).</span></li>
+<li><code>final double spanU</code> <span class="mdoc">Texture extent (image pixels).</span></li>
+<li><code>final double v0</code> <span class="mdoc">Texture origin (image pixels).</span></li>
+<li><code>final double vSpan</code> <span class="mdoc">Texture extent (image pixels).</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-DebugTilesSource">
+<h4 class="sym"><span class="nm">DebugTilesSource</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class DebugTilesSource implements GlobeRasterSource</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>DebugTilesSource.maplibreNumber({this.maxZoom = 22})
+  : mode = DebugTilesMode.maplibreNumber,
+  minZoom = 0</code></pre></li>
+<li><pre class="msig"><code>DebugTilesSource.labeled({this.maxZoom = 8})
+  : mode = DebugTilesMode.labeled,
+  minZoom = 0</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>Future&lt;TileFetchResult&gt; fetch(int z, int x, int y) async</code></li>
+<li><code>void dispose()</code></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>TileSchemeKind get scheme =&gt; TileSchemeKind.webMercator</code></li>
+<li><code>TileRowOrder get rowOrder =&gt; TileRowOrder.xyzTopDown</code></li>
+<li><code>int get maxConcurrentRequests =&gt; GeoEngineTuning.maxParallelRequests</code></li>
+<li><pre class="msig"><code>String get attribution =&gt;
+  mode == DebugTilesMode.maplibreNumber
+  ? '© MapLibre debug tiles'
+  : 'generated debug tiles'</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final DebugTilesMode mode</code></li>
+<li><code>final int minZoom</code></li>
+<li><code>final int maxZoom</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-FlatTileLayer">
+<h4 class="sym"><span class="nm">FlatTileLayer</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class FlatTileLayer extends StatelessWidget</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const FlatTileLayer({
+  required this.source,
+  this.engine,
+  super.key,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>Widget build(BuildContext context) =&gt; TileLayer(
+  source: source,
+  engine: engine,
+  mode: TileLayerMode.mercator,
+)</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final GlobeRasterSource source</code></li>
+<li><code>final TileEngine? engine</code> <span class="mdoc">The shared engine. When <code>null</code> the layer creates one and owns it.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoAnchoredPopup">
+<h4 class="sym"><span class="nm">GeoAnchoredPopup</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoAnchoredPopup extends StatelessWidget</code></pre>
+<p>跟随地图的浮层：每次相机变化重新投影 [anchor] 并重定位 [child]。</p>
+<p>纯展示容器——宿主自行决定 [anchor]（如点击命中的地理点）与 [child]（业务卡片）。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GeoAnchoredPopup({
+  super.key,
+  required this.controller,
+  required this.anchor,
+  required this.child,
+  required this.keepOut,
+  required this.cardSize,
+  this.anchorSide = PopupAnchor.bottom,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>Widget build(BuildContext context)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final GeoMapController controller</code></li>
+<li><code>final LatLng anchor</code></li>
+<li><code>final Widget child</code></li>
+<li><code>final EdgeInsets keepOut</code></li>
+<li><code>final Size cardSize</code> <span class="mdoc">用于夹取的卡片逻辑尺寸（实际卡片可更小）。</span></li>
+<li><code>final PopupAnchor anchorSide</code> <span class="mdoc">卡片贴锚点的哪一侧（九宫格）。默认 [PopupAnchor.bottom]（卡片在锚点上方）。</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoDiagnostics">
+<h4 class="sym"><span class="nm">GeoDiagnostics</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoDiagnostics</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>GeoDiagnostics._()</code></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>static void traceLine(String message)</code></li>
+<li><code>static void frame(String message)</code></li>
+<li><code>static void missDetail(String message)</code></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>static bool get traceOn =&gt; enabled &amp;&amp; kDebugMode &amp;&amp; trace</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>static bool enabled = true</code> <span class="mdoc">总开关（debug 构建默认 true；release 恒关）。</span></li>
+<li><code>static int frameIntervalMs = 500</code></li>
+<li><code>static int missDetailIntervalMs = 2000</code></li>
+<li><code>static bool trace = false</code> <span class="mdoc">逐瓦片 trace（key + 屏幕位置）。定位选片洞/覆盖缺口时打开；
+每帧限量 + 500ms 限速，避免刷屏。</span></li>
+<li><code>static int tracePerFrame = 40</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoFeatureRegistry">
+<h4 class="sym"><span class="nm">GeoFeatureRegistry</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoFeatureRegistry</code></pre>
+<p>可查询要素的注册表。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>void setSource(
+  String sourceId,
+  List&lt;GeoJsonFeature&gt; features, {
+  bool visible = true,
+  String? layerId,
+  double? pointRadiusPx,
+  GeoPopupBinding? popup,
+})</code></pre> <span class="mdoc">Register (or replace) the features of one source.
+
+[visible] hides the whole source without removing it — a layer that is
+switched off must not be pickable. [pointRadiusPx] overrides the query's
+default pick radius for this source, and [layerId] records which layer
+it came from.
+
+[popup] optionally binds a popup card to this source (the SDK equivalent of
+MapLibre <code>map.on('click', layerId, handler)</code>); see [GeoPopupBinding]. A
+source without a popup is still pickable — it just won't open a card via
+[GeoPopupController] (the host may drive a SnackBar or selection instead).</span></li>
+<li><code>void removeSource(String sourceId) =&gt; _sources.remove(sourceId)</code> <span class="mdoc">Drop a source. Its features are no longer pickable.</span></li>
+<li><code>void clear() =&gt; _sources.clear()</code> <span class="mdoc">Drop every source.</span></li>
+<li><code>bool containsSource(String sourceId) =&gt; _sources.containsKey(sourceId)</code></li>
+<li><code>GeoPopupBinding? popupOf(String sourceId) =&gt; _sources[sourceId]?.popup</code> <span class="mdoc">The popup binding registered for [sourceId], or <code>null</code> if that source has
+no popup card (e.g. it only drives a SnackBar or a selection state).</span></li>
+<li><pre class="msig"><code>List&lt;GeoQueryHit&gt; queryFeatures(
+  LatLng tap, {
+  required GeoMapController controller,
+  double? pointRadiusPx,
+  Set&lt;String&gt;? sourceIds,
+  Set&lt;GeoGeometryKind&gt;? geometries,
+  int? limit,
+})</code></pre> <span class="mdoc">The features under [tap].
+
+Point features are matched in <strong>screen space</strong> (within [pointRadiusPx]);
+area features in <strong>geographic space</strong> (point-in-polygon). The two are
+dispatched per feature by its geometry type — see
+<code>planFeatureQuery</code> in <code>geo_map_core</code> for the full contract.
+
+[sourceIds] and [geometries] narrow the query; [limit] truncates the
+result after sorting.</span></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>Iterable&lt;String&gt; get sourceIds =&gt; _sources.keys</code> <span class="mdoc">The registered source ids, in registration order.</span></li>
+<li><code>int get length =&gt; _sources.length</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoJsonVectorSource">
+<h4 class="sym"><span class="nm">GeoJsonVectorSource</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoJsonVectorSource</code></pre>
+<p>为调试叠加层加载矢量数据。</p>
+<p>此处的“矢量底图”指：通过 HTTP 拉取一个 GeoJSON <code>FeatureCollection</code>，把其中的线稿喂给 [GlobeVectorLayer]。矢量<strong>瓦片</strong>（MVT）需要完整的样式 / protobuf 管线；GeoJSON 已足以肉眼验证投影是否正确。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const GeoJsonVectorSource(this.url)</code></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>Future&lt;List&lt;GlobePolyline&gt;&gt; load({
+  Color color = const Color(0xCCFFFFFF),
+  double strokeWidth = 1.0,
+}) async</code></pre></li>
+<li><pre class="msig"><code>static Future&lt;List&lt;GlobePolyline&gt;&gt; loadAsset(
+  String assetPath, {
+  Color color = const Color(0xCCFFFFFF),
+  double strokeWidth = 1.0,
+}) async</code></pre> <span class="mdoc">Loads a GeoJSON file bundled as an asset (works offline).</span></li>
+<li><pre class="msig"><code>static List&lt;GlobePolyline&gt; parse(
+  String body, {
+  Color color = const Color(0xCCFFFFFF),
+  double strokeWidth = 1.0,
+})</code></pre> <span class="mdoc">Parses <code>LineString</code>, <code>MultiLineString</code> and <code>Polygon</code> (outer rings only).</span></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final String url</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoMap">
+<h4 class="sym"><span class="nm">GeoMap</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoMap extends StatefulWidget</code></pre>
+<p><code>GeoMap</code>——宿主控件。子控件堆叠在栅格图层之上。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GeoMap({
+  required this.options,
+  required this.source,
+  this.controller,
+  this.children = const [],
+  this.onTap,
+  super.key,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>final void Function(LatLng latLng)? onTap</code></li>
+<li><code>State&lt;GeoMap&gt; createState() =&gt; _GeoMapState()</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final GeoMapOptions options</code></li>
+<li><code>final GlobeRasterSource source</code></li>
+<li><code>final GeoMapController? controller</code></li>
+<li><code>final List&lt;Widget&gt; children</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoMapController">
+<h4 class="sym"><span class="nm">GeoMapController</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoMapController extends ChangeNotifier</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>GeoMapController({
+  bool useGlobe = true,
+  GlobeProjectionDelegate? projectionDelegate,
+  LatLng initialCenter = const LatLng(30, 105),
+  double initialZoom = 4.2,
+  this.minZoom = 1,
+  this.maxZoom = 8,
+})  : _isGlobe = useGlobe,
+  delegate = projectionDelegate ??
+  (useGlobe
+  ? GlobeProjectionDelegate()
+  : FlatProjectionDelegate())</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>void applyConstraints({required double minZoom, required double maxZoom})</code> <span class="mdoc">外部宿主同步缩放约束（防 options 与 controller 脱节）。</span></li>
+<li><code>void setMode(bool globe)</code> <span class="mdoc">2D/3D 切换：替换投影 delegate 并重建 vendored camera（center/zoom 连续）。</span></li>
+<li><code>void move(LatLng center, double zoom)</code> <span class="mdoc">Move the camera; syncs the projection delegate and notifies listeners.</span></li>
+<li><pre class="msig"><code>void panBy(Offset pixelDelta) =&gt;
+  move(delegate.panBy(pixelDelta), _zoom)</code></pre> <span class="mdoc">Content follows the finger: delegate handles the 1/cos(lat) compensation.</span></li>
+<li><code>void zoomBy(double factor, Offset anchor)</code> <span class="mdoc">Pinch: multiply zoom by [factor], keeping [anchor] (screen px) fixed.</span></li>
+<li><code>void zoomAround(Offset focal, double newZoom)</code> <span class="mdoc">Lab-verified anchor zoom (<code>_zoomAround</code> + <code>_anchorCenter</code>): first-order
+correction for the radius change, then <code>panCenter</code> with the view direction.</span></li>
+<li><code>void recenter(LatLng target) =&gt; move(target, _zoom)</code></li>
+<li><code>void setViewport(Size size)</code> <span class="mdoc">Viewport size changed (layout pass).</span></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>bool get isGlobe =&gt; _isGlobe</code></li>
+<li><code>MapCamera get camera =&gt; _camera</code></li>
+<li><code>LatLng get center =&gt; _center</code></li>
+<li><code>double get zoom =&gt; _zoom</code></li>
+<li><code>Size get viewport =&gt; Size(_camera.size.x, _camera.size.y)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>MapProjectionDelegate delegate</code></li>
+<li><code>double minZoom</code></li>
+<li><code>double maxZoom</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoMapOptions">
+<h4 class="sym"><span class="nm">GeoMapOptions</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoMapOptions</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GeoMapOptions({
+  this.initialCenter = const LatLng(30, 105),
+  this.initialZoom = 4.2,
+  this.minZoom = 1,
+  this.maxZoom = 8,
+  this.useGlobe = true,
+  this.background = const Color(0xFF000000),
+})</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final LatLng initialCenter</code></li>
+<li><code>final double initialZoom</code></li>
+<li><code>final double minZoom</code></li>
+<li><code>final double maxZoom</code></li>
+<li><code>final bool useGlobe</code> <span class="mdoc">true = 正交球面（3D）；false = Web Mercator 平面（2D）。
+切换时 center/zoom 连续（经 delegate 的 anchorCenter 各自实现）。</span></li>
+<li><code>final Color background</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoMapPopup">
+<h4 class="sym"><span class="nm">GeoMapPopup</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoMapPopup extends StatelessWidget</code></pre>
+<p>把 [GeoMapPopupController] 的显隐状态接到 [GeoAnchoredPopup] 上。</p>
+<p>自监听 [popup]：调用 <code>popup.show/hide</code> 即自动重绘，宿主无需在父级 <code>watch</code>。业务内容通过 [builder]（入参含锚点）注入——这就是留给宿主的“接口”：在此返回自己的卡片（含关闭按钮，关闭按钮调用 [GeoMapPopupController.hide]）。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GeoMapPopup({
+  super.key,
+  required this.controller,
+  required this.popup,
+  required this.builder,
+  required this.keepOut,
+  required this.cardSize,
+  this.anchorSide = PopupAnchor.bottom,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>final Widget Function(BuildContext context, LatLng anchor) builder</code> <span class="mdoc">业务内容构造器：给定锚点，返回卡片。</span></li>
+<li><code>Widget build(BuildContext context)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final GeoMapController controller</code> <span class="mdoc">地图相机（用于每帧重投影锚点）。</span></li>
+<li><code>final GeoMapPopupController popup</code> <span class="mdoc">浮层显隐状态。</span></li>
+<li><code>final EdgeInsets keepOut</code> <span class="mdoc">留白区（顶栏 / 侧栏 / 底栏尺寸），浮层不会盖进去。</span></li>
+<li><code>final Size cardSize</code> <span class="mdoc">用于夹取的卡片逻辑尺寸（实际卡片可更小）。</span></li>
+<li><code>final PopupAnchor anchorSide</code> <span class="mdoc">卡片贴锚点的哪一侧（九宫格）。默认 [PopupAnchor.bottom]（卡片在锚点上方）。</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoMapPopupController">
+<h4 class="sym"><span class="nm">GeoMapPopupController</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoMapPopupController extends ChangeNotifier</code></pre>
+<p>跟随地图的浮层显隐状态（对标 MapLibre <code>Popup</code> 的 open/close）。</p>
+<p>只持有<strong>锚点</strong>：内容由宿主通过 [GeoMapPopup.builder] 注入。状态因此与业务完全解耦，SIGMET / 机场 / POI 等任意图层共用同一套“显示—关闭”逻辑。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>方法</h6>
+<ul>
+<li><code>void dispose()</code></li>
+<li><code>void show(LatLng anchor)</code> <span class="mdoc">在 [anchor] 处打开（覆盖式：重复 open 同一锚点幂等）。</span></li>
+<li><code>void hide()</code> <span class="mdoc">关闭浮层（锚点置空）。</span></li>
+<li><code>void toggle(LatLng anchor) =&gt; isOpen ? hide() : show(anchor)</code> <span class="mdoc">点同一锚点切换开/关（MapLibre <code>togglePopup</code> 语义）。</span></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>bool get isDisposed =&gt; _disposed</code> <span class="mdoc">是否已 dispose（语义同 <code>GeoPopupController.isDisposed</code>：Riverpod 的
+<code>invalidateSelf()</code> —— hot reload 改到 provider 源码时的常规路径 —— 会
+先 dispose 再重建，这段窗口内的 <code>show/hide</code> 必须安静丢弃）。</span></li>
+<li><code>LatLng? get anchor =&gt; _anchor</code> <span class="mdoc">当前锚点；<code>null</code> 表示浮层隐藏。</span></li>
+<li><code>bool get isOpen =&gt; _anchor != null</code> <span class="mdoc">是否处于打开状态。</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoMapPopupHost">
+<h4 class="sym"><span class="nm">GeoMapPopupHost</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoMapPopupHost extends StatelessWidget</code></pre>
+<p>弹窗控制层的渲染宿主。</p>
+<p>在 <code>GeoMap</code> 之外、作为外层 <code>Stack</code> 的<strong>直接子级</strong>恰好挂载一个（与 [GeoMapPopup]同一约束：必须是外层 <code>Stack</code> 的直接子级，绝不可位于 <code>GeoMap.children</code> 之内）。它从 [popup] 读取已打开的绑定并渲染对应卡片，每次相机移动时由底层 [GeoMapPopup] 重新定位。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GeoMapPopupHost({
+  super.key,
+  required this.controller,
+  required this.popup,
+  required this.keepOut,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>Widget build(BuildContext context)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final GeoMapController controller</code> <span class="mdoc">Map camera (re-projects the anchor each frame).</span></li>
+<li><code>final GeoPopupController popup</code> <span class="mdoc">The popup control layer that decides what to show.</span></li>
+<li><code>final EdgeInsets keepOut</code> <span class="mdoc">Insets the card never covers (top bar / side bar / bottom bar).</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoMapScope">
+<h4 class="sym"><span class="nm">GeoMapScope</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoMapScope extends StatelessWidget</code></pre>
+<p>供子控件只读访问相机的入口：<code>GeoMapScope.of(context).camera</code>。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const GeoMapScope({required this.controller, required this.child, super.key})</code></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>Widget build(BuildContext context) =&gt; MapInheritedModel(
+  camera: controller.camera,
+  child: child,
+)</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final GeoMapController controller</code></li>
+<li><code>final Widget child</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoPopupBinding">
+<h4 class="sym"><span class="nm">GeoPopupBinding</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoPopupBinding</code></pre>
+<p>把一个图层（其在 [GeoFeatureRegistry] 中的 <code>sourceId</code>）与点击该图层时弹出的卡片绑定起来。</p>
+<p>这是 MapLibre <code>map.on('click', layerId, handler)</code> 的 SDK 等价物：在我们的模型里“图层”就是一个 <code>sourceId</code>，把弹窗绑定到它就是业务图层声明“我被命中时渲染这张卡片”。命中测试、锚点投影、定位与关闭全部由 [GeoPopupController] 处理——业务侧只需提供 [builder]（卡片）及少量元数据。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GeoPopupBinding({
+  this.priority = 0,
+  required this.cardSize,
+  this.anchor = PopupAnchor.bottom,
+  this.anchorOf,
+  required this.builder,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>final LatLng? Function(GeoQueryHit hit)? anchorOf</code> <span class="mdoc">Override the default anchor point. The default is the tap point (MapLibre
+<code>setLngLat(e.lngLat)</code> semantics); pass this to pin the bubble to the
+feature geometry instead (e.g. an airport icon's own coordinate).</span></li>
+<li><code>final Widget Function(BuildContext context, GeoQueryHit hit) builder</code> <span class="mdoc">The business card builder, invoked by the render host after a hit. Receive
+the [GeoQueryHit] to map its <code>feature.id</code> back to your domain object.</span></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final int priority</code> <span class="mdoc">Arbitration priority when several layers are hit at once (e.g. a SIGMET
+polygon overlapping an airport). Higher wins; ties go to the first hit in
+the query result (already sorted by screen distance within a source).</span></li>
+<li><code>final Size cardSize</code> <span class="mdoc">The card's logical maximum size, used by the layout to clamp inside
+[GeoMapPopupHost.keepOut]. Pass the card's real maximum width/height.</span></li>
+<li><code>final PopupAnchor anchor</code> <span class="mdoc">Which side of the card meets the anchor (nine-grid).</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoPopupCard">
+<h4 class="sym"><span class="nm">GeoPopupCard</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoPopupCard extends StatelessWidget</code></pre>
+<p>统一的弹窗卡片外壳。</p>
+<p>结构：</p>
+<ul><li>最外层 [GestureDetector]（<code>behavior: opaque</code>）吞掉卡片内的空白点击，避免漏给下面的地图（等价于 MapLibre Popup 作为独立 DOM 覆盖层的事件隔离）。</li><li>[header] 右侧可带一个 SDK 关闭按钮（[onClose] 非空时渲染），命中区 ≥32px。</li></ul>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GeoPopupCard({
+  super.key,
+  required this.child,
+  this.header,
+  this.onClose,
+  this.width = 280,
+  this.padding = const EdgeInsets.all(12),
+  this.decoration,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>Widget build(BuildContext context)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final Widget child</code> <span class="mdoc">卡片内容。</span></li>
+<li><code>final Widget? header</code> <span class="mdoc">标题区（业务排版）。为 null 时不渲染标题行。</span></li>
+<li><code>final VoidCallback? onClose</code> <span class="mdoc">关闭回调；非空时在标题行右侧渲染关闭按钮。</span></li>
+<li><code>final double width</code> <span class="mdoc">卡片宽度（逻辑像素）。</span></li>
+<li><code>final EdgeInsets padding</code> <span class="mdoc">内容内边距。</span></li>
+<li><code>final BoxDecoration? decoration</code> <span class="mdoc">卡片背景/边框/阴影；为 null 时使用主题色的默认外观。</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoPopupController">
+<h4 class="sym"><span class="nm">GeoPopupController</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoPopupController extends ChangeNotifier</code></pre>
+<p>[GeoFeatureRegistry] 与共享的 [GeoMapPopupController] 之间的粘合层。</p>
+<p>使用流程见库级文档注释。宿主应用持有一个实例（通常通过把底层弹窗控制器接入的 Riverpod provider）。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>GeoPopupController(this.geoPopup)</code> <span class="mdoc">[geoPopup] is the shared show/hide/anchor state, owned by the host. The
+feature registry is passed to [handleTap] per tap so the controller never
+holds a stale snapshot.</span></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>void dispose()</code></li>
+<li><code>void registerPopup(String sourceId, GeoPopupBinding binding)</code> <span class="mdoc">Bind a popup to [sourceId] imperatively. Call from a layer's setup and pair
+it with [unregisterPopup] on teardown so stale bindings never fire.</span></li>
+<li><code>void unregisterPopup(String sourceId)</code> <span class="mdoc">Drop an imperative binding. If it is the one currently shown, the popup
+closes.</span></li>
+<li><pre class="msig"><code>Widget? Function(BuildContext context, LatLng anchor)? get activeBuilder =&gt;
+  _active == null
+  ? null
+  : (context, anchor) =&gt; _active!.binding.builder(context, _active!.hit)</code></pre> <span class="mdoc">The card builder for the open popup, or <code>null</code> when nothing is open. The
+render host calls this with the projected anchor.</span></li>
+<li><pre class="msig"><code>List&lt;GeoQueryHit&gt; handleTap(
+  LatLng tap, {
+  required GeoMapController controller,
+  required GeoFeatureRegistry registry,
+  double? pointRadiusPx,
+  List&lt;GeoQueryHit&gt;? hits,
+})</code></pre> <span class="mdoc">The single entry point for a map tap.
+
+Queries [registry], filters to sources that registered a popup, and opens
+the highest-priority one. No hit, or a hit on a source without a popup
+(e.g. an airport that only fires a SnackBar), closes any open popup.
+
+Pass [hits] when the host already ran the query (it usually needs the same
+results for its own business reactions) — this avoids querying twice.
+
+Disposed controller (see [isDisposed]) → no-op: the popup it owned no longer
+exists, and the freshly created replacement will handle the next tap.
+
+Returns the query result so the host can reuse it for its own reactions
+(SnackBar / selection) without querying a second time.</span></li>
+<li><code>void close()</code> <span class="mdoc">Close the popup (anchor cleared, active binding dropped).</span></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>bool get isDisposed =&gt; _disposed</code> <span class="mdoc">Whether [dispose] has run.
+
+宿主可能在这个窗口里仍然调到本实例：Riverpod 的 <code>invalidateSelf()</code>
+（hot reload 改到 provider 源码时的常规路径，或业务主动 <code>ref.invalidate</code>）
+会<strong>先 <code>runOnDispose()</code> 再重建</strong>，也就是说 notify 监听方的 dispose 先发生、
+新实例下一帧才出现。旧实例这段"僵尸期"内收到的点击必须安静地丢弃，
+而不是让 <code>notifyListeners()</code> 抛 assert 打断整条手势链路。</span></li>
+<li><code>Size get activeCardSize =&gt; _active?.binding.cardSize ?? const Size(280, 240)</code> <span class="mdoc">The open card's maximum size, for keepOut clamping.</span></li>
+<li><code>PopupAnchor get activeAnchor =&gt; _active?.binding.anchor ?? PopupAnchor.bottom</code> <span class="mdoc">The open card's anchor side (nine-grid).</span></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final GeoMapPopupController geoPopup</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoStyleController">
+<h4 class="sym"><span class="nm">GeoStyleController</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoStyleController extends ChangeNotifier</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>GeoStyleController(StyleSpec spec) : _document = StyleDocument.fromSpec(spec)</code></li>
+<li><pre class="msig"><code>GeoStyleController.document(StyleDocument document)
+  : _document = document</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>void addSource(String id, Map&lt;String, Object?&gt; source) =&gt;
+  _set(_document.addSource(id, source))</code></pre></li>
+<li><code>void removeSource(String id) =&gt; _set(_document.removeSource(id))</code></li>
+<li><pre class="msig"><code>void addLayer(StyleLayer layer, {String? before}) =&gt;
+  _set(_document.addLayer(layer, before: before))</code></pre></li>
+<li><code>void removeLayer(String id) =&gt; _set(_document.removeLayer(id))</code></li>
+<li><pre class="msig"><code>void moveLayer(String id, {String? before}) =&gt;
+  _set(_document.moveLayer(id, before: before))</code></pre></li>
+<li><pre class="msig"><code>void setPaintProperty(String id, String name, Object? value) =&gt;
+  _set(_document.setPaintProperty(id, name, value))</code></pre></li>
+<li><pre class="msig"><code>void setLayoutProperty(String id, String name, Object? value) =&gt;
+  _set(_document.setLayoutProperty(id, name, value))</code></pre></li>
+<li><pre class="msig"><code>void setFilter(String id, Object? filter) =&gt;
+  _set(_document.setFilter(id, filter))</code></pre></li>
+<li><pre class="msig"><code>void setLayerZoomRange(String id, num min, num max) =&gt;
+  _set(_document.setLayerZoomRange(id, min, max))</code></pre></li>
+<li><pre class="msig"><code>void setVisibility(String id, String visibility) =&gt;
+  _set(_document.setVisibility(id, visibility))</code></pre></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>StyleDocument get document =&gt; _document</code></li>
+<li><code>int get revision =&gt; _revision</code> <span class="mdoc">Monotonic revision; changes only when the document actually changed.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GeoTileDefaults">
+<h4 class="sym"><span class="nm">GeoTileDefaults</span><span class="badge">类</span></h4>
+<pre class="sig"><code>abstract class GeoTileDefaults</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>字段</h6>
+<ul>
+<li><code>static const int maxZoom = 18</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GlobeGestureOverlay">
+<h4 class="sym"><span class="nm">GlobeGestureOverlay</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GlobeGestureOverlay extends StatefulWidget</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GlobeGestureOverlay({
+  required this.controller,
+  this.onTap,
+  this.minZoom,
+  this.maxZoom,
+  super.key,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>final void Function(LatLng latLng)? onTap</code></li>
+<li><code>State&lt;GlobeGestureOverlay&gt; createState() =&gt; _GlobeGestureOverlayState()</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final GeoMapController controller</code></li>
+<li><code>final double? minZoom</code> <span class="mdoc">Zoom clamps for wheel/double-tap; null = controller's own range.</span></li>
+<li><code>final double? maxZoom</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GlobeImageLayer">
+<h4 class="sym"><span class="nm">GlobeImageLayer</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GlobeImageLayer extends StatefulWidget</code></pre>
+<p>绘制在地球表面的图像叠加层（气象雷达、卫星条带等）。</p>
+<p>flutter_map 的 <code>OverlayImageLayer</code> 把图像映射到四角构成的四边形上，在球面上看起来像一张平铺的纸：没有曲率、没有地平线裁剪。本图层把 bounds细分为网格并对每个顶点做投影，于是叠加层贴合地表并会在其背后消失。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GlobeImageLayer({
+  super.key,
+  required this.image,
+  required this.bounds,
+  this.opacity = 0.85,
+  this.subdivisions = 24,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>State&lt;GlobeImageLayer&gt; createState() =&gt; _GlobeImageLayerState()</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final ImageProvider image</code></li>
+<li><code>final LatLngBounds bounds</code></li>
+<li><code>final double opacity</code></li>
+<li><code>final int subdivisions</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GlobeLabel">
+<h4 class="sym"><span class="nm">GlobeLabel</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GlobeLabel</code></pre>
+<p>锚定在地理坐标点上的文本标签。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GlobeLabel({
+  required this.point,
+  required this.text,
+  this.style = const TextStyle(color: Colors.white, fontSize: 11),
+  this.offset = const Offset(0, -16),
+  this.background = const Color(0xCC0F2440),
+})</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final LatLng point</code></li>
+<li><code>final String text</code></li>
+<li><code>final TextStyle style</code></li>
+<li><code>final Offset offset</code></li>
+<li><code>final Color background</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GlobePolygonShape">
+<h4 class="sym"><span class="nm">GlobePolygonShape</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GlobePolygonShape</code></pre>
+<p>球面上的填充多边形（填充 + 描边），用于地球模式以取代 flutter_map 的<code>PolygonLayer</code>——后者的绘制器无法裁剪到地平线。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GlobePolygonShape({
+  required this.points,
+  required this.fill,
+  required this.stroke,
+  this.strokeWidth = 2,
+  this.label,
+  this.labelStyle = const TextStyle(color: Colors.white, fontSize: 12),
+})</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final List&lt;LatLng&gt; points</code></li>
+<li><code>final Color fill</code></li>
+<li><code>final Color stroke</code></li>
+<li><code>final double strokeWidth</code></li>
+<li><code>final String? label</code> <span class="mdoc">Optional text drawn at the ring's centroid (3D counterpart of
+<code>Polygon.label</code>, which only the native painter handles).</span></li>
+<li><code>final TextStyle labelStyle</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GlobePolyline">
+<h4 class="sym"><span class="nm">GlobePolyline</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GlobePolyline</code></pre>
+<p>绘制在屏幕空间中的球面上的折线。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GlobePolyline({
+  required this.points,
+  required this.color,
+  this.strokeWidth = 1.2,
+  this.closed = false,
+  this.dashPattern,
+})</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final List&lt;LatLng&gt; points</code></li>
+<li><code>final Color color</code></li>
+<li><code>final double strokeWidth</code></li>
+<li><code>final bool closed</code></li>
+<li><code>final List&lt;double&gt;? dashPattern</code> <span class="mdoc">屏幕像素的虚线样式：<code>[2, 2]</code> 表示实 2px / 空 2px 交替。null 为实线。</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GlobeProjectionDelegate">
+<h4 class="sym"><span class="nm">GlobeProjectionDelegate</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GlobeProjectionDelegate implements MapProjectionDelegate</code></pre>
+<p>通过（仅 fork 版）<code>MapProjectionDelegate</code> 钩子接入 flutter_map 的正交地球投影。</p>
+<p>屏幕空间取代世界空间：</p>
+<ul><li><code>project()</code> 返回<strong>屏幕像素</strong>（或远侧点的远端坐标，交给 flutter_map 自带的剔除移除）；</li><li><code>pixelOrigin</code> 被 fork 版 <code>MapCamera</code> 强制为零；</li><li><code>pixelBounds</code> 即视口。</li></ul>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>GlobeProjectionDelegate({this.tileSize = 256})</code></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>void updateCamera(LatLng center, double zoom, Size size)</code></li>
+<li><code>Offset project(LatLng point)</code></li>
+<li><code>Offset projectForVector(LatLng point)</code></li>
+<li><code>bool isVisible(LatLng point) =&gt; _toView(point).$3 &gt; -0.03</code></li>
+<li><code>LatLng? unproject(Offset local)</code></li>
+<li><code>LatLng panBy(Offset pixelDelta) =&gt; panCenter(_center, pixelDelta, _zoom)</code></li>
+<li><pre class="msig"><code>LatLng anchorCenter(
+  LatLng center, LatLng anchor, double fromZoom, double toZoom)</code></pre></li>
+<li><code>LatLng panCenter(LatLng from, Offset delta, double zoom)</code></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>LatLng get center =&gt; _center</code></li>
+<li><code>double get zoom =&gt; _zoom</code></li>
+<li><code>double get radius =&gt; tileSize * math.pow(2, _zoom) / (2 * math.pi)</code> <span class="mdoc">Disc radius in logical pixels — a function of zoom only.
+
+Multiplying by <code>1/cos(lat)</code> (mercator's trick) would make the globe grow
+as you drag towards the poles; on a sphere the apparent size is fixed.</span></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final double tileSize</code></li>
+<li><code>static const double maxCameraLatitude = 89.999</code> <span class="mdoc">The camera may look straight at a pole. 85.0511° is a <strong>tile data</strong> limit
+(Web Mercator), not a projection limit — clamping the camera there makes
+the globe feel truncated, so only stop just short of the degenerate pole.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GlobeTileLayer">
+<h4 class="sym"><span class="nm">GlobeTileLayer</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GlobeTileLayer extends StatelessWidget</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GlobeTileLayer({
+  required this.source,
+  this.engine,
+  super.key,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>Widget build(BuildContext context) =&gt; TileLayer(
+  source: source,
+  engine: engine,
+  mode: TileLayerMode.globe,
+)</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final GlobeRasterSource source</code></li>
+<li><code>final TileEngine? engine</code> <span class="mdoc">The shared engine. When <code>null</code> the layer creates one and owns it.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-GlobeVectorLayer">
+<h4 class="sym"><span class="nm">GlobeVectorLayer</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GlobeVectorLayer extends StatelessWidget</code></pre>
+<p>地球的矢量调试图层。</p>
+<p>刻意<strong>不</strong>使用 flutter_map 的 <code>PolylineLayer</code>/<code>PolygonLayer</code>：那些图层在<code>camera.project</code> 之后用 <code>crs.transform</code> 再次投影，一旦启用了投影代理就错了。此处每个顶点都经过 <code>camera.project</code>（即代理）与大圆加密，因此本图层也充当那些图层日后所需实现的参考。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GlobeVectorLayer({
+  super.key,
+  required this.lines,
+  this.polygons = const [],
+  this.dots = const [],
+  this.dotColors,
+  this.labels = const [],
+  this.dotRadius = 1.6,
+  this.dotColor = const Color(0x803DDC97),
+  this.opacity = 1,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>Widget build(BuildContext context)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final List&lt;GlobePolyline&gt; lines</code></li>
+<li><code>final List&lt;GlobePolygonShape&gt; polygons</code></li>
+<li><code>final List&lt;LatLng&gt; dots</code> <span class="mdoc">Points (e.g. graticule intersections) drawn in the same projection as the
+lines — avoids the mismatch you get from mixing in a separate layer.</span></li>
+<li><code>final List&lt;Color&gt;? dotColors</code> <span class="mdoc">Per-dot override colors. Length must match [dots] or be null (all use
+[dotColor]). Entries can be [dotColor] for individual dots to fall back.</span></li>
+<li><code>final List&lt;GlobeLabel&gt; labels</code></li>
+<li><code>final double dotRadius</code></li>
+<li><code>final Color dotColor</code></li>
+<li><code>final double opacity</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-HttpTileSource">
+<h4 class="sym"><span class="nm">HttpTileSource</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class HttpTileSource implements GlobeRasterSource</code></pre>
+<p>基于 HTTP 的 WMTS / XYZ。</p>
+<p>URL 构建（模板、TMS 翻转、quadkey、bbox、子域、ratio）委托给 core 中的纯 [TileUrlBuilder]，因此在那里有单元测试。本类只负责 404 与网络故障的区分；套接字本身是 <code>platform/http_get.dart</code> 中的共享传输，它有浏览器实现，故本文件可编译到 web。</p>
+<p><code>urlTemplate</code> 支持 <code>{z}</code>、<code>{x}</code>、<code>{y}</code>、<code>{TileMatrix}</code>、<code>{TileRow}</code>、<code>{TileCol}</code>、<code>{prefix}</code>、<code>{ratio}</code>、<code>{quadkey}</code>、<code>{bbox}</code>、<code>{bbox-epsg-3857}</code>。RESTful WMTS 与纯 XYZ 模板均可用。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>HttpTileSource({
+  required this.urlTemplate,
+  required this.scheme,
+  required this.maxZoom,
+  this.minZoom = 0,
+  this.attribution = '',
+  this.headers = const {},
+  this.rowOrder = TileRowOrder.xyzTopDown,
+  this.userAgent = 'geo_map/0.1',
+  this.subdomains = const [],
+  this.tileRatio = 1,
+})</code></pre></li>
+<li><code>factory HttpTileSource.gibsTrueColor({DateTime? date})</code> <span class="mdoc">NASA GIBS daily true-colour mosaic (no API key, EPSG:4326 WMTS).
+
+Good demo for the 2:1 matrix set: coastlines must line up with the
+bundled MBTiles basemap when both are visible.</span></li>
+<li><pre class="msig"><code>factory HttpTileSource.osm() =&gt; HttpTileSource(
+  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  scheme: TileSchemeKind.webMercator,
+  minZoom: 0,
+  maxZoom: 18,
+  attribution: '© OpenStreetMap contributors',
+)</code></pre> <span class="mdoc">Plain XYZ raster (OSM). Only for smoke tests — respect the tile policy.</span></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>String urlFor(int z, int x, int y) =&gt; _urls.urlFor(z, x, y)</code></li>
+<li><code>Future&lt;TileFetchResult&gt; fetch(int z, int x, int y) async</code></li>
+<li><code>static Uint8List? decodeBase64(String value) =&gt; base64Decode(value)</code></li>
+<li><code>void dispose()</code></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>int get maxConcurrentRequests =&gt; GeoEngineTuning.maxParallelRequests</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final String urlTemplate</code></li>
+<li><code>final TileSchemeKind scheme</code></li>
+<li><code>final TileRowOrder rowOrder</code></li>
+<li><code>final int minZoom</code></li>
+<li><code>final int maxZoom</code></li>
+<li><code>final String attribution</code></li>
+<li><code>final Map&lt;String, String&gt; headers</code></li>
+<li><code>final String userAgent</code></li>
+<li><code>final List&lt;String&gt; subdomains</code> <span class="mdoc">Subdomains spread by <code>{prefix}</code> (empty disables it).</span></li>
+<li><code>final int tileRatio</code> <span class="mdoc">Pixel ratio rendered by <code>{ratio}</code> (<code>&amp;gt; 1</code> → <code>@Nx</code>).</span></li>
+<li><code>String? lastError</code> <span class="mdoc">Last transport error, surfaced in the debug HUD (DNS failure, timeout…).</span></li>
+<li><code>int? lastStatusCode</code> <span class="mdoc">Last HTTP status code that was <strong>not</strong> 200 (<code>null</code> after a success).</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-LatLngBounds">
+<h4 class="sym"><span class="nm">LatLngBounds</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class LatLngBounds</code></pre>
+<p>由西北角与东南角约束而成的矩形包围盒数据结构。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>factory LatLngBounds(LatLng corner1, LatLng corner2)</code> <span class="mdoc">Create new [LatLngBounds] by providing two corners. Both corners have to
+be on opposite sites but it doesn't matter which opposite corners or in
+what order the corners are provided.
+
+If you want to create [LatLngBounds] with raw values, use the
+[LatLngBounds.unsafe] constructor instead.</span></li>
+<li><pre class="msig"><code>LatLngBounds.unsafe({
+  required this.north,
+  required this.south,
+  required this.east,
+  required this.west,
+})  : assert(north &lt;= maxLatitude,
+  "The north latitude can't be bigger than $maxLatitude: $north"),
+  assert(north &gt;= minLatitude,
+  "The north latitude can't be smaller than $minLatitude: $north"),
+  assert(south &lt;= maxLatitude,
+  "The south latitude can't be bigger than $maxLatitude: $south"),
+  assert(south &gt;= minLatitude,
+  "The south latitude can't be smaller than $minLatitude: $south"),
+  assert(east &lt;= maxLongitude,
+  "The east longitude can't be bigger than $maxLongitude: $east"),
+  assert(east &gt;= minLongitude,
+  "The east longitude can't be smaller than $minLongitude: $east"),
+  assert(west &lt;= maxLongitude,
+  "The west longitude can't be bigger than $maxLongitude: $west"),
+  assert(west &gt;= minLongitude,
+  "The west longitude can't be smaller than $minLongitude: $west"),
+  assert(
+  north &gt;= south,
+  "The north latitude ($north) can't be smaller than the "
+  'south latitude ($south)',
+),
+  assert(
+  east &gt;= west,
+  "The west longitude ($west) can't be smaller than the "
+  'east longitude ($east)',
+)</code></pre> <span class="mdoc">Create a [LatLngBounds] instance from raw edge values.
+
+Potentially throws assertion errors if the coordinates exceed their max
+or min values or if coordinates are meant to be smaller / bigger
+but aren't.</span></li>
+<li><code>factory LatLngBounds.fromPoints(List&lt;LatLng&gt; points)</code> <span class="mdoc">Create a new [LatLngBounds] from a list of [LatLng] points. This
+calculates the bounding box of the provided points.</span></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>void extend(LatLng latLng)</code> <span class="mdoc">Expands bounding box by [latLng] coordinate point. This method mutates
+the bounds object on which it is called.</span></li>
+<li><code>void extendBounds(LatLngBounds bounds)</code> <span class="mdoc">Expands bounding box by other [bounds] object. If provided [bounds] object
+is smaller than current one, it is not shrunk. This method mutates
+the bounds object on which it is called.</span></li>
+<li><pre class="msig"><code>bool contains(LatLng point) =&gt;
+  point.longitude &gt;= west &amp;&amp;
+  point.longitude &lt;= east &amp;&amp;
+  point.latitude &gt;= south &amp;&amp;
+  point.latitude &lt;= north</code></pre> <span class="mdoc">Checks whether [point] is inside bounds</span></li>
+<li><pre class="msig"><code>bool containsBounds(LatLngBounds other) =&gt;
+  other.south &gt;= south &amp;&amp;
+  other.north &lt;= north &amp;&amp;
+  other.west &gt;= west &amp;&amp;
+  other.east &lt;= east</code></pre> <span class="mdoc">Checks whether the [other] bounding box is contained inside bounds.</span></li>
+<li><pre class="msig"><code>bool isOverlapping(LatLngBounds other) =&gt; !(south &gt; other.north ||
+  north &lt; other.south ||
+  east &lt; other.west ||
+  west &gt; other.east)</code></pre> <span class="mdoc">Checks whether at least one edge of the [other] bounding box  is
+overlapping with this bounding box.
+
+Bounding boxes that touch each other but don't overlap are counted as
+not overlapping.</span></li>
+<li><pre class="msig"><code>bool operator ==(Object other) =&gt;
+  identical(this, other) ||
+  (other is LatLngBounds &amp;&amp;
+  other.north == north &amp;&amp;
+  other.south == south &amp;&amp;
+  other.east == east &amp;&amp;
+  other.west == west)</code></pre></li>
+<li><pre class="msig"><code>String toString() =&gt;
+  'LatLngBounds(north: $north, south: $south, east: $east, west: $west)'</code></pre></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>LatLng get southWest =&gt; LatLng(south, west)</code> <span class="mdoc">Obtain coordinates of southwest corner of the bounds.
+
+Instead of using latitude or longitude of the corner, use [south] or
+[west] instead!</span></li>
+<li><code>LatLng get northEast =&gt; LatLng(north, east)</code> <span class="mdoc">Obtain coordinates of northeast corner of the bounds.
+
+Instead of using latitude or longitude of the corner, use [north] or
+[east] instead!</span></li>
+<li><code>LatLng get northWest =&gt; LatLng(north, west)</code> <span class="mdoc">Obtain coordinates of northwest corner of the bounds.
+
+Instead of using latitude or longitude of the corner, use [north] or
+[west] instead!</span></li>
+<li><code>LatLng get southEast =&gt; LatLng(south, east)</code> <span class="mdoc">Obtain coordinates of southeast corner of the bounds.
+
+Instead of using latitude or longitude of the corner, use [south] or
+[east] instead!</span></li>
+<li><code>LatLng get center</code> <span class="mdoc">Obtain coordinates of the bounds center</span></li>
+<li><code>LatLng get simpleCenter =&gt; LatLng((south + north) / 2, (east + west) / 2)</code> <span class="mdoc">Obtain simple coordinates of the bounds center</span></li>
+<li><code>int get hashCode =&gt; Object.hash(south, north, east, west)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>static const double minLatitude = -90</code> <span class="mdoc">minimum latitude value, south</span></li>
+<li><code>static const double maxLatitude = 90</code> <span class="mdoc">maximum latitude value, north</span></li>
+<li><code>static const double minLongitude = -180</code> <span class="mdoc">minimum longitude value, west</span></li>
+<li><code>static const double maxLongitude = 180</code> <span class="mdoc">maximum longitude value, east</span></li>
+<li><code>double north</code> <span class="mdoc">The latitude north edge of the bounds</span></li>
+<li><code>double south</code> <span class="mdoc">The latitude south edge of the bounds</span></li>
+<li><code>double east</code> <span class="mdoc">The longitude east edge of the bounds</span></li>
+<li><code>double west</code> <span class="mdoc">The longitude west edge of the bounds</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-MbtilesTileSource">
+<h4 class="sym"><span class="nm">MbtilesTileSource</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class MbtilesTileSource implements GlobeRasterSource</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>MbtilesTileSource._(this.id, this._db, this.minZoom, this.maxZoom)</code></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>static Future&lt;MbtilesTileSource&gt; open({
+  required String id,
+  required String assetPath,
+}) async</code></pre> <span class="mdoc">Open (and lazily copy) an MBTiles asset.</span></li>
+<li><code>Future&lt;TileFetchResult&gt; fetch(int z, int x, int y) async</code></li>
+<li><code>void dispose() =&gt; _db.dispose()</code></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>TileSchemeKind get scheme =&gt; TileSchemeKind.webMercator</code></li>
+<li><code>TileRowOrder get rowOrder =&gt; TileRowOrder.tmsBottomUp</code></li>
+<li><code>int get maxConcurrentRequests =&gt; GeoEngineTuning.sqliteParallelRequests</code></li>
+<li><code>String get attribution =&gt; 'MBTiles: $id'</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final String id</code></li>
+<li><code>final int minZoom</code></li>
+<li><code>final int maxZoom</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-MvtDiagnostics">
+<h4 class="sym"><span class="nm">MvtDiagnostics</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class MvtDiagnostics</code></pre>
+<p>图层当前正在做什么，供调试 HUD 使用。</p>
+<p><code>dataZoom</code> 是瓦片被请求的层级（0..source.maxZoom），即 <code>round(camera zoom)</code>——并非 HUD 通常显示的连续相机缩放。<code>readyCount</code> / <code>tileCount</code> 说明已解码的可见瓦片数量，<code>lastStatusCode</code> 在源为 HTTP 时透出传输状态。</p>
+<p><code>firstFailed</code> 标出 <code>failedCount</code> 背后那块瓦片（<code>z/x/y · status</code>）。没有它，“一块瓦片失败”的报告无法诊断——关键在于它告诉你那是边界瓦片、越界坐标还是限流。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const MvtDiagnostics({
+  required this.dataZoom,
+  required this.tileCount,
+  required this.readyCount,
+  required this.failedCount,
+  this.lastStatusCode,
+  this.firstFailed,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>bool operator ==(Object other) =&gt;
+  other is MvtDiagnostics &amp;&amp;
+  other.dataZoom == dataZoom &amp;&amp;
+  other.tileCount == tileCount &amp;&amp;
+  other.readyCount == readyCount &amp;&amp;
+  other.failedCount == failedCount &amp;&amp;
+  other.lastStatusCode == lastStatusCode &amp;&amp;
+  other.firstFailed == firstFailed</code></pre></li>
+<li><pre class="msig"><code>String toString() =&gt; 'MvtDiagnostics(z$dataZoom, $readyCount/$tileCount, '
+  'failed $failedCount${firstFailed == null ? '' : ' ($firstFailed)'}, '
+  'http $lastStatusCode)';</code></pre></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><pre class="msig"><code>int get hashCode =&gt; Object.hash(dataZoom, tileCount, readyCount, failedCount,
+  lastStatusCode, firstFailed)</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final int dataZoom</code></li>
+<li><code>final int tileCount</code></li>
+<li><code>final int readyCount</code></li>
+<li><code>final int failedCount</code></li>
+<li><code>final int? lastStatusCode</code></li>
+<li><code>final String? firstFailed</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-MvtVectorLayer">
+<h4 class="sym"><span class="nm">MvtVectorLayer</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class MvtVectorLayer extends StatefulWidget</code></pre>
+<p>通过 [StyleSpec] 渲染的矢量瓦片。</p>
+<p>传输以 [GeoTileSource] 注入，因此同一图层可配合 HTTP、MBTiles 或测试桩工作。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const MvtVectorLayer({
+  super.key,
+  required this.source,
+  this.style,
+  this.controller,
+  this.opacity = 1.0,
+  this.maxCachedTiles = 160,
+  this.renderWorldCopies = true,
+  this.sprite,
+  this.onDiagnostics,
+}) : assert(style != null || controller != null,
+  'provide either style or controller')</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>State&lt;MvtVectorLayer&gt; createState() =&gt; _MvtVectorLayerState()</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final GeoTileSource source</code></li>
+<li><code>final StyleSpec? style</code> <span class="mdoc">A static style. Ignored when [controller] is provided.</span></li>
+<li><code>final GeoStyleController? controller</code> <span class="mdoc">A runtime style controller (M1.4); the layer rebuilds on notify.</span></li>
+<li><code>final double opacity</code></li>
+<li><code>final int maxCachedTiles</code></li>
+<li><code>final bool renderWorldCopies</code> <span class="mdoc">Draw the world once per visible copy when panning past ±180°.
+
+Defaults to <code>true</code> (MapLibre's <code>renderWorldCopies</code>). Set <code>false</code> for a
+fixed single-world view: off-screen data is clipped instead of repeated.</span></li>
+<li><code>final SpriteAtlas? sprite</code> <span class="mdoc">Icons for <code>icon-image</code>; without one the labels are still drawn.</span></li>
+<li><code>final ValueChanged&lt;MvtDiagnostics&gt;? onDiagnostics</code> <span class="mdoc">Called after a frame when the diagnostics change (for a debug HUD).</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-SphericalGeometry">
+<h4 class="sym"><span class="nm">SphericalGeometry</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class SphericalGeometry extends TileGeometry</code></pre>
+<p>正交（3D 地球）几何。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const SphericalGeometry({
+  required this.projector,
+  required this.scheme,
+  this.meshBuilder,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>void drawTile(
+  Canvas canvas,
+  TileDraw draw, {
+  required CameraState camera,
+  required double opacity,
+})</code></pre></li>
+<li><pre class="msig"><code>void drawCap(
+  Canvas canvas,
+  CapDraw cap, {
+  required CameraState camera,
+  required double opacity,
+})</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final GeoProjector projector</code></li>
+<li><code>final TileSchemeKind scheme</code></li>
+<li><code>final TileMeshBuilder? meshBuilder</code> <span class="mdoc">Shared mesh cache — the unit meshes are projection independent, so they
+survive panning and zoom changes.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-SpriteAtlas">
+<h4 class="sym"><span class="nm">SpriteAtlas</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class SpriteAtlas</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>SpriteAtlas({required this.image, required this.index})</code></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>Rect sourceRect(SpriteIcon icon) =&gt;
+  Rect.fromLTWH(icon.x, icon.y, icon.width, icon.height)</code></pre> <span class="mdoc">Rectangular region of [image] occupied by [icon].</span></li>
+<li><pre class="msig"><code>static Future&lt;SpriteAtlas?&gt; decode({
+  required String json,
+  required List&lt;int&gt; imageBytes,
+}) async</code></pre> <span class="mdoc">Decodes a sprite from its JSON text and PNG bytes.
+
+Returns <code>null</code> when the image cannot be decoded — the caller keeps drawing
+labels and simply drops the icons, which is better than losing the layer.</span></li>
+<li><code>void dispose() =&gt; image.dispose()</code></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>int get length =&gt; index.length</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final ui.Image image</code> <span class="mdoc">The decoded atlas.</span></li>
+<li><code>final SpriteIndex index</code> <span class="mdoc">Where each icon lives inside [image].</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-StyleVectorLayer">
+<h4 class="sym"><span class="nm">StyleVectorLayer</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class StyleVectorLayer extends StatelessWidget</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const StyleVectorLayer({
+  super.key,
+  this.style,
+  this.controller,
+  required this.features,
+  this.opacity = 1.0,
+  this.sprite,
+})  : sources = null,
+  assert(style != null || controller != null,
+  'provide either style or controller')</code></pre></li>
+<li><pre class="msig"><code>const StyleVectorLayer.ofSources({
+  super.key,
+  this.style,
+  this.controller,
+  required Map&lt;String, List&lt;GeoJsonFeature&gt;&gt; this.sources,
+  this.opacity = 1.0,
+  this.sprite,
+})  : features = const [],
+  assert(style != null || controller != null,
+  'provide either style or controller')</code></pre> <span class="mdoc">Multi-source variant: each style layer draws only <code>sources[layer.source]</code>.
+
+Without this, a style with two sources draws every feature twice — a
+<code>line</code> layer would happily stroke the polygons that belong to a different
+source, which reads as a stray outline in the wrong colour.</span></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>Widget build(BuildContext context)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final StyleSpec? style</code> <span class="mdoc">A static style. Ignored when [controller] is provided.</span></li>
+<li><code>final GeoStyleController? controller</code> <span class="mdoc">A runtime style controller (M1.4); the layer rebuilds on notify.</span></li>
+<li><code>final List&lt;GeoJsonFeature&gt; features</code></li>
+<li><code>final Map&lt;String, List&lt;GeoJsonFeature&gt;&gt;? sources</code> <span class="mdoc">Features keyed by style source id (see [StyleVectorLayer.ofSources]).</span></li>
+<li><code>final double opacity</code></li>
+<li><code>final SpriteAtlas? sprite</code> <span class="mdoc">Icons for <code>icon-image</code>; without one the labels are still drawn.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-TileDraw">
+<h4 class="sym"><span class="nm">TileDraw</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class TileDraw</code></pre>
+<p>屏幕瓦片的一条绘制指令。</p>
+<p><code>geoKey</code> 是<strong>足迹</strong>（覆盖世界的哪一块），UV 值是 <code>image</code> 内部的<strong>纹理区域</strong>（以图像像素计）。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const TileDraw({
+  required this.geoKey,
+  required this.sourceKey,
+  required this.image,
+  required this.u0,
+  required this.v0,
+  required this.spanU,
+  required this.spanV,
+})</code></pre></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>ui.Rect get sourceRect =&gt; ui.Rect.fromLTWH(u0, v0, spanU, spanV)</code> <span class="mdoc">The source rect inside the image.</span></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final TileKey geoKey</code> <span class="mdoc">The tile whose geographic footprint is drawn.</span></li>
+<li><code>final TileKey sourceKey</code> <span class="mdoc">The tile the [image] was decoded from (an ancestor when falling back).</span></li>
+<li><code>final TileImage image</code></li>
+<li><code>final double u0</code> <span class="mdoc">Texture origin (image pixels).</span></li>
+<li><code>final double v0</code> <span class="mdoc">Texture origin (image pixels).</span></li>
+<li><code>final double spanU</code> <span class="mdoc">Texture extent (image pixels).</span></li>
+<li><code>final double spanV</code> <span class="mdoc">Texture extent (image pixels).</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-TileEngine">
+<h4 class="sym"><span class="nm">TileEngine</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class TileEngine extends ChangeNotifier</code></pre>
+<p>瓦片引擎：选择、请求、缓存、回退。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>TileEngine({required this.source})
+  : _policy = TileCachePolicy(
+  maxConcurrentRequests: source.maxConcurrentRequests,
+)</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>static String keyOf(TileKey key) =&gt; '${key.z}/${key.x}/${key.y}'</code></li>
+<li><code>TileImage? imageOf(TileKey key) =&gt; _images[keyOf(key)]</code> <span class="mdoc">The decoded image of a tile, or <code>null</code>.</span></li>
+<li><code>bool wasRequested(TileKey key) =&gt; _requested.contains(keyOf(key))</code> <span class="mdoc">Whether a tile was ever requested (MapLibre <code>wasRequested</code>).</span></li>
+<li><code>bool isLive(TileDraw draw) =&gt; _images[keyOf(draw.sourceKey)] == draw.image</code> <span class="mdoc">Whether the image behind a draw command is still cached.</span></li>
+<li><code>void request(TileKey key)</code> <span class="mdoc">Request a tile (idempotent; failures are graded, never blacklisted).
+
+The tile is <strong>enqueued</strong> on the [TileScheduler] priority queue and a pump
+dispatches as many as the concurrency gate allows. A tile that finds every
+slot busy is no longer silently dropped (and re-requested next frame) — it
+waits its turn and is dispatched the moment a slot frees.</span></li>
+<li><code>TileResolution resolve(TileKey key, int dataZoom)</code> <span class="mdoc">Resolve one ideal tile: exact → descendants → ancestors.
+
+The <strong>ideal</strong> tile is always requested (MapLibre <code>_updateRetainedTiles</code>
+→ <code>_addTile(idealID)</code>), <em>even when a fallback is already drawable</em>. This
+is not an optimisation detail: requesting only when nothing at all is
+cached means that the moment a coarse tile is in the cache — which is
+true after <strong>every</strong> zoom-in — the finer tile is never fetched and the
+view stays pinned to the coarse level forever.
+
+The <strong>ancestor chain</strong> is different: it escalates one level per round and
+only after the level below has actually failed (MapLibre
+<code>parentWasRequested</code>). Requesting the whole pyramid at once is what
+produced request storms (and the black holes that followed).</span></li>
+<li><code>List&lt;TileDraw&gt; drawsFor(TileKey key, int dataZoom)</code> <span class="mdoc">The drawing commands for one ideal tile.
+
+<em> exact hit → one command (whole texture);
+</em> loaded descendants → one command per child (they tile the footprint);
+<em> loaded ancestor → one command: the </em>fine* footprint with the
+ancestor's sub-rectangle as texture region.
+
+An empty list means "nothing available yet" — the caller keeps the
+previous frame underneath so the screen never flashes black.</span></li>
+<li><pre class="msig"><code>List&lt;CapDraw&gt; capDraws({
+  required CameraState camera,
+  required int dataZoom,
+})</code></pre> <span class="mdoc">The polar caps that should be drawn for the current camera.
+
+Only mercator has a blind spot (|lat| &gt; 85.05°); the cap stretches the
+edge pixel row of the first / last tile row onto the pole.
+
+Two regimes, chosen by [PolarCapBuilder.columnCountFor]:
+
+<em> <strong>wedge</strong> — the span is a handful of columns wide: each column is drawn
+as its own strip, textured with its own tile. Crisp, and the request
+count is proportional to the visible cap.
+</em> <strong>smeared</strong> — the span needs more columns than
+[GeoEngineTuning.maxPolarCapColumns] allows (the camera is inside the
+cap, so the arc wraps the pole): <strong>one</strong> strip, one image. Drawing a
+wedge per column there meant 4096 meshes per frame, each with a
+different picture, i.e. a sunburst across the whole viewport.</span></li>
+<li><pre class="msig"><code>double fadeOpacity(TileImage image, int now) =&gt;
+  selfFadeOpacity(image.loadedAt, now, fadeDurationMs)</code></pre> <span class="mdoc">Linear self-fade opacity (0→1) for [image] at wall-clock [now].
+
+A <code>null</code> [TileImage.loadedAt] (e.g. a pre-cached image) is always 1. This
+is the raster-only "load fade" of MapLibre — a tile is blended in from
+transparent to opaque instead of popping in (see <code>draw_raster.ts</code>
+<code>getSelfFadeValues</code>). The math lives in <code>geo_map_core</code> so it is
+unit-testable without <code>dart:ui</code>.</span></li>
+<li><code>bool hasFadingTiles([int? now])</code> <span class="mdoc">Whether any cached tile is still inside its fade window at [now].
+
+Drives the per-frame repaint loop: while this is true the layer keeps
+redrawing so the fade actually animates (MapLibre keeps <code>triggerRepaint</code>
+alive while <code>hasRasterTransition</code>).</span></li>
+<li><code>bool noteDataZoom(int dataZoom, int now)</code> <span class="mdoc">Record the data level of this frame. When it differs from the previous
+frame a cross-fade begins; returns true on the first frame of a transition.</span></li>
+<li><code>double crossFadeProgressAt(int now)</code> <span class="mdoc">Cross-fade progress (0→1) at [now]; 1 means the transition is complete.</span></li>
+<li><pre class="msig"><code>bool isCrossFading(int now) =&gt;
+  _crossFadeFrom != null &amp;&amp;
+  isWithinFade(_crossFadeStartMs, now, crossFadeDurationMs)</code></pre> <span class="mdoc">Whether a zoom cross-fade is still animating at [now].</span></li>
+<li><code>void noteRenderZoom(double zoom, int now)</code> <span class="mdoc">Record the render zoom of this frame. Any change of zoom marks the camera
+as zooming until [zoomSettleMs] after the last change.</span></li>
+<li><code>void beginFrame()</code> <span class="mdoc">Start a frame: the <em>previous</em> render set stays protected, the current one
+is rebuilt. Also reclaims stuck queue entries and pumps the queue once.</span></li>
+<li><code>void markRendered(TileKey key) =&gt; _policy.addRenderTile(keyOf(key))</code> <span class="mdoc">Mark a tile as drawn this frame (protects it from eviction).</span></li>
+<li><code>void commitFrame(List&lt;TileDraw&gt; draws)</code> <span class="mdoc">Promote the current frame's draws to the "previous" underlay.</span></li>
+<li><code>void noteCameraChange({required bool interacting})</code> <span class="mdoc">Note a camera interaction (used for the request debounce).</span></li>
+<li><code>void invalidate()</code> <span class="mdoc">Drop in-flight results of an older camera generation, and clear queued
+requests that belong to the old view.</span></li>
+<li><code>void dispose()</code></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>TileCachePolicy&lt;String&gt; get policy =&gt; _policy</code> <span class="mdoc">Failure / retry bookkeeping (exposed for the diagnostics HUD).</span></li>
+<li><code>TileScheduler get scheduler =&gt; _scheduler</code> <span class="mdoc">Scheduler (exposed so the host can flag camera gestures).</span></li>
+<li><code>int get imageCount =&gt; _images.length</code></li>
+<li><code>int get pendingCount =&gt; _pending.length</code></li>
+<li><code>int get inFlight =&gt; _policy.inFlight</code></li>
+<li><code>int get queuedCount =&gt; _scheduler.pendingCount</code></li>
+<li><code>int get requestedCount =&gt; _requested.length</code></li>
+<li><code>int get previousDrawCount =&gt; _previousDraws.length</code></li>
+<li><code>int? get crossFadeFromZoom =&gt; _crossFadeFrom</code> <span class="mdoc">The level currently being faded <em>from</em>, or null when not cross-fading.</span></li>
+<li><code>bool get isZooming =&gt; _nowMs &lt; _zoomingUntilMs</code> <span class="mdoc">Whether the camera is currently zooming (within [zoomSettleMs] of the last
+zoom change). Drives [planTileRequest]'s <code>suspendAncestors</code>.</span></li>
+<li><pre class="msig"><code>List&lt;TileDraw&gt; get previousDraws =&gt;
+  _previousDraws.where(isLive).toList(growable: false)</code></pre> <span class="mdoc">The draw commands of the previous frame (still cached ones only).</span></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final GlobeRasterSource source</code></li>
+<li><code>static const int fadeDurationMs = 300</code> <span class="mdoc">Self-fade window for a freshly decoded raster tile (ms). Mirrors
+MapLibre's <code>fadeDuration</code> (default 300).</span></li>
+<li><code>static const int crossFadeDurationMs = 300</code> <span class="mdoc">Duration of a zoom-level cross-fade (ms). Mirrors MapLibre's
+<code>fadeDuration</code>-based zoom transition between a parent and its child.</span></li>
+<li><code>VoidCallback? onCrossFadeStart</code> <span class="mdoc">Notifies the host when a new zoom transition starts, so it can begin the
+per-frame repaint loop even while the camera is otherwise stationary.</span></li>
+<li><code>static const int zoomSettleMs = 250</code> <span class="mdoc">How long after the last zoom change the camera is still treated as
+"zooming" (ms). Long enough to cover a continuous pinch, short enough to
+resume parent requests promptly after the finger lifts.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-TileGeometry">
+<h4 class="sym"><span class="nm">TileGeometry</span><span class="badge">类</span></h4>
+<pre class="sig"><code>abstract class TileGeometry</code></pre>
+<p>负责绘制一帧瓦片指令。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const TileGeometry()</code></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>void drawTile(
+  Canvas canvas,
+  TileDraw draw, {
+  required CameraState camera,
+  required double opacity,
+})</code></pre> <span class="mdoc">Draw one tile command.</span></li>
+<li><pre class="msig"><code>void drawCap(
+  Canvas canvas,
+  CapDraw cap, {
+  required CameraState camera,
+  required double opacity,
+})</code></pre> <span class="mdoc">Draw one polar cap command.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-TileImage">
+<h4 class="sym"><span class="nm">TileImage</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class TileImage</code></pre>
+<p>一张已解码的瓦片图像及其着色器。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>TileImage(this.image, this.shader, {this.loadedAt})</code></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>void dispose()</code></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>int get bytes =&gt; image.width * image.height * 4</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final ui.Image image</code></li>
+<li><code>final ui.ImageShader shader</code></li>
+<li><code>final int? loadedAt</code> <span class="mdoc">Wall-clock time (ms) the image finished decoding, used for the self
+fade-in (MapLibre <code>fadeDuration</code>). <code>null</code> marks a pre-settled image that
+always draws at full opacity.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-TileLayer">
+<h4 class="sym"><span class="nm">TileLayer</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class TileLayer extends StatefulWidget</code></pre>
+<p>同时服务于 2D 与 3D 的栅格瓦片图层。</p>
+<h5 class="doc-sub">引擎归属</h5>
+<p>图层接受一个可选的 <code>engine</code>。一旦注入，<strong>它归宿主所有</strong>，图层绝不得释放它：共享引擎的全部意义在于 2D 与 3D 图层能互换而不丢失缓存，而正在卸载的图层并不知道是否有兄弟图层即将以同一引擎挂载。</p>
+<p>若此处搞反，后果并不 subtle——释放被注入的引擎会杀死所有在途解码（<code>_decode</code> 在 <code>_disposed</code> 时丢弃该帧），下一次构建即断言<code>A TileEngine was used after being disposed</code>，表现为“地球底图永远加载不出来”。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const TileLayer({
+  required this.source,
+  required this.mode,
+  this.engine,
+  super.key,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>State&lt;TileLayer&gt; createState() =&gt; _TileLayerState()</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final GlobeRasterSource source</code></li>
+<li><code>final TileEngine? engine</code> <span class="mdoc">The shared engine. When <code>null</code> the layer creates one and owns it.</span></li>
+<li><code>final TileLayerMode mode</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-TileResolution">
+<h4 class="sym"><span class="nm">TileResolution</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class TileResolution</code></pre>
+<p>一块屏幕瓦片将如何被填充。</p>
+<ul><li><code>exact</code>（精确）— 请求的瓦片本身可用。</li><li><code>ancestor</code>（祖先）— 用更粗的一层瓦片拉伸覆盖请求的足迹；<code>ancestorDz</code> 说明它上溯了几级（UV 为子矩形）。</li><li><code>descendants</code>（后代）— 更细的瓦片已加载并覆盖请求的足迹（对应 MapLibre 的 <code>_retainLoadedChildren</code>）。</li></ul>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const TileResolution.exact(this.image)
+  : ancestor = null,
+  ancestorDz = 0,
+  descendants = const [],
+  descendantImages = const []</code></pre></li>
+<li><pre class="msig"><code>const TileResolution.ancestor(this.image, this.ancestorDz)
+  : ancestor = image,
+  descendants = const [],
+  descendantImages = const []</code></pre></li>
+<li><pre class="msig"><code>const TileResolution.descendants(this.descendants, this.descendantImages)
+  : image = null,
+  ancestor = null,
+  ancestorDz = 0</code></pre></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>bool get isEmpty =&gt; image == null &amp;&amp; ancestor == null &amp;&amp; descendants.isEmpty</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final TileImage? image</code> <span class="mdoc">The exact tile (if any).</span></li>
+<li><code>final TileImage? ancestor</code> <span class="mdoc">The ancestor used as a fallback (if any).</span></li>
+<li><code>final int ancestorDz</code> <span class="mdoc">How many zoom levels up [ancestor] is.</span></li>
+<li><code>final List&lt;TileKey&gt; descendants</code> <span class="mdoc">Loaded descendants covering the footprint.</span></li>
+<li><code>final List&lt;TileImage&gt; descendantImages</code> <span class="mdoc">The images of [descendants] (same order).</span></li>
+</ul>
+</div>
+</section>
+<h3 id="gm-grp-enum">枚举（Enums）<span class="cnt">3</span></h3>
+<div class="chips"><a class="chip" href="#gm-DebugTilesMode">DebugTilesMode</a><a class="chip" href="#gm-PopupAnchor">PopupAnchor</a><a class="chip" href="#gm-TileLayerMode">TileLayerMode</a></div>
+<section class="symbol" id="gm-DebugTilesMode">
+<h4 class="sym"><span class="nm">DebugTilesMode</span><span class="badge">枚举</span></h4>
+<pre class="sig"><code>enum DebugTilesMode</code></pre>
+</section>
+<section class="symbol" id="gm-PopupAnchor">
+<h4 class="sym"><span class="nm">PopupAnchor</span><span class="badge">枚举</span></h4>
+<pre class="sig"><code>enum PopupAnchor</code></pre>
+<p>浮层锚点——九宫格位置（MapLibre <code>PositionAnchor</code>）。</p>
+<p>决定卡片的哪条边 / 角贴住由 [GeoMapPopupController] 携带的锚点经纬度。默认 [bottom]，即保持现有的“卡片浮在锚点上方”行为。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>枚举值</h6>
+<ul>
+<li><code>center</code></li>
+<li><code>top</code></li>
+<li><code>bottom</code></li>
+<li><code>left</code></li>
+<li><code>right</code></li>
+<li><code>topLeft</code></li>
+<li><code>topRight</code></li>
+<li><code>bottomLeft</code></li>
+<li><code>bottomRight</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="gm-TileLayerMode">
+<h4 class="sym"><span class="nm">TileLayerMode</span><span class="badge">枚举</span></h4>
+<pre class="sig"><code>enum TileLayerMode</code></pre>
+<p>该图层以哪种投影渲染。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>枚举值</h6>
+<ul>
+<li><code>mercator</code></li>
+<li><code>globe</code></li>
+</ul>
+</div>
+</section>
+<h3 id="gm-grp-typedef">类型定义（Typedefs）<span class="cnt">1</span></h3>
+<div class="chips"><a class="chip" href="#gm-GlobeRasterSource">GlobeRasterSource</a></div>
+<section class="symbol" id="gm-GlobeRasterSource">
+<h4 class="sym"><span class="nm">GlobeRasterSource</span><span class="badge">类型定义</span></h4>
+<pre class="sig"><code>typedef GlobeRasterSource = GeoTileSource</code></pre>
+<p>为 [GeoTileSource] 保留的向后兼容别名。</p>
+</section>
+<h3 id="gm-grp-function">函数（Functions）<span class="cnt">7</span></h3>
+<div class="chips"><a class="chip" href="#gm-anchorOffsetFor">anchorOffsetFor</a><a class="chip" href="#gm-buildGraticule">buildGraticule</a><a class="chip" href="#gm-buildGreatCircle">buildGreatCircle</a><a class="chip" href="#gm-buildTissot">buildTissot</a><a class="chip" href="#gm-densifyPath">densifyPath</a><a class="chip" href="#gm-layoutAnchoredPopup">layoutAnchoredPopup</a><a class="chip" href="#gm-projectForPick">projectForPick</a></div>
+<section class="symbol" id="gm-anchorOffsetFor">
+<h4 class="sym"><span class="nm">anchorOffsetFor</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>Offset anchorOffsetFor(PopupAnchor side, Offset point, Size card, double tail)</code></pre>
+<p>卡片左上角的「未夹取」位置（九宫格）。</p>
+<p>给定投影后的锚点 [point] 与卡片尺寸 [card]，返回卡片左上角应处的逻辑像素， 再交由 [layoutAnchoredPopup] 夹进 [EdgeInsets]。[tail] 是卡片朝向锚点那一侧留出的小尖角间距（仅 top/bottom/left/right 用；四角忽略）。</p>
+<p>纯函数，可纯 Dart 断言测试。</p>
+</section>
+<section class="symbol" id="gm-buildGraticule">
+<h4 class="sym"><span class="nm">buildGraticule</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>List&lt;GlobePolyline&gt; buildGraticule({
+  double latStep = 15,
+  double lngStep = 15,
+  double maxLat = 80,
+  Color color = const Color(0x553DDC97),
+})</code></pre>
+<p>Meridians every [lngStep]° and parallels every [latStep]°.</p>
+<p>Parallels are sampled densely so they visibly curve — that curvature is the first thing to check when the projection is off.</p>
+</section>
+<section class="symbol" id="gm-buildGreatCircle">
+<h4 class="sym"><span class="nm">buildGreatCircle</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>GlobePolyline buildGreatCircle(
+  LatLng from,
+  LatLng to, {
+  Color color = const Color(0xCCFF1744),
+  double strokeWidth = 2,
+}) =&gt; GlobePolyline(points: [from, to], color: color, strokeWidth: strokeWidth)</code></pre>
+<p>Great-circle segment between two points (for checking long distances).</p>
+</section>
+<section class="symbol" id="gm-buildTissot">
+<h4 class="sym"><span class="nm">buildTissot</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>List&lt;GlobePolyline&gt; buildTissot({
+  double latStep = 30,
+  double lngStep = 30,
+  double radiusDeg = 9,
+  int segments = 48,
+  Color color = const Color(0x88FFC107),
+})</code></pre>
+<p>Tissot indicatrices: small equal-radius circles on the sphere.</p>
+<p>On a correct orthographic projection they stay circular at the disc centre and squash into ellipses towards the limb — an instant visual check for distortion and for wrong great-circle interpolation.</p>
+</section>
+<section class="symbol" id="gm-densifyPath">
+<h4 class="sym"><span class="nm">densifyPath</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>List&lt;LatLng&gt; densifyPath(List&lt;LatLng&gt; points, {double stepDeg = 2})</code></pre>
+<p>Densifies a path along great circles.</p>
+<p>flutter_map's polygon/polyline painters connect projected points with straight screen lines, so data fed to them must already be densified for the edges to follow the sphere.</p>
+</section>
+<section class="symbol" id="gm-layoutAnchoredPopup">
+<h4 class="sym"><span class="nm">layoutAnchoredPopup</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>AnchoredPopupLayout layoutAnchoredPopup({
+  required Offset anchor,
+  required Size viewport,
+  required Size card,
+  required EdgeInsets keepOut,
+  PopupAnchor anchorSide = PopupAnchor.bottom,
+  double tail = 8,
+  double slop = 32,
+})</code></pre>
+<p>计算卡片左上角：按 [anchorSide] 九宫格把卡片某一侧对准 [anchor]，再夹进 [keepOut]。</p>
+<p>[anchor] / [viewport] / [card] 都是逻辑像素。锚点出屏、非有限、或球面背半球哨兵（<code>±1e6</code>）时返回 <code>visible:false</code>。宿主据此决定是否渲染卡片。</p>
+<p>[anchorSide] 默认 [PopupAnchor.bottom]，与旧行为（底边中点对准锚点）一致； 其余八档见 [PopupAnchor]。</p>
+</section>
+<section class="symbol" id="gm-projectForPick">
+<h4 class="sym"><span class="nm">projectForPick</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>Vec2? projectForPick(MapProjectionDelegate delegate, LatLng point)</code></pre>
+<p>The screen position of [point] for picking, or <code>null</code> when it cannot be picked (the far side of the globe, or a non-finite coordinate).</p>
+</section>
+<h2 id="core-lib">库 <code>package:geo_map_core</code>（再导出部分）</h2>
+<h3 id="core-grp-class">类（Classes）<span class="cnt">19</span></h3>
+<div class="chips"><a class="chip" href="#core-Expr">Expr</a><a class="chip" href="#core-ExpressionContext">ExpressionContext</a><a class="chip" href="#core-GeoEngineTuning">GeoEngineTuning</a><a class="chip" href="#core-GeoJsonFeature">GeoJsonFeature</a><a class="chip" href="#core-GeoJsonGeometry">GeoJsonGeometry</a><a class="chip" href="#core-GeoTileSource">GeoTileSource</a><a class="chip" href="#core-LineStringGeometry">LineStringGeometry</a><a class="chip" href="#core-MultiLineStringGeometry">MultiLineStringGeometry</a><a class="chip" href="#core-MultiPolygonGeometry">MultiPolygonGeometry</a><a class="chip" href="#core-PointGeometry">PointGeometry</a><a class="chip" href="#core-PolygonGeometry">PolygonGeometry</a><a class="chip" href="#core-PropertyValue">PropertyValue</a><a class="chip" href="#core-SpriteIcon">SpriteIcon</a><a class="chip" href="#core-SpriteIndex">SpriteIndex</a><a class="chip" href="#core-StyleColor">StyleColor</a><a class="chip" href="#core-StyleDocument">StyleDocument</a><a class="chip" href="#core-StyleLayer">StyleLayer</a><a class="chip" href="#core-StyleSpec">StyleSpec</a><a class="chip" href="#core-TileFetchResult">TileFetchResult</a></div>
+<section class="symbol" id="core-Expr">
+<h4 class="sym"><span class="nm">Expr</span><span class="badge">类</span></h4>
+<pre class="sig"><code>abstract class Expr</code></pre>
+<p>一个已解析的表达式节点。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const Expr()</code></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>Object? evaluate(ExpressionContext ctx)</code></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>bool get isFeatureConstant</code> <span class="mdoc">True when the value does <strong>not</strong> depend on feature properties.</span></li>
+<li><code>bool get isZoomConstant</code> <span class="mdoc">True when the value does <strong>not</strong> depend on the zoom.</span></li>
+<li><code>bool get isConstant =&gt; isFeatureConstant &amp;&amp; isZoomConstant</code> <span class="mdoc">True when this is a compile-time constant.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-ExpressionContext">
+<h4 class="sym"><span class="nm">ExpressionContext</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class ExpressionContext</code></pre>
+<p>表达式的求值输入。</p>
+<p>对应 MapLibre 的 <code>EvaluationParameters</code> / <code>EvaluationContext</code>：<code>zoom</code> 是 spike 阶段唯一需要的全局量；<code>properties</code> 替代要素的属性表（这正是 <code>get</code>/<code>has</code> 让表达式依赖要素的原因）。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const ExpressionContext({
+  required this.zoom,
+  this.properties = const {},
+  this.variables = const {},
+})</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final double zoom</code></li>
+<li><code>final Map&lt;String, Object?&gt; properties</code></li>
+<li><code>final Map&lt;String, Object?&gt; variables</code> <span class="mdoc">Bindings introduced by [<code>let</code>] expressions.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-GeoEngineTuning">
+<h4 class="sym"><span class="nm">GeoEngineTuning</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoEngineTuning</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const GeoEngineTuning._()</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>static const double epsDepth = 0.02</code> <span class="mdoc">Depth below which a vertex counts as "behind the horizon".</span></li>
+<li><code>static const double maxCameraLatitude = 89.999</code> <span class="mdoc">Camera latitude clamp — keeps the orthographic camera out of the exact pole
+(avoids NaN in <code>1/cos(lat)</code> compensation and degenerate tangents).</span></li>
+<li><code>static const double pickZoomCosFloor = 0.2</code> <span class="mdoc">Floor for <code>cos(lat)</code> when picking a tile zoom near the poles.</span></li>
+<li><code>static const int tileSize = 256</code> <span class="mdoc">Raster tile edge in pixels. Single source of truth.</span></li>
+<li><code>static const double tileSizeD = tileSize * 1.0</code> <span class="mdoc">[tileSize] as a double (const-usable default parameter).</span></li>
+<li><code>static const double densifyPixelError = 0.5</code> <span class="mdoc">Maximum chord error allowed when densifying great circles (screen px).</span></li>
+<li><code>static const double selectMargin = 64</code> <span class="mdoc">Extra margin (px) used when testing whether a tile touches the viewport.</span></li>
+<li><code>static const int subdivMin = 6</code> <span class="mdoc">Mesh subdivision bounds per tile / image quad.</span></li>
+<li><code>static const int subdivMax = 16</code></li>
+<li><code>static const double subdivPx = 20</code> <span class="mdoc">Target number of screen pixels per subdivision cell.</span></li>
+<li><code>static const int cacheBudgetBytes = 96 &lt;&lt; 20</code> <span class="mdoc">Raster cache budget (bytes) — replaces the old "384 images" count cap.</span></li>
+<li><code>static const int defaultTileBytes = 256 * 1024</code> <span class="mdoc">Default estimated bytes per decoded tile, used before a real measurement.</span></li>
+<li><code>static const double tapSlopPx = 12</code> <span class="mdoc">Tap slop and fling thresholds for the gesture layer.</span></li>
+<li><code>static const int tapMaxMillis = 400</code></li>
+<li><code>static const int doubleTapMaxMillis = 320</code></li>
+<li><code>static const double flingMinVelocityPxPerSec = 600</code></li>
+<li><code>static const int tileRequestDebounceMillis = 120</code> <span class="mdoc">Debounce before issuing new tile requests while the camera is moving.</span></li>
+<li><code>static const int maxUnderzooming = 10</code> <span class="mdoc">How many zoom levels up the ancestor chain may be used as a fallback.
+
+MapLibre: <code>maxUnderzooming</code> (default 10). The chain stops at
+<code>source.minzoom</code>.</span></li>
+<li><code>static const int maxOverzooming = 3</code> <span class="mdoc">How many zoom levels down the descendant chain may be used as a fallback.
+
+MapLibre: <code>maxOverzooming</code> (default 3). The whole generation must be
+present before it is drawn.</span></li>
+<li><code>static const int tileCacheZoomLevels = 5</code> <span class="mdoc">Zoom levels kept in the cache (MapLibre <code>MAX_TILE_CACHE_ZOOM_LEVELS</code>).</span></li>
+<li><code>static const int maxParallelRequests = 16</code> <span class="mdoc">Maximum concurrent raster tile requests (MapLibre
+<code>MAX_PARALLEL_IMAGE_REQUESTS</code>).</span></li>
+<li><code>static const int sqliteParallelRequests = 4</code> <span class="mdoc">Concurrent requests for a sqlite-backed source — a single file handle
+does not benefit from more.</span></li>
+<li><code>static const int requestTimeoutMs = 15000</code> <span class="mdoc">TCP connect timeout for tile requests.</span></li>
+<li><code>static const int bodyTimeoutMs = 30000</code> <span class="mdoc">Timeout for reading the response body of a tile request.</span></li>
+<li><code>static const int pendingTimeoutMs = 45000</code> <span class="mdoc">A pending request that never completed within this window is reclaimed.</span></li>
+<li><code>static const int maxTrackedTileKeys = 4096</code> <span class="mdoc">Upper bound on the number of tracked request/failure keys.</span></li>
+<li><code>static const int networkFailureTtlMs = 3000</code> <span class="mdoc">Network / timeout failures are transient — retry quickly.</span></li>
+<li><code>static const int notFoundTtlMs = 30000</code> <span class="mdoc">A missing tile (HTTP 404) stays missing for longer: MapLibre does not
+blacklist it, it just falls back to parent/child tiles.</span></li>
+<li><code>static const int decodeFailureTtlMs = 8000</code> <span class="mdoc">Decode failures (corrupt payload) — retry, but not immediately.</span></li>
+<li><code>static const int failureBackoffBaseMs = 1000</code> <span class="mdoc">Exponential backoff base for repeated failures of the same tile
+(MapLibre <code>tile.ts</code>: <code>1000 * 2^(n-1)</code>).</span></li>
+<li><code>static const int failureBackoffMaxMs = 30000</code> <span class="mdoc">Cap for the exponential backoff.</span></li>
+<li><code>static const int maxPolarCapColumns = 64</code> <span class="mdoc">Upper bound on the number of <strong>separate meshes</strong> used to draw one polar
+cap.
+
+Two regimes exist and this constant is the switch between them:
+
+<em> <strong>wedge regime</strong> (<code>columns ≤ maxPolarCapColumns</code>) — every visible grid
+column gets its own strip textured with that column's own tile. This is
+the crisp path and it is what a cap seen from </em>outside<em> looks like.
+</em> <strong>smeared regime</strong> (<code>columns &amp;gt; maxPolarCapColumns</code>) — the whole visible
+arc is drawn as <strong>one</strong> strip with a single texture. The camera is
+inside the cap here, the arc wraps all the way around the pole, and a
+per-column wedge would mean thousands of meshes each sampling a
+different image: that is precisely the radial sunburst that used to
+fill the viewport.
+
+The bound therefore has to stay small enough that the wedge regime stays
+cheap, and the smeared regime is only reached where the cap is a
+featureless blob anyway.</span></li>
+<li><code>static const double featurePickRadiusPx = 24</code> <span class="mdoc">Default screen-space pick radius (px) for point features.
+
+24 px is roughly twice the on-screen diameter of a 12 px symbol, so a
+dot is grabbable without demanding pixel accuracy. Hosts may override it
+per query or per feature.</span></li>
+<li><code>static const double hiddenPointSentinelPx = 1e6</code> <span class="mdoc">Magnitude at which a projected screen coordinate is treated as the
+"not drawable" sentinel.
+
+The globe projector returns <code>(-1e6, -1e6)</code> for the far side of the
+sphere. Such a coordinate is finite, so a naive distance check would
+treat it as "very far away" rather than "not pickable" — both are
+rejected, but the sentinel must be detected explicitly.</span></li>
+<li><code>static const double featureBoundaryEpsilonDeg = 1e-7</code> <span class="mdoc">Tolerance (degrees) for "the tap is exactly on the ring boundary".
+
+1e-7° is about a centimetre — it only absorbs floating-point noise, it
+does not widen the shape.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-GeoJsonFeature">
+<h4 class="sym"><span class="nm">GeoJsonFeature</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class GeoJsonFeature</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const GeoJsonFeature({
+  this.id,
+  this.properties = const {},
+  required this.geometry,
+})</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final String? id</code></li>
+<li><code>final Map&lt;String, Object?&gt; properties</code></li>
+<li><code>final GeoJsonGeometry geometry</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-GeoJsonGeometry">
+<h4 class="sym"><span class="nm">GeoJsonGeometry</span><span class="badge">类</span></h4>
+<pre class="sig"><code>sealed class GeoJsonGeometry</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const GeoJsonGeometry()</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-GeoTileSource">
+<h4 class="sym"><span class="nm">GeoTileSource</span><span class="badge">类</span></h4>
+<pre class="sig"><code>abstract class GeoTileSource</code></pre>
+<p>栅格瓦片提供者（HTTP、MBTiles 等）。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>方法</h6>
+<ul>
+<li><code>Future&lt;TileFetchResult&gt; fetch(int z, int x, int y)</code> <span class="mdoc">Fetch one tile. [x] / [y] are canonical XYZ (row 0 = north); the source
+converts to its own wire order internally.</span></li>
+<li><code>void dispose()</code> <span class="mdoc">Release any resource held by the source (sqlite handle, http client).</span></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>int get minZoom</code></li>
+<li><code>int get maxZoom</code></li>
+<li><code>TileSchemeKind get scheme</code> <span class="mdoc">The tile grid geometry of this source.</span></li>
+<li><code>TileRowOrder get rowOrder =&gt; TileRowOrder.xyzTopDown</code> <span class="mdoc">Row order used <strong>on the wire</strong> (TMS / MBTiles count rows from south).</span></li>
+<li><code>int get maxConcurrentRequests =&gt; GeoEngineTuning.maxParallelRequests</code> <span class="mdoc">How many requests may be in flight at the same time. A local sqlite file
+gains nothing from parallel reads, so MBTiles overrides this with a much
+smaller number.</span></li>
+<li><code>String get attribution</code> <span class="mdoc">Attribution shown in debug UI.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-LineStringGeometry">
+<h4 class="sym"><span class="nm">LineStringGeometry</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class LineStringGeometry extends GeoJsonGeometry</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const LineStringGeometry(this.points)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final List&lt;LatLng&gt; points</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-MultiLineStringGeometry">
+<h4 class="sym"><span class="nm">MultiLineStringGeometry</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class MultiLineStringGeometry extends GeoJsonGeometry</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const MultiLineStringGeometry(this.lines)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final List&lt;List&lt;LatLng&gt;&gt; lines</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-MultiPolygonGeometry">
+<h4 class="sym"><span class="nm">MultiPolygonGeometry</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class MultiPolygonGeometry extends GeoJsonGeometry</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const MultiPolygonGeometry(this.polygons)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final List&lt;List&lt;List&lt;LatLng&gt;&gt;&gt; polygons</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-PointGeometry">
+<h4 class="sym"><span class="nm">PointGeometry</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class PointGeometry extends GeoJsonGeometry</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const PointGeometry(this.point)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final LatLng point</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-PolygonGeometry">
+<h4 class="sym"><span class="nm">PolygonGeometry</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class PolygonGeometry extends GeoJsonGeometry</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const PolygonGeometry(this.rings)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final List&lt;List&lt;LatLng&gt;&gt; rings</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-PropertyValue">
+<h4 class="sym"><span class="nm">PropertyValue</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class PropertyValue</code></pre>
+<p>一个绘制 / 布局值：常量，或每次绘制时求值的表达式。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>PropertyValue._(this._constant, this._expr, this.isColor)</code></li>
+<li><code>factory PropertyValue.fromJson(Object? json, {bool isColor = false})</code></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>Object? evaluate(ExpressionContext ctx)</code></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>bool get isExpression =&gt; _expr != null</code></li>
+<li><code>bool get isFeatureConstant =&gt; _expr?.isFeatureConstant ?? true</code> <span class="mdoc">True when the value does not depend on feature properties.</span></li>
+<li><code>bool get isZoomConstant =&gt; _expr?.isZoomConstant ?? true</code> <span class="mdoc">True when the value does not depend on zoom.</span></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final bool isColor</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-SpriteIcon">
+<h4 class="sym"><span class="nm">SpriteIcon</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class SpriteIcon</code></pre>
+<p>图集中某个图标的矩形区域。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>const SpriteIcon({
+  required this.x,
+  required this.y,
+  required this.width,
+  required this.height,
+  this.pixelRatio = 1,
+  this.sdf = false,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>String toString() =&gt;
+  'SpriteIcon($x,$y ${width}x$height @${pixelRatio}x)'</code></pre></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>double get displayWidth =&gt; pixelRatio &lt;= 0 ? width : width / pixelRatio</code> <span class="mdoc">Size on screen at <code>icon-size: 1</code>, i.e. sprite pixels divided by density.</span></li>
+<li><code>double get displayHeight =&gt; pixelRatio &lt;= 0 ? height : height / pixelRatio</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final double x</code></li>
+<li><code>final double y</code></li>
+<li><code>final double width</code></li>
+<li><code>final double height</code></li>
+<li><code>final double pixelRatio</code></li>
+<li><code>final bool sdf</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-SpriteIndex">
+<h4 class="sym"><span class="nm">SpriteIndex</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class SpriteIndex</code></pre>
+<p>单个精灵的 名称 → 图标 查找表。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const SpriteIndex(this.icons)</code></li>
+<li><code>factory SpriteIndex.parse(Object? json)</code> <span class="mdoc">Parses the sprite JSON, skipping entries that are malformed.
+
+Tolerant on purpose: a sprite atlas is third-party data, and one broken
+entry should cost that icon, not the whole layer.</span></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>int get length =&gt; icons.length</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final Map&lt;String, SpriteIcon&gt; icons</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-StyleColor">
+<h4 class="sym"><span class="nm">StyleColor</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class StyleColor</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const StyleColor(this.r, this.g, this.b, [this.a = 255])</code></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>static StyleColor parse(Object? value)</code> <span class="mdoc">Parse a CSS color: <code>#rgb</code>, <code>#rrggbb</code>, <code>#rrggbbaa</code>, <code>rgb()</code>, <code>rgba()</code>, a
+few named colors, an <code>0xAARRGGBB</code> int, or an existing [StyleColor].</span></li>
+<li><pre class="msig"><code>static StyleColor lerp(StyleColor x, StyleColor y, double t) =&gt; StyleColor(
+  (x.r + (y.r - x.r) * t).round(),
+  (x.g + (y.g - x.g) * t).round(),
+  (x.b + (y.b - x.b) * t).round(),
+  (x.a + (y.a - x.a) * t).round(),
+)</code></pre></li>
+<li><code>String toCss()</code></li>
+<li><pre class="msig"><code>bool operator ==(Object other) =&gt;
+  other is StyleColor &amp;&amp;
+  other.r == r &amp;&amp;
+  other.g == g &amp;&amp;
+  other.b == b &amp;&amp;
+  other.a == a</code></pre></li>
+<li><code>String toString() =&gt; 'StyleColor(${toCss()})'</code></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>int get hashCode =&gt; Object.hash(r, g, b, a)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final int r</code></li>
+<li><code>final int g</code></li>
+<li><code>final int b</code></li>
+<li><code>final int a</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-StyleDocument">
+<h4 class="sym"><span class="nm">StyleDocument</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class StyleDocument</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>StyleDocument({
+  this.version = 8,
+  Map&lt;String, Map&lt;String, Object?&gt;&gt; sources = const {},
+  List&lt;StyleLayer&gt; layers = const [],
+})  : sources = Map.unmodifiable(sources),
+  layers = List.unmodifiable(layers)</code></pre></li>
+<li><pre class="msig"><code>factory StyleDocument.fromSpec(StyleSpec spec) =&gt; StyleDocument(
+  version: spec.version,
+  sources: spec.sources,
+  layers: spec.layers,
+)</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>StyleSpec toSpec() =&gt;
+  StyleSpec(version: version, sources: sources, layers: layers)</code></pre></li>
+<li><code>StyleLayer? layer(String id)</code></li>
+<li><code>StyleDocument addSource(String id, Map&lt;String, Object?&gt; source)</code></li>
+<li><code>StyleDocument removeSource(String id)</code></li>
+<li><code>StyleDocument addLayer(StyleLayer layer, {String? before})</code></li>
+<li><code>StyleDocument removeLayer(String id)</code></li>
+<li><code>StyleDocument moveLayer(String id, {String? before})</code></li>
+<li><pre class="msig"><code>StyleDocument setPaintProperty(String id, String name, Object? value) =&gt;
+  _updateLayer(id, (l) {
+  final def = layerPaintDefs[l.type]?[name];
+  return l.copyWith(paint: {
+  ...l.paint,
+  name: PropertyValue.fromJson(
+  value,
+  isColor: def?.type == StylePropertyType.color,
+),
+});
+})</code></pre></li>
+<li><pre class="msig"><code>StyleDocument setLayoutProperty(String id, String name, Object? value) =&gt;
+  _updateLayer(id, (l) {
+  final def = layerLayoutDefs[l.type]?[name];
+  return l.copyWith(layout: {
+  ...l.layout,
+  name: PropertyValue.fromJson(
+  value,
+  isColor: def?.type == StylePropertyType.color,
+),
+});
+})</code></pre></li>
+<li><pre class="msig"><code>StyleDocument setFilter(String id, Object? filter) =&gt;
+  _updateLayer(id, (l) =&gt; l.copyWith(filter: compileFilter(filter)))</code></pre></li>
+<li><pre class="msig"><code>StyleDocument setLayerZoomRange(String id, num min, num max) =&gt;
+  _updateLayer(id, (l) =&gt; l.copyWith(minZoom: min, maxZoom: max))</code></pre></li>
+<li><pre class="msig"><code>StyleDocument setVisibility(String id, String visibility) =&gt;
+  setLayoutProperty(id, 'visibility', visibility)</code></pre></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final int version</code></li>
+<li><code>final Map&lt;String, Map&lt;String, Object?&gt;&gt; sources</code></li>
+<li><code>final List&lt;StyleLayer&gt; layers</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-StyleLayer">
+<h4 class="sym"><span class="nm">StyleLayer</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class StyleLayer</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>StyleLayer({
+  required this.id,
+  required this.type,
+  this.source,
+  this.sourceLayer,
+  this.minZoom,
+  this.maxZoom,
+  this.paint = const {},
+  this.layout = const {},
+  this.filter = matchAllFeatures,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>bool matches(Map&lt;String, Object?&gt; properties, double zoom) =&gt;
+  filter(properties, zoom)</code></pre> <span class="mdoc">Whether this layer wants [properties] at [zoom].
+
+The zoom argument exists because MapLibre lets a filter reference
+<code>["zoom"]</code>; see <code>style_filter.dart</code>.</span></li>
+<li><code>static StyleLayer parse(Map&lt;String, Object?&gt; json)</code></li>
+<li><code>Object? valueOf(String name, ExpressionContext ctx)</code> <span class="mdoc">Evaluate any paint or layout property (paint first, then layout).</span></li>
+<li><code>double? number(String name, ExpressionContext ctx)</code></li>
+<li><code>StyleColor? color(String name, ExpressionContext ctx)</code></li>
+<li><pre class="msig"><code>String? string(String name, ExpressionContext ctx) =&gt;
+  valueOf(name, ctx)?.toString()</code></pre></li>
+<li><code>bool? boolean(String name, ExpressionContext ctx)</code></li>
+<li><code>bool isVisibleAt(double zoom)</code> <span class="mdoc">MapLibre visibility: <code>minzoom &amp;lt;= zoom &amp;lt; maxzoom</code> and <code>visibility != none</code>.</span></li>
+<li><pre class="msig"><code>StyleLayer copyWith({
+  Map&lt;String, PropertyValue&gt;? paint,
+  Map&lt;String, PropertyValue&gt;? layout,
+  num? minZoom,
+  num? maxZoom,
+  FeaturePredicate? filter,
+}) =&gt;
+  StyleLayer(
+  id: id,
+  type: type,
+  source: source,
+  sourceLayer: sourceLayer,
+  minZoom: minZoom ?? this.minZoom,
+  maxZoom: maxZoom ?? this.maxZoom,
+  paint: paint ?? this.paint,
+  layout: layout ?? this.layout,
+  filter: filter ?? this.filter,
+)</code></pre></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>bool get isSupported =&gt; type == 'fill' || type == 'line' || type == 'symbol'</code> <span class="mdoc">Whether the M1 renderer can draw this layer type.</span></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final String id</code></li>
+<li><code>final String type</code> <span class="mdoc"><code>fill</code> or <code>line</code> in the M1 subset (other types parse but are not drawn).</span></li>
+<li><code>final String? source</code></li>
+<li><code>final String? sourceLayer</code></li>
+<li><code>final num? minZoom</code></li>
+<li><code>final num? maxZoom</code></li>
+<li><code>final Map&lt;String, PropertyValue&gt; paint</code></li>
+<li><code>final Map&lt;String, PropertyValue&gt; layout</code></li>
+<li><code>final FeaturePredicate filter</code> <span class="mdoc">Compiled filter over feature properties (always-true when absent).
+
+Call it through [matches], which supplies the zoom.</span></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-StyleSpec">
+<h4 class="sym"><span class="nm">StyleSpec</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class StyleSpec</code></pre>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><pre class="msig"><code>StyleSpec({
+  required this.version,
+  required this.sources,
+  required this.layers,
+})</code></pre></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><code>static StyleSpec parse(Map&lt;String, Object?&gt; json)</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final int version</code></li>
+<li><code>final Map&lt;String, Map&lt;String, Object?&gt;&gt; sources</code></li>
+<li><code>final List&lt;StyleLayer&gt; layers</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-TileFetchResult">
+<h4 class="sym"><span class="nm">TileFetchResult</span><span class="badge">类</span></h4>
+<pre class="sig"><code>class TileFetchResult</code></pre>
+<p>单次瓦片请求的结果。</p>
+<p>MapLibre 在“服务器声明无此瓦片”（404——永不黑名单，引擎持续回退）与“请求中断”（网络错误——快速重试）之间划出硬界限。把两者都坍缩成 <code>null</code>正是旧引擎在两次失败后把瓦片拉黑的原因。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>构造</h6>
+<ul>
+<li><code>const TileFetchResult.ok(this.bytes) : failure = null</code></li>
+<li><code>const TileFetchResult.failed(this.failure) : bytes = null</code></li>
+</ul>
+<h6>方法</h6>
+<ul>
+<li><pre class="msig"><code>String toString() =&gt; isOk
+  ? 'TileFetchResult.ok(${bytes?.length} bytes)'
+  : 'TileFetchResult.failed($failure)'</code></pre></li>
+</ul>
+<h6>取值</h6>
+<ul>
+<li><code>bool get isOk =&gt; failure == null &amp;&amp; bytes != null</code></li>
+<li><code>bool get isNotFound =&gt; failure == TileFailureKind.notFound</code></li>
+</ul>
+<h6>字段</h6>
+<ul>
+<li><code>final Uint8List? bytes</code> <span class="mdoc">The decoded payload, or <code>null</code> when [failure] is set.</span></li>
+<li><code>final TileFailureKind? failure</code> <span class="mdoc">Why the tile could not be produced (<code>null</code> on success).</span></li>
+</ul>
+</div>
+</section>
+<h3 id="core-grp-enum">枚举（Enums）<span class="cnt">4</span></h3>
+<div class="chips"><a class="chip" href="#core-GeoGeometryKind">GeoGeometryKind</a><a class="chip" href="#core-TileFailureKind">TileFailureKind</a><a class="chip" href="#core-TileRowOrder">TileRowOrder</a><a class="chip" href="#core-TileSchemeKind">TileSchemeKind</a></div>
+<section class="symbol" id="core-GeoGeometryKind">
+<h4 class="sym"><span class="nm">GeoGeometryKind</span><span class="badge">枚举</span></h4>
+<pre class="sig"><code>enum GeoGeometryKind</code></pre>
+<p>一次查询可考量的几何种类。</p>
+</section>
+<section class="symbol" id="core-TileFailureKind">
+<h4 class="sym"><span class="nm">TileFailureKind</span><span class="badge">枚举</span></h4>
+<pre class="sig"><code>enum TileFailureKind</code></pre>
+<p>一块瓦片为何无法生成。</p>
+<p>区分很关键：缺失的瓦片（404）<strong>不得</strong>被黑名单（MapLibre <code>tile_manager.ts</code> 的 <code>_loadTile</code> 只是再次 <code>update()</code> 并持续回退到父 / 子瓦片），而网络错误是瞬时的，应快速重试。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>枚举值</h6>
+<ul>
+<li><code>notFound</code></li>
+<li><code>network</code></li>
+<li><code>decode</code></li>
+<li><code>empty</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-TileRowOrder">
+<h4 class="sym"><span class="nm">TileRowOrder</span><span class="badge">枚举</span></h4>
+<pre class="sig"><code>enum TileRowOrder</code></pre>
+<p><strong>线上</strong>使用的行序。</p>
+<p>内部（规范）行序始终是 XYZ——第 0 行是网格的北缘。某些服务（TMS、MBTiles）从南边数行，因此在构建 URL 或从本地文件读取行时必须翻转行索引。</p>
+<p>MapLibre 用一行实现：<code>tile_id.ts</code> L48 <code>y = scheme === 'tms' ? 2^z - y - 1 : y</code>。</p>
+<div class="members">
+<h5>成员</h5>
+<h6>枚举值</h6>
+<ul>
+<li><code>xyzTopDown</code></li>
+<li><code>tmsBottomUp</code></li>
+</ul>
+</div>
+</section>
+<section class="symbol" id="core-TileSchemeKind">
+<h4 class="sym"><span class="nm">TileSchemeKind</span><span class="badge">枚举</span></h4>
+<pre class="sig"><code>enum TileSchemeKind</code></pre>
+</section>
+<h3 id="core-grp-typedef">类型定义（Typedefs）<span class="cnt">1</span></h3>
+<div class="chips"><a class="chip" href="#core-FeaturePredicate">FeaturePredicate</a></div>
+<section class="symbol" id="core-FeaturePredicate">
+<h4 class="sym"><span class="nm">FeaturePredicate</span><span class="badge">类型定义</span></h4>
+<pre class="sig"><code>typedef FeaturePredicate = bool Function(
+  Map&lt;String, Object?&gt; properties, [
+  double? zoom,
+])</code></pre>
+<p>在某一缩放层级上对单个要素的谓词。</p>
+<p>zoom 可选，因此没有相机的调用方（测试、从不提及 <code>[\"zoom\"]</code> 的过滤器）仍可询问 <code>matches(props)</code>；此时含义为“zoom 0”。</p>
+</section>
+<h3 id="core-grp-function">函数（Functions）<span class="cnt">9</span></h3>
+<div class="chips"><a class="chip" href="#core-compileFilter">compileFilter</a><a class="chip" href="#core-normalizeRingWinding">normalizeRingWinding</a><a class="chip" href="#core-parseGeoJsonFeatures">parseGeoJsonFeatures</a><a class="chip" href="#core-pointInMultiPolygon">pointInMultiPolygon</a><a class="chip" href="#core-pointInPolygon">pointInPolygon</a><a class="chip" href="#core-pointInRing">pointInRing</a><a class="chip" href="#core-ringSignedArea">ringSignedArea</a><a class="chip" href="#core-splitRingAtSeam">splitRingAtSeam</a><a class="chip" href="#core-unwrapLongitudes">unwrapLongitudes</a></div>
+<section class="symbol" id="core-compileFilter">
+<h4 class="sym"><span class="nm">compileFilter</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>FeaturePredicate compileFilter(Object? json)</code></pre>
+</section>
+<section class="symbol" id="core-normalizeRingWinding">
+<h4 class="sym"><span class="nm">normalizeRingWinding</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>List&lt;List&lt;LatLng&gt;&gt; normalizeRingWinding(List&lt;List&lt;LatLng&gt;&gt; rings)</code></pre>
+<p>把绕向与外环一致的环反转。</p>
+<p>Canvas 用非零环绕规则填充，因此绕向与外环相同的洞<strong>不会</strong>穿透；将其反转即可恢复孔洞。外环保持朝向不变，单环多边形原样返回。</p>
+</section>
+<section class="symbol" id="core-parseGeoJsonFeatures">
+<h4 class="sym"><span class="nm">parseGeoJsonFeatures</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>List&lt;GeoJsonFeature&gt; parseGeoJsonFeatures(Map&lt;String, Object?&gt; json)</code></pre>
+<p>解析一个 GeoJSON <code>FeatureCollection</code> 或单个 <code>Feature</code>。</p>
+</section>
+<section class="symbol" id="core-pointInMultiPolygon">
+<h4 class="sym"><span class="nm">pointInMultiPolygon</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>bool pointInMultiPolygon(
+  List&lt;List&lt;List&lt;LatLng&gt;&gt;&gt; polygons,
+  LatLng point, {
+  bool includeBoundary = true,
+})</code></pre>
+<p>[point] 是否落在 [polygons]（MultiPolygon）的任一子多边形内。</p>
+<p>各子多边形独立求值（并集语义），与渲染器绘制方式一致——每个环一次 <code>addPolygon</code>。</p>
+</section>
+<section class="symbol" id="core-pointInPolygon">
+<h4 class="sym"><span class="nm">pointInPolygon</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>bool pointInPolygon(
+  List&lt;List&lt;LatLng&gt;&gt; rings,
+  LatLng point, {
+  bool includeBoundary = true,
+})</code></pre>
+<p>[point] 是否落在多边形 [rings] 内（首环 = 外环，其余 = 洞）。</p>
+<p>内部为“外环减洞”（RFC 7946）。边界处理：落在<strong>外环</strong>边界上的点算内部；落在<strong>洞</strong>边界上的点算外部——洞优先。</p>
+</section>
+<section class="symbol" id="core-pointInRing">
+<h4 class="sym"><span class="nm">pointInRing</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>bool pointInRing(
+  List&lt;LatLng&gt; ring,
+  LatLng point, {
+  bool includeBoundary = true,
+})</code></pre>
+<p>[point] 是否落在闭合环 [ring] 内。</p>
+<p>使用奇偶规则，因此环的绕向无关。<code>includeBoundary</code> 决定恰好落在边上的点是否算内部（默认：算）。顶点少于三个的环返回 <code>false</code>。</p>
+</section>
+<section class="symbol" id="core-ringSignedArea">
+<h4 class="sym"><span class="nm">ringSignedArea</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>double ringSignedArea(List&lt;LatLng&gt; ring)</code></pre>
+<p>[ring] 的带符号面积，在<strong>展开后</strong>的经度上度量。</p>
+<p>正值表示逆时针。展开很关键：靠近 ±180° 的环否则会翻转符号，悄然改变哪个环被当作外环。</p>
+</section>
+<section class="symbol" id="core-splitRingAtSeam">
+<h4 class="sym"><span class="nm">splitRingAtSeam</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>List&lt;List&lt;LatLng&gt;&gt; splitRingAtSeam(List&lt;LatLng&gt; ring, double seamLng)</code></pre>
+<p>在经线 [seamLng] 处切分 [ring]，返回一个或两个闭合片段。</p>
+<p>先展开环，因此 +179°/−179° 的边会被识别为跨越接缝。若环完全位于一侧，则原样返回 <code>[ring]</code>。顶点少于三个的片段被丢弃。</p>
+<p>这对应 MapLibre 在切片时于 ±180° 切分 GeoJSON 的行为。渲染器自身只需要 [unwrapLongitudes] 加世界副本；此辅助函数让该行为可测试，并允许调用方显式裁剪。</p>
+</section>
+<section class="symbol" id="core-unwrapLongitudes">
+<h4 class="sym"><span class="nm">unwrapLongitudes</span><span class="badge">函数</span></h4>
+<pre class="sig"><code>List&lt;double&gt; unwrapLongitudes(List&lt;double&gt; lons)</code></pre>
+<p>顺序展开 [lons]，使每对相邻差值都落在 (-180, 180]。</p>
+<p><code>out[0] == lons[0]</code>；<code>out[i] = out[i-1] + wrapLongitude(lons[i] - lons[i-1])</code>。一条从 +179° “跳”到 −179° 的环会变成 +179° → +181°（2° 步长）而非 −358° 步长，从而可被连续投影。</p>
+</section>
+    <div class="footer">由 <code>docs/extract_api_ref.py</code> + <code>docs/build_api_zh_html.py</code> 从源码生成 ·
+    与 <code>docs/geo_map_api_zh.md</code> 同源</div>
+  </main>
+</div>
+<script>
+  const links = Array.from(document.querySelectorAll('.sidebar li a'));
+  const sections = links.map(a => document.querySelector(a.getAttribute('href')));
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const idx = sections.indexOf(e.target);
+        if (idx >= 0) links[idx].classList.add('active');
+      }
+    });
+  }, { rootMargin: '-10% 0px -80% 0px' });
+  sections.forEach(s => s && obs.observe(s));
+</script>
+</body>
+</html>

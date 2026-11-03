@@ -94,4 +94,43 @@ void main() {
       expect(d.kind, TileFallbackKind.none);
     });
   });
+
+  group('known-empty', () {
+    test('a known-empty ideal resolves exact (draw nothing), not ancestor', () {
+      final d = planTileResolution(
+        ideal: ideal,
+        sourceMinZoom: 0,
+        sourceMaxZoom: 22,
+        scheme: scheme,
+        isLoaded: (_) => false,
+        isKnownEmpty: (key) => key == ideal,
+      );
+      expect(d.kind, TileFallbackKind.exact);
+    });
+
+    test('a known-empty child counts towards a complete generation', () {
+      // 三个子瓦片已加载，第四个是已知空（海洋）——也算完整一代。
+      final loaded = {children[0], children[1], children[2]};
+      final d = planTileResolution(
+        ideal: ideal,
+        sourceMinZoom: 0,
+        sourceMaxZoom: 22,
+        scheme: scheme,
+        isLoaded: loaded.contains,
+        isKnownEmpty: (key) => key == children[3],
+      );
+      expect(d.kind, TileFallbackKind.descendants);
+    });
+
+    test('without isKnownEmpty the old fallback behaviour is unchanged', () {
+      final d = planTileResolution(
+        ideal: ideal,
+        sourceMinZoom: 0,
+        sourceMaxZoom: 22,
+        scheme: scheme,
+        isLoaded: (_) => false,
+      );
+      expect(d.kind, TileFallbackKind.none);
+    });
+  });
 }

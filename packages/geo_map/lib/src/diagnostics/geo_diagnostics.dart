@@ -52,3 +52,57 @@ class GeoDiagnostics {
     debugPrint(message);
   }
 }
+
+/// Per-frame paint timing for the vector layer, surfaced through the HUD.
+///
+/// Used to quantify the drag/pan optimisation: with retained geometry the
+/// per-frame `paint` cost should collapse, and `avgPaintMs` drops accordingly.
+/// Replaced the old full rebuild path when `enableRetainedGeometry` is off, so
+/// the same HUD number can A/B the two implementations on-device.
+class MvtPaintMetrics {
+  MvtPaintMetrics._();
+
+  static final Stopwatch _sw = Stopwatch();
+  static int lastPaintMs = 0;
+  static int maxPaintMs = 0;
+  static int frames = 0;
+  static int retainedHits = 0;
+  static int retainedMisses = 0;
+
+  static final List<int> _history = [];
+  static const int _historyCap = 60;
+
+  static void beginFrame() {
+    _sw
+      ..reset()
+      ..start();
+  }
+
+  static void endFrame() {
+    _sw.stop();
+    lastPaintMs = (_sw.elapsedMicroseconds / 1000).round();
+    if (lastPaintMs > maxPaintMs) maxPaintMs = lastPaintMs;
+    frames++;
+    _history.add(lastPaintMs);
+    if (_history.length > _historyCap) _history.removeAt(0);
+  }
+
+  static double get avgPaintMs => _history.isEmpty
+      ? 0
+      : _history.fold(0, (a, b) => a + b) / _history.length;
+
+  /// Call when a tile's cached `Picture` is reused this frame.
+  static void recordRetainedHit() => retainedHits++;
+
+  /// Call when a tile falls back to the old per-vertex path this frame.
+  static void recordRetainedMiss() => retainedMisses++;
+
+  static void reset() {
+    lastPaintMs = 0;
+    maxPaintMs = 0;
+    frames = 0;
+    retainedHits = 0;
+    retainedMisses = 0;
+    _history.clear();
+  }
+}

@@ -47,10 +47,12 @@ class HorizonClippedRing {
 ///
 /// Runs are collected in ring order with **no rotation** to "start on a hidden
 /// vertex", so the order in which runs are concatenated never changes between
-/// frames. Each gap between consecutive runs (including the wrap from the last
-/// run back to the first) is sealed with a limb arc that follows the *occluded*
-/// side of the silhouette — chosen from the hidden vertices in that gap — which
-/// is stable for both minor and major arcs.
+/// frames. A visible stretch that straddles the array boundary (first and last
+/// vertex both visible) is merged back into one run, and each remaining gap is
+/// sealed with the **shorter** limb arc. The short arc is the only correct
+/// seal for a simple ring: the visible part of a polygon can never span more
+/// than half the limb, so the long way would fill "the whole disc minus the
+/// region" — which is exactly the bug that once painted the entire globe.
 HorizonClippedRing? clipRingToHorizon(
   List<LatLng> ring,
   CameraState camera,
@@ -147,82 +149,60 @@ HorizonClippedRing? clipRingToHorizon(
   if (current != null && current!.isNotEmpty) endRun();
   if (runs.isEmpty) return null;
 
+  // 不旋转数组的代价：可见段可能**跨数组首尾**（首、末顶点都可见）。此时最先
+  // 与最后一段其实是同一段连续可见边界，必须并成一段；否则两者之间会被当成
+  // "隐藏间隙"补一条 limb 弧，把一条平直的环边走成鼓包。
+  if (runs.length > 1 && zs[0] > 0 && zs[ring.length - 1] > 0) {
+    final mergedRun = <Vec2>[...runs.last, ...runs.first];
+    final mergedStart = runStartSrc.last;
+    final mergedEnd = runEndSrc.first;
+    runs
+      ..removeLast()
+      ..removeAt(0)
+      ..insert(0, mergedRun);
+    runStartSrc
+      ..removeLast()
+      ..removeAt(0)
+      ..insert(0, mergedStart);
+    runEndSrc
+      ..removeLast()
+      ..removeAt(0)
+      ..insert(0, mergedEnd);
+  }
+
   // Seal each gap (including the wrap from the last run back to the first) with
-  // a limb arc that follows the occluded side of the silhouette.
+  // the shorter limb arc.
   final fill = <Vec2>[];
   for (var r = 0; r < runs.length; r++) {
     fill.addAll(runs[r]);
     final next = (r + 1) % runs.length;
-
-    // Hidden vertices strictly between run r's last real vertex and run next's
-    // first real vertex, walking forward in ring order.
-    final hiddenAngles = <double>[];
-    var k = (runEndSrc[r] + 1) % ring.length;
-    final gapEnd = runStartSrc[next];
-    var guard = 0;
-    while (k != gapEnd && guard <= ring.length) {
-      hiddenAngles.add(math.atan2(-ys[k], xs[k]));
-      k = (k + 1) % ring.length;
-      guard++;
-    }
-
-    _arcAlongLimb(fill, runs[r].last, runs[next].first, center, radius,
-        hiddenAngles);
+    _arcAlongLimb(fill, runs[r].last, runs[next].first, center, radius);
   }
 
   return HorizonClippedRing(fill: fill, strokeRuns: runs);
 }
 
-/// Appends the arc on the silhouette from [from] to [to] that passes through
-/// the occluded gap (given by the angular positions of the hidden vertices in
-/// that gap).
+/// Appends the shorter arc on the silhouette from [from] to [to].
 ///
-/// It picks the minor or major arc from the *circular mean* of the hidden
-/// vertices' limb angles, so a single noisy projection (a far-behind vertex can
-/// wrap past the run endpoint) cannot flip the seal to the wrong side. The mean
-/// is stable frame to frame, so the seal never jumps direction as the camera
-/// drifts — which is what produced the flicker.
+/// 必须走短弧：环的可见部分永远不会超过半个 limb，走长弧等于把"整个圆盘减去
+/// 这块区域"填了 —— 曾经用"隐藏顶点角度均值"决定长短弧，遇到隐藏顶点投影落在
+/// 盘内（角度无意义）时选成长弧，结果整个地球被涂满。
 void _arcAlongLimb(
   List<Vec2> out,
   Vec2 from,
   Vec2 to,
   Vec2 center,
   double radius,
-  List<double> hiddenAngles,
 ) {
   final a0 = math.atan2(from.y - center.y, from.x - center.x);
   final a1 = math.atan2(to.y - center.y, to.x - center.x);
-
-  double norm(double d) {
-    while (d > math.pi) {
-      d -= 2 * math.pi;
-    }
-    while (d < -math.pi) {
-      d += 2 * math.pi;
-    }
-    return d;
+  var delta = a1 - a0;
+  while (delta > math.pi) {
+    delta -= 2 * math.pi;
   }
-
-  final deltaShort = norm(a1 - a0);
-  final deltaLong =
-      deltaShort > 0 ? deltaShort - 2 * math.pi : deltaShort + 2 * math.pi;
-
-  bool shortContains(double target) {
-    final d = norm(target - a0);
-    return deltaShort > 0 ? (d >= 0 && d <= deltaShort) : (d <= 0 && d >= deltaShort);
+  while (delta < -math.pi) {
+    delta += 2 * math.pi;
   }
-
-  // The occluded gap lies on the side of the limb where the hidden vertices
-  // cluster. Use their circular mean — robust to a stray out-of-range angle —
-  // to decide short vs long arc.
-  final meanAngle = hiddenAngles.isEmpty
-      ? a0
-      : math.atan2(
-          hiddenAngles.fold(0.0, (s, h) => s + math.sin(h)),
-          hiddenAngles.fold(0.0, (s, h) => s + math.cos(h)),
-        );
-  final useLong = !shortContains(meanAngle);
-  final delta = useLong ? deltaLong : deltaShort;
 
   const steps = 24;
   for (var i = 1; i <= steps; i++) {

@@ -157,6 +157,12 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
   /// level that actually has data.
   final Set<TileKey> _fallback = {};
 
+  /// Tiles the source definitively answered do not exist (404 / missing
+  /// MBTiles row — e.g. tippecanoe skips ocean tiles). Resolution treats these
+  /// as "resolved, draw nothing" instead of stretching an ancestor placeholder
+  /// over them; see [planTileResolution].
+  final Set<TileKey> _knownEmpty = {};
+
   int _inFlight = 0;
   int _revision = 0;
   Timer? _retryTimer;
@@ -209,6 +215,7 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
         _failures.remove(key);
         _failureStatus.remove(key);
         _fallback.remove(key);
+        _knownEmpty.remove(key);
         while (_decoded.length > widget.maxCachedTiles) {
           _decoded.remove(_decoded.keys.first);
         }
@@ -235,6 +242,11 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
     _failureStatus[key] = widget.source is HttpTileSource
         ? (widget.source as HttpTileSource).lastStatusCode
         : null;
+    // notFound（404 / MBTiles 无该行）是**确定性的"不存在"**，不是暂时的失败：
+    // 记入 known-empty，分辨率规划把它当作"已解析的空瓦片"（画空），不再用
+    // 粗层级祖先占位——矢量线条盖不住占位线，否则海洋瓦片的永久祖先占位会以
+    // 简化重影的形式叠在精细海岸线下方。
+    if (notFound) _knownEmpty.add(key);
     final delay = tileRetryDelay(
       attempts,
       baseMs: notFound
@@ -320,6 +332,7 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
     final draw = resolveVectorDrawTiles(
       visible: selection.tiles,
       isLoaded: _decoded.containsKey,
+      isKnownEmpty: _knownEmpty.contains,
       sourceMinZoom: widget.source.minZoom,
       sourceMaxZoom: widget.source.maxZoom,
       scheme: widget.source.scheme,
@@ -543,6 +556,23 @@ class _MvtPainter extends CustomPainter {
         )));
     }
 
+    // Background layers: the style's bottom-most paint, drawn first so every
+    // later layer composites over it. Painted *inside* the globe clip — on a
+    // globe the background is the sphere's base colour (MapLibre renders it as
+    // the globe cover, disc only); the space outside the disc stays with the
+    // GeoMapOptions.background ColoredBox sitting below this canvas in the
+    // stack. On a flat map the clip is null and the paint covers the viewport,
+    // matching MapLibre's 2D behaviour.
+    //
+    // NOTE: this canvas sits ABOVE the raster TileLayer in the GeoMap stack, so
+    // an opaque background (opacity 1) hides raster imagery beneath. Styles
+    // paired with a raster basemap must not carry a background layer — use
+    // GeoMapOptions.background for the layout colour instead. The two colours
+    // are independent knobs: the style background covers this canvas once
+    // loaded; GeoMapOptions.background shows while loading, outside the globe
+    // disc, and under raster-only setups.
+    _paintBackgrounds(canvas, size);
+
     // Placeholders (loaded ancestors) first, then exact tiles / child
     // generations, so a loaded tile always wins over its coarse stand-in.
     final drawOrder = drawTiles.drawOrder;
@@ -579,6 +609,32 @@ class _MvtPainter extends CustomPainter {
         state,
         flat,
         drawOrder,
+      );
+    }
+  }
+
+  // --- background ------------------------------------------------------------
+
+  /// Paints every visible `background` layer in style order (later layers
+  /// composite over earlier ones) as a full-canvas rect — already clipped to
+  /// the globe disc when a clip is active.
+  ///
+  /// Defaults are baked at parse time (`StyleLayer.parseProps`), so an
+  /// unspecified `background-color`/`background-opacity` resolves to
+  /// `#000000` / 1 — no null fallback is needed for well-formed layers.
+  void _paintBackgrounds(Canvas canvas, Size size) {
+    final ctx = ExpressionContext(zoom: camera.zoom);
+    for (final layer in style.layers) {
+      if (layer.type != 'background' || !layer.isVisibleAt(camera.zoom)) {
+        continue;
+      }
+      final c = layer.color('background-color', ctx);
+      if (c == null) continue;
+      final o = (layer.number('background-opacity', ctx) ?? 1) * opacity;
+      if (o <= 0) continue;
+      canvas.drawRect(
+        Offset.zero & size,
+        Paint()..color = Color(_argb(c, o)),
       );
     }
   }

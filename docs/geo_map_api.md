@@ -3,7 +3,7 @@
 > 风格参考 MapLibre GL JS 官方文档，面向 Dart / Flutter 开发者。
 > 覆盖范围：包结构、快速开始、`GeoMapController`、栅格瓦片源、图层体系、**要素查询（queryRenderedFeatures）**、典型使用场景、样式系统（含 **symbol 符号与标注**全量属性）、约束与踩坑、与本项目（`app_client`）的落地对照。
 >
-> 对应版本 `0.2.0`（M1 style spec / M2 MVT / M3 符号与标注 均已落地）。
+> 对应版本 `0.2.1`（M1 style spec / M2 MVT / M3 符号与标注 / 要素查询 / **弹窗控制层** 均已落地）。
 
 ---
 
@@ -27,6 +27,12 @@
 - [8. 约束与踩坑](#8-约束与踩坑)
   - [8.1 日界线与平面无限滚动](#81-日界线与平面无限滚动)
 - [9. 与 app_client 的落地对照](#9-与-app_client-的落地对照)
+- [10. 浮层 / 弹窗（Popup）](#10-浮层--弹窗popup)
+  - [10.1 为什么不能放进 `GeoMap.children`](#101-为什么不能放进-geomapchildren)
+  - [10.2 三层结构：状态 / 定位 / 绑定](#102-三层结构状态--定位--绑定)
+  - [10.3 绑定式弹窗（推荐）](#103-绑定式弹窗推荐)
+  - [10.4 九宫格锚点](#104-九宫格锚点)
+  - [10.5 约束与踩坑](#105-约束与踩坑)
 
 ---
 
@@ -713,6 +719,7 @@ StyleVectorLayer(style: style, features: feats, sprite: atlas);
 | 2D/3D 开关 | `lib/features/map/providers/map_mode_provider.dart` | `mapUseGlobeProvider`，默认 `false` |
 | 图层构造 | `lib/features/map/layers/layer_builder.dart` | `buildMapLayer` 穷举 `switch`（无 default，强制覆盖） |
 | 真实图层范例 | `satellite_layer.dart` / `airport_symbol_layer.dart` / `restricted_area_layer.dart` | 卫星、机场符号、限制区 |
+| 弹窗绑定 | `providers/map_feature_registry_provider.dart`（`popup:` 绑定）+ `aero_weather_layout.dart`（`GeoMapPopupHost`） | 面板/弹窗见 [10.3](#103-绑定式弹窗推荐) |
 
 `MbtilesRegistryTileSource` 实现了 `GeoTileSource`，把多个 MBTiles 包按区域路由到统一源，是「自定义源」章节（[3.4](#34-自定义源)）的参考实现。
 
@@ -739,6 +746,154 @@ class AeroMap extends ConsumerWidget {
   }
 }
 ```
+
+---
+
+## 10. 浮层 / 弹窗（Popup）
+
+对标 MapLibre 的 `Popup`：**锚在一个经纬度上、随相机平移缩放跟着走**的卡片。
+本包提供三层能力，从"只要定位"到"点了哪层弹哪张卡"依次叠加。
+
+### 10.1 为什么不能放进 `GeoMap.children`
+
+`children` 位于 `GeoMap` 内部的 opaque 手势层（`GlobeGestureOverlay`）之下，收不到指针。
+所以**交互 UI 必须放在 `GeoMap` 外层的 `Stack` 里**，与地图平级、位于其后。
+这也是本包所有弹窗 widget 唯一的硬约束。
+
+### 10.2 三层结构：状态 / 定位 / 绑定
+
+| 组件 | 职责 | 对应 MapLibre |
+| --- | --- | --- |
+| `GeoMapPopupController` | 只存**锚点**（`LatLng?`），`show/hide/toggle` | `Popup` 的 open/close 状态 |
+| `GeoAnchoredPopup` / `GeoMapPopup` | 每帧重投影锚点、夹进 `keepOut`、渲染任意 child | `Popup.setLngLat()` + 自动 reposition |
+| `GeoPopupController` + `GeoMapPopupHost` | 命中仲裁 + 按图层选卡片 | `map.on('click', layerId, handler)` |
+
+纯定位层最小用法（自己管显隐、自己给内容）：
+
+```dart
+Stack(
+  children: [
+    GeoMap(controller: controller, onTap: ...),
+    GeoMapPopup(
+      controller: controller,
+      popup: popup,                 // GeoMapPopupController
+      cardSize: const Size(280, 240),   // 卡片最大尺寸，夹取用
+      anchorSide: PopupAnchor.bottom,   // 可选，默认 bottom（卡片在锚点上方）
+      keepOut: EdgeInsets.only(top: 54, left: 110, right: 85, bottom: 72),
+      builder: (context, anchor) => MyCard(onClose: popup.hide),
+    ),
+  ],
+);
+```
+
+布局是纯函数，可单独断言：
+
+```dart
+// 未夹取位置（逻辑像素）；tail 是卡片朝锚点那侧的尖角间距
+final p = anchorOffsetFor(PopupAnchor.bottom, const Offset(100, 100), Size(80, 40), 8);
+// p == Offset(60, 52)
+
+// 再夹进 keepOut；锚点出屏 / 非有限 / 球面背半球哨兵（±1e6）→ visible:false
+final layout = layoutAnchoredPopup(
+  anchor: p, viewport: controller.viewport, card: const Size(80, 40),
+  keepOut: const EdgeInsets.all(16),
+);
+if (layout.visible) { /* Positioned(left: layout.left, top: layout.top) */ }
+```
+
+投影分支已内置：平面走 `projectForVector`（折回最近的世界副本，跨日界线才准），
+球面走 `project`（背半球返回哨兵 → 布局判隐藏）。宿主不必自己判背半球。
+
+### 10.3 绑定式弹窗（推荐）
+
+先给要素源声明"我点了弹什么"，再挂一个宿主，点击只调一个方法。
+
+**① 绑定**——挂在 `setSource` 上，与要素同生命周期：
+
+```dart
+registry.setSource(
+  'sigmet',
+  features,
+  visible: true,
+  popup: GeoPopupBinding(
+    priority: 10,                        // 重叠命中时的仲裁权重，大者胜
+    cardSize: Size(280, 268),            // 夹取用的最大尺寸
+    anchor: PopupAnchor.bottom,          // 卡片贴锚点哪一侧
+    anchorOf: (hit) => null,             // 默认 null = 锚在点击点
+    builder: (context, hit) => SigmetPopupCard(
+      hits: [byId[hit.feature.id]!],     // hit 只带冠军那条
+      onClose: popup.close,
+    ),
+  ),
+);
+```
+
+| 字段 | 默认 | 说明 |
+| --- | --- | --- |
+| `priority` | `0` | 多处命中时大者胜；平手取查询结果里靠前的 |
+| `cardSize` | 必填 | 卡片最大逻辑尺寸 |
+| `anchor` | `bottom` | 九宫格（见 10.4） |
+| `anchorOf` | `null` | 覆盖锚点；默认用**点击点**（`setLngLat(e.lngLat)` 语义） |
+| `builder` | 必填 | 卡片构造器，拿 `hit.feature.id` 回查业务对象 |
+
+读取：`registry.popupOf(sourceId)`。运行时挂载/卸载用
+`popup.registerPopup(id, binding)` / `popup.unregisterPopup(id)`。
+
+**② 宿主**——全局只挂一个：
+
+```dart
+GeoMapPopupHost(
+  controller: mapController,
+  popup: ref.watch(geoPopupControllerProvider),
+  keepOut: EdgeInsets.only(top: 54, left: 110, right: 85, bottom: 72),
+),
+```
+
+**③ 点击**——命中、仲裁、开关全在控制层：
+
+```dart
+popup.handleTap(
+  tap,
+  controller: mapController,
+  registry: registry,
+  hits: hits,        // 可选：宿主已查过就传进来，避免二次查询
+  pointRadiusPx: GeoEngineTuning.featurePickRadiusPx,
+);
+```
+
+`handleTap` 内部：`queryFeatures` → 过滤出注册了 binding 的源 → 按 `priority` 选冠军 →
+`geoPopup.show(binding.anchorOf?.call(hit) ?? tap)` → 没赢家就 `close()`（closeOnClick）。
+
+控制层**不持有**注册表（每次传 `registry`），所以不会读到旧快照，也不会与 Riverpod 的
+`mapFeatureRegistryProvider` 形成循环依赖。渲染侧读 `activeBuilder` / `activeCardSize` /
+`activeAnchor`，由宿主喂给 `GeoMapPopup`。
+
+### 10.4 九宫格锚点
+
+`PopupAnchor` 九档（对齐 MapLibre `PositionAnchor`）：
+
+| 值 | 卡片位置 |
+| --- | --- |
+| `bottom`（默认） | 卡片在锚点**上方**，底边中点对齐 |
+| `top` | 卡片在锚点**下方**，顶边中点对齐 |
+| `left` / `right` | 卡片在锚点右/左侧，竖边中点对齐 |
+| `center` | 中心对齐 |
+| `topLeft` / `topRight` / `bottomLeft` / `bottomRight` | 四角对齐 |
+
+与 symbol 的锚点（[7.3](#73-锚点九宫格)）语义一致，但**卡片的九档是"哪个边贴住锚点"**，
+不含 `baseline` 之类的文字排版锚点。
+
+### 10.5 约束与踩坑
+
+1. **必须在 `GeoMap` 外层 Stack**（见 10.1），进 `children` 点不到。
+2. **宿主只挂一个**：两个 `GeoMapPopupHost` 会画两份卡片（共用一个 popup 状态）。
+3. **`cardSize` 写卡片真实最大尺寸**：写小了会被夹进 `keepOut` 后越界。
+4. **`keepOut` 要覆盖所有固定 UI**：顶栏/侧栏/底栏/播放条都算，否则卡片被压在下面。
+5. **`ChangeNotifierProvider` 会自动 dispose**：不要再 `ref.onDispose(c.dispose)`，
+   否则容器销毁时 double dispose，debug 抛 `used after being disposed`。
+6. **`builder` 只拿冠军 hit**：要"一张卡列出全部重叠"就自己用同一锚点再查一次
+   （点击点即 `popup.geoPopup.anchor`）。
+7. **`show` 幂等**：锚点相等不重复 `notifyListeners()`。
 
 ---
 

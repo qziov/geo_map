@@ -587,6 +587,27 @@ class _VectorPainter extends CustomPainter {
     if (current != null && current!.isNotEmpty) endRun();
     if (runs.isEmpty) return null;
 
+    // 不旋转数组的代价：可见段可能**跨数组首尾**（首、末顶点都可见）。此时最先
+    // 与最后一段是同一段连续可见边界，必须并成一段；否则两者之间会被当成
+    // "隐藏间隙"补一条 limb 弧，把一条平直的环边走成鼓包。
+    if (runs.length > 1 && view[0].$3 > 0 && view[view.length - 1].$3 > 0) {
+      final mergedRun = <Offset>[...runs.last, ...runs.first];
+      final mergedStart = runStartSrc.last;
+      final mergedEnd = runEndSrc.first;
+      runs
+        ..removeLast()
+        ..removeAt(0)
+        ..insert(0, mergedRun);
+      runStartSrc
+        ..removeLast()
+        ..removeAt(0)
+        ..insert(0, mergedStart);
+      runEndSrc
+        ..removeLast()
+        ..removeAt(0)
+        ..insert(0, mergedEnd);
+    }
+
     final fillPath = ui.Path();
     final strokePath = ui.Path();
 
@@ -604,74 +625,33 @@ class _VectorPainter extends CustomPainter {
         fillPath.lineTo(run[i].dx, run[i].dy);
       }
       // Close the fill along the silhouette so it never cuts across the disc.
-      // The arc follows the occluded side of the limb — the side the hidden
-      // vertices sit on — chosen from their circular mean so it never flips
-      // direction frame to frame (the old firstHidden rotation was the flicker).
+      // 必须走**短弧**：可见段永远不会超过半个 limb，走长弧等于把"整个圆盘减去
+      // 这块区域"填了（曾经按隐藏顶点的角度均值选长短弧，隐藏点投影落在盘内时
+      // 角度无意义，选成长弧 → 整个地球被涂满）。
       final next = (r + 1) % runs.length;
-      final hiddenAngles = <double>[];
-      var k = (runEndSrc[r] + 1) % ring.length;
-      final gapEnd = runStartSrc[next];
-      var guard = 0;
-      while (k != gapEnd && guard <= ring.length) {
-        hiddenAngles.add(math.atan2(-view[k].$2, view[k].$1));
-        k = (k + 1) % ring.length;
-        guard++;
-      }
-      _arcAlongLimb(fillPath, run.last, runs[next].first, center, radius,
-          hiddenAngles);
+      _arcAlongLimb(fillPath, run.last, runs[next].first, center, radius);
     }
     fillPath.close();
     return (fillPath, strokePath);
   }
 
-  /// Appends the arc on the silhouette from [from] to [to] that passes through
-  /// the occluded gap (given by the angular positions of the hidden vertices in
-  /// that gap). It picks the minor or major arc from the circular mean of those
-  /// angles, so a single noisy behind-globe projection cannot flip the seal to
-  /// the wrong side — which keeps the fill topology stable frame to frame.
+  /// Appends the shorter arc on the silhouette from [from] to [to].
   void _arcAlongLimb(
     ui.Path path,
     Offset from,
     Offset to,
     Offset center,
     double radius,
-    List<double> hiddenAngles,
   ) {
     final a0 = math.atan2(from.dy - center.dy, from.dx - center.dx);
     final a1 = math.atan2(to.dy - center.dy, to.dx - center.dx);
-
-    double norm(double d) {
-      while (d > math.pi) {
-        d -= 2 * math.pi;
-      }
-      while (d < -math.pi) {
-        d += 2 * math.pi;
-      }
-      return d;
+    var delta = a1 - a0;
+    while (delta > math.pi) {
+      delta -= 2 * math.pi;
     }
-
-    final deltaShort = norm(a1 - a0);
-    final deltaLong =
-        deltaShort > 0 ? deltaShort - 2 * math.pi : deltaShort + 2 * math.pi;
-
-    bool shortContains(double target) {
-      final d = norm(target - a0);
-      return deltaShort > 0
-          ? (d >= 0 && d <= deltaShort)
-          : (d <= 0 && d >= deltaShort);
+    while (delta < -math.pi) {
+      delta += 2 * math.pi;
     }
-
-    // The occluded gap lies on the side of the limb where the hidden vertices
-    // cluster. Use their circular mean — robust to a stray out-of-range angle —
-    // to decide short vs long arc.
-    final meanAngle = hiddenAngles.isEmpty
-        ? a0
-        : math.atan2(
-            hiddenAngles.fold(0.0, (s, h) => s + math.sin(h)),
-            hiddenAngles.fold(0.0, (s, h) => s + math.cos(h)),
-          );
-    final useLong = !shortContains(meanAngle);
-    final delta = useLong ? deltaLong : deltaShort;
 
     const steps = 24;
     for (var i = 1; i <= steps; i++) {

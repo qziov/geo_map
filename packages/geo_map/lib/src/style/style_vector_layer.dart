@@ -135,6 +135,10 @@ class _StyleVectorPainter extends CustomPainter {
         )));
     }
 
+    // Background layers first, inside the globe clip (same semantics as
+    // _MvtPainter: sphere base colour on a globe, full viewport on flat).
+    _paintBackgrounds(canvas, size);
+
     // Labels are collected while walking the layers but painted last: a symbol
     // layer is meant to sit on top of the geometry regardless of where it is in
     // the style, and one placer must see every candidate to arbitrate between
@@ -182,6 +186,7 @@ class _StyleVectorPainter extends CustomPainter {
       }
 
       if (!layer.isSupported) continue;
+      if (layer.type == 'background') continue; // painted above, no features
 
       // A layer draws its own source only. `sources == null` is the
       // single-source shorthand and keeps the old behaviour.
@@ -272,6 +277,24 @@ class _StyleVectorPainter extends CustomPainter {
 
   static ui.Color _color(StyleColor c, double opacity) =>
       ui.Color.fromRGBO(c.r, c.g, c.b, (c.a / 255.0) * opacity);
+
+  /// Paints visible `background` layers in style order, clipped to the globe
+  /// disc when a clip is active (see _MvtPainter._paintBackgrounds). Defaults
+  /// are baked at parse time, so a well-formed background layer always yields
+  /// a colour here.
+  void _paintBackgrounds(Canvas canvas, Size size) {
+    final ctx = ExpressionContext(zoom: camera.zoom);
+    for (final layer in style.layers) {
+      if (layer.type != 'background' || !layer.isVisibleAt(camera.zoom)) {
+        continue;
+      }
+      final c = layer.color('background-color', ctx);
+      if (c == null) continue;
+      final o = (layer.number('background-opacity', ctx) ?? 1) * opacity;
+      if (o <= 0) continue;
+      canvas.drawRect(Offset.zero & size, Paint()..color = _color(c, o));
+    }
+  }
 
   /// Draw [draw] once per visible world copy when flat.
   ///

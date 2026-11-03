@@ -17,26 +17,11 @@ import 'package:geo_map_core/geo_map_core.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../camera/geo_map_controller.dart';
+import '../widget/geo_popup_binding.dart';
 import 'geo_pick_projection.dart';
+import 'geo_query_hit.dart';
 
-/// A feature that answered a query.
-class GeoQueryHit {
-  const GeoQueryHit({
-    required this.feature,
-    required this.sourceId,
-    this.distancePx,
-  });
-
-  /// The registered feature, with its id and properties intact — the host
-  /// maps it back to its own object (usually by [GeoJsonFeature.id]).
-  final GeoJsonFeature feature;
-
-  /// The source the feature was registered under.
-  final String sourceId;
-
-  /// Screen distance in pixels for point features; `null` for areas.
-  final double? distancePx;
-}
+export 'geo_query_hit.dart';
 
 /// The registry of queryable features.
 class GeoFeatureRegistry {
@@ -48,12 +33,18 @@ class GeoFeatureRegistry {
   /// switched off must not be pickable. [pointRadiusPx] overrides the query's
   /// default pick radius for this source, and [layerId] records which layer
   /// it came from.
+  ///
+  /// [popup] optionally binds a popup card to this source (the SDK equivalent of
+  /// MapLibre `map.on('click', layerId, handler)`); see [GeoPopupBinding]. A
+  /// source without a popup is still pickable — it just won't open a card via
+  /// [GeoPopupController] (the host may drive a SnackBar or selection instead).
   void setSource(
     String sourceId,
     List<GeoJsonFeature> features, {
     bool visible = true,
     String? layerId,
     double? pointRadiusPx,
+    GeoPopupBinding? popup,
   }) {
     _sources[sourceId] = _RegisteredSource(
       sourceId: sourceId,
@@ -61,6 +52,7 @@ class GeoFeatureRegistry {
       visible: visible,
       layerId: layerId,
       pointRadiusPx: pointRadiusPx,
+      popup: popup,
     );
   }
 
@@ -71,6 +63,10 @@ class GeoFeatureRegistry {
   void clear() => _sources.clear();
 
   bool containsSource(String sourceId) => _sources.containsKey(sourceId);
+
+  /// The popup binding registered for [sourceId], or `null` if that source has
+  /// no popup card (e.g. it only drives a SnackBar or a selection state).
+  GeoPopupBinding? popupOf(String sourceId) => _sources[sourceId]?.popup;
 
   /// The registered source ids, in registration order.
   Iterable<String> get sourceIds => _sources.keys;
@@ -142,6 +138,7 @@ class _RegisteredSource {
     required this.visible,
     this.layerId,
     this.pointRadiusPx,
+    this.popup,
   });
 
   final String sourceId;
@@ -149,4 +146,5 @@ class _RegisteredSource {
   final bool visible;
   final String? layerId;
   final double? pointRadiusPx;
+  final GeoPopupBinding? popup;
 }

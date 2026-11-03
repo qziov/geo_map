@@ -31,6 +31,12 @@ class StylePropertyDef {
 
 /// `layerType -> paint property -> definition`.
 const Map<String, Map<String, StylePropertyDef>> layerPaintDefs = {
+  'background': {
+    'background-color': StylePropertyDef(StylePropertyType.color,
+        defaultValue: '#000000', interpolated: true),
+    'background-opacity': StylePropertyDef(StylePropertyType.number,
+        defaultValue: 1, interpolated: true),
+  },
   'fill': {
     'fill-color': StylePropertyDef(StylePropertyType.color,
         defaultValue: '#000000', dataDriven: true, interpolated: true),
@@ -67,6 +73,10 @@ const Map<String, Map<String, StylePropertyDef>> layerPaintDefs = {
 
 /// `layerType -> layout property -> definition`.
 const Map<String, Map<String, StylePropertyDef>> layerLayoutDefs = {
+  'background': {
+    'visibility':
+        StylePropertyDef(StylePropertyType.string, defaultValue: 'visible'),
+  },
   'fill': {
     'fill-sort-key':
         StylePropertyDef(StylePropertyType.number, dataDriven: true),

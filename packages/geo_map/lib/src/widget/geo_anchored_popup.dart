@@ -20,6 +20,7 @@ import '../vendor/flutter_map_camera/flat_projection_delegate.dart'
     show FlatProjectionDelegate;
 import '../vendor/flutter_map_camera/projection_delegate.dart'
     show MapProjectionDelegate;
+import 'geo_popup_binding.dart';
 
 /// 纯布局结果（`left/top` 是逻辑像素）。
 class AnchoredPopupLayout {
@@ -41,15 +42,51 @@ class AnchoredPopupLayout {
   final bool visible;
 }
 
-/// 计算卡片左上角：卡片**底边中点**对准 [anchor]，再夹进 [keepOut]。
+/// 卡片左上角的「未夹取」位置（九宫格）。
+///
+/// 给定投影后的锚点 [point] 与卡片尺寸 [card]，返回卡片左上角应处的逻辑像素，
+/// 再交由 [layoutAnchoredPopup] 夹进 [EdgeInsets]。[tail] 是卡片朝向锚点那一侧
+/// 留出的小尖角间距（仅 top/bottom/left/right 用；四角忽略）。
+///
+/// 纯函数，可纯 Dart 断言测试。
+Offset anchorOffsetFor(PopupAnchor side, Offset point, Size card, double tail) {
+  final w = card.width;
+  final h = card.height;
+  switch (side) {
+    case PopupAnchor.center:
+      return Offset(point.dx - w / 2, point.dy - h / 2);
+    case PopupAnchor.top: // 卡片在锚点下方
+      return Offset(point.dx - w / 2, point.dy + tail);
+    case PopupAnchor.bottom: // 卡片在锚点上方（默认，保持旧行为）
+      return Offset(point.dx - w / 2, point.dy - h - tail);
+    case PopupAnchor.left: // 卡片在锚点右侧
+      return Offset(point.dx + tail, point.dy - h / 2);
+    case PopupAnchor.right: // 卡片在锚点左侧
+      return Offset(point.dx - w - tail, point.dy - h / 2);
+    case PopupAnchor.topLeft:
+      return Offset(point.dx + tail, point.dy + tail);
+    case PopupAnchor.topRight:
+      return Offset(point.dx - w - tail, point.dy + tail);
+    case PopupAnchor.bottomLeft:
+      return Offset(point.dx + tail, point.dy - h - tail);
+    case PopupAnchor.bottomRight:
+      return Offset(point.dx - w - tail, point.dy - h - tail);
+  }
+}
+
+/// 计算卡片左上角：按 [anchorSide] 九宫格把卡片某一侧对准 [anchor]，再夹进 [keepOut]。
 ///
 /// [anchor] / [viewport] / [card] 都是逻辑像素。锚点出屏、非有限、或球面背半球
 /// 哨兵（`±1e6`）时返回 `visible:false`。宿主据此决定是否渲染卡片。
+///
+/// [anchorSide] 默认 [PopupAnchor.bottom]，与旧行为（底边中点对准锚点）一致；
+/// 其余八档见 [PopupAnchor]。
 AnchoredPopupLayout layoutAnchoredPopup({
   required Offset anchor,
   required Size viewport,
   required Size card,
   required EdgeInsets keepOut,
+  PopupAnchor anchorSide = PopupAnchor.bottom,
   double tail = 8,
   double slop = 32,
 }) {
@@ -68,12 +105,13 @@ AnchoredPopupLayout layoutAnchoredPopup({
       anchor.dy > viewport.height + slop) {
     return AnchoredPopupLayout.hidden;
   }
+  final unclamped = anchorOffsetFor(anchorSide, anchor, card, tail);
   final maxLeft = (viewport.width - keepOut.right - card.width)
       .clamp(keepOut.left, viewport.width);
   final maxTop = (viewport.height - keepOut.bottom - card.height)
       .clamp(keepOut.top, viewport.height);
-  final left = (anchor.dx - card.width / 2).clamp(keepOut.left, maxLeft);
-  final top = (anchor.dy - card.height - tail).clamp(keepOut.top, maxTop);
+  final left = unclamped.dx.clamp(keepOut.left, maxLeft);
+  final top = unclamped.dy.clamp(keepOut.top, maxTop);
   return AnchoredPopupLayout(left: left, top: top, visible: true);
 }
 
@@ -88,6 +126,7 @@ class GeoAnchoredPopup extends StatelessWidget {
     required this.child,
     required this.keepOut,
     required this.cardSize,
+    this.anchorSide = PopupAnchor.bottom,
   });
 
   final GeoMapController controller;
@@ -97,6 +136,9 @@ class GeoAnchoredPopup extends StatelessWidget {
 
   /// 用于夹取的卡片逻辑尺寸（实际卡片可更小）。
   final Size cardSize;
+
+  /// 卡片贴锚点的哪一侧（九宫格）。默认 [PopupAnchor.bottom]（卡片在锚点上方）。
+  final PopupAnchor anchorSide;
 
   Offset _project() {
     final MapProjectionDelegate d = controller.delegate;
@@ -121,6 +163,7 @@ class GeoAnchoredPopup extends StatelessWidget {
           viewport: controller.viewport,
           card: cardSize,
           keepOut: keepOut,
+          anchorSide: anchorSide,
         );
         if (!layout.visible) return const SizedBox.shrink();
         return Positioned(
@@ -128,7 +171,13 @@ class GeoAnchoredPopup extends StatelessWidget {
           top: layout.top,
           child: Material(
             type: MaterialType.transparency,
-            child: child,
+            // 浮层作为独立覆盖层：吞掉内部点击，避免漏给下面的地图
+            // （对齐 MapLibre Popup 的 DOM 事件隔离）。内层按钮更深，仍优先。
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {},
+              child: child,
+            ),
           ),
         );
       },
@@ -143,6 +192,24 @@ class GeoAnchoredPopup extends StatelessWidget {
 class GeoMapPopupController extends ChangeNotifier {
   LatLng? _anchor;
 
+  bool _disposed = false;
+
+  /// 是否已 dispose（语义同 `GeoPopupController.isDisposed`：Riverpod 的
+  /// `invalidateSelf()` —— hot reload 改到 provider 源码时的常规路径 —— 会
+  /// 先 dispose 再重建，这段窗口内的 `show/hide` 必须安静丢弃）。
+  bool get isDisposed => _disposed;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  void _safeNotify() {
+    if (_disposed) return;
+    notifyListeners();
+  }
+
   /// 当前锚点；`null` 表示浮层隐藏。
   LatLng? get anchor => _anchor;
 
@@ -151,16 +218,16 @@ class GeoMapPopupController extends ChangeNotifier {
 
   /// 在 [anchor] 处打开（覆盖式：重复 open 同一锚点幂等）。
   void show(LatLng anchor) {
-    if (_anchor == anchor) return;
+    if (_disposed || _anchor == anchor) return;
     _anchor = anchor;
-    notifyListeners();
+    _safeNotify();
   }
 
   /// 关闭浮层（锚点置空）。
   void hide() {
-    if (_anchor == null) return;
+    if (_disposed || _anchor == null) return;
     _anchor = null;
-    notifyListeners();
+    _safeNotify();
   }
 
   /// 点同一锚点切换开/关（MapLibre `togglePopup` 语义）。
@@ -180,6 +247,7 @@ class GeoMapPopup extends StatelessWidget {
     required this.builder,
     required this.keepOut,
     required this.cardSize,
+    this.anchorSide = PopupAnchor.bottom,
   });
 
   /// 地图相机（用于每帧重投影锚点）。
@@ -197,6 +265,9 @@ class GeoMapPopup extends StatelessWidget {
   /// 用于夹取的卡片逻辑尺寸（实际卡片可更小）。
   final Size cardSize;
 
+  /// 卡片贴锚点的哪一侧（九宫格）。默认 [PopupAnchor.bottom]（卡片在锚点上方）。
+  final PopupAnchor anchorSide;
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -209,6 +280,7 @@ class GeoMapPopup extends StatelessWidget {
           anchor: anchor,
           keepOut: keepOut,
           cardSize: cardSize,
+          anchorSide: anchorSide,
           child: builder(context, anchor),
         );
       },

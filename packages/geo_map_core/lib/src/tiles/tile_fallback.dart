@@ -76,23 +76,42 @@ class TileFallbackDecision {
 ///
 /// The ideal tile is **not** required to be loaded: the ancestor chain is a
 /// placeholder while it is in flight, never a substitute for fetching it.
+///
+/// [isKnownEmpty] marks tiles the source has **definitively answered do not
+/// exist** (a 404 / missing row — MapLibre's "404 is an answer, not an error").
+/// A known-empty ideal resolves as [TileFallbackKind.exact] (draw nothing)
+/// instead of falling back to an ancestor. This matters for vector layers:
+/// unlike an opaque raster image, strokes drawn over a coarse placeholder do
+/// not hide it, so a permanent ancestor placeholder for an ocean tile shows up
+/// as simplified ghost coastlines under the fine detail — forever, because the
+/// tile will never exist.
 TileFallbackDecision planTileResolution({
   required TileKey ideal,
   required int sourceMinZoom,
   required int sourceMaxZoom,
   required TileSchemeKind scheme,
   required bool Function(TileKey key) isLoaded,
+  bool Function(TileKey key)? isKnownEmpty,
 }) {
   if (isLoaded(ideal)) return const TileFallbackDecision.exact();
 
+  // ⓪ Definitively empty (404 / no row): draw nothing, never a placeholder.
+  if (isKnownEmpty != null && isKnownEmpty(ideal)) {
+    return const TileFallbackDecision.exact();
+  }
+
   // ① A complete generation of immediate children (MapLibre
   //    `_retainLoadedChildren`). Three of four is not enough — the missing
-  //    quarter would show the underlay through, i.e. a notch.
+  //    quarter would show the underlay through, i.e. a notch. A known-empty
+  //    child counts as satisfied: nothing will ever load there.
   if (ideal.z + 1 <= sourceMaxZoom) {
     final grid = TileGrid.of(scheme, ideal.z + 1);
     final children = grid.childrenOf(ideal);
     final complete = children.every(
-      (c) => c.x < grid.cols && c.y < grid.rows && isLoaded(c),
+      (c) =>
+          c.x < grid.cols &&
+          c.y < grid.rows &&
+          (isLoaded(c) || (isKnownEmpty?.call(c) ?? false)),
     );
     if (complete) return TileFallbackDecision.descendants(children);
   }

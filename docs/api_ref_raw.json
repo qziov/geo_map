@@ -1,0 +1,4269 @@
+{
+  "geo_map": [
+    {
+      "file": "lib/geo_map.dart",
+      "types": [],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/camera/geo_map_controller.dart",
+      "types": [
+        {
+          "name": "GeoMapController",
+          "kind": "class",
+          "signature": "class GeoMapController extends ChangeNotifier",
+          "doc": null,
+          "members": [
+            {
+              "name": "GeoMapController",
+              "kind": "constructor",
+              "signature": "GeoMapController({\nbool useGlobe = true,\nGlobeProjectionDelegate? projectionDelegate,\nLatLng initialCenter = const LatLng(30, 105),\ndouble initialZoom = 4.2,\nthis.minZoom = 1,\nthis.maxZoom = 8,\n})  : _isGlobe = useGlobe,\ndelegate = projectionDelegate ??\n(useGlobe\n? GlobeProjectionDelegate()\n: FlatProjectionDelegate())",
+              "doc": null
+            },
+            {
+              "name": "delegate",
+              "kind": "field",
+              "signature": "MapProjectionDelegate delegate",
+              "doc": null
+            },
+            {
+              "name": "minZoom",
+              "kind": "field",
+              "signature": "double minZoom",
+              "doc": null
+            },
+            {
+              "name": "maxZoom",
+              "kind": "field",
+              "signature": "double maxZoom",
+              "doc": null
+            },
+            {
+              "name": "isGlobe",
+              "kind": "getter",
+              "signature": "bool get isGlobe => _isGlobe",
+              "doc": null
+            },
+            {
+              "name": "applyConstraints",
+              "kind": "method",
+              "signature": "void applyConstraints({required double minZoom, required double maxZoom})",
+              "doc": "外部宿主同步缩放约束（防 options 与 controller 脱节）。"
+            },
+            {
+              "name": "setMode",
+              "kind": "method",
+              "signature": "void setMode(bool globe)",
+              "doc": "2D/3D 切换：替换投影 delegate 并重建 vendored camera（center/zoom 连续）。"
+            },
+            {
+              "name": "camera",
+              "kind": "getter",
+              "signature": "MapCamera get camera => _camera",
+              "doc": null
+            },
+            {
+              "name": "center",
+              "kind": "getter",
+              "signature": "LatLng get center => _center",
+              "doc": null
+            },
+            {
+              "name": "zoom",
+              "kind": "getter",
+              "signature": "double get zoom => _zoom",
+              "doc": null
+            },
+            {
+              "name": "viewport",
+              "kind": "getter",
+              "signature": "Size get viewport => Size(_camera.size.x, _camera.size.y)",
+              "doc": null
+            },
+            {
+              "name": "move",
+              "kind": "method",
+              "signature": "void move(LatLng center, double zoom)",
+              "doc": "Move the camera; syncs the projection delegate and notifies listeners."
+            },
+            {
+              "name": "panBy",
+              "kind": "method",
+              "signature": "void panBy(Offset pixelDelta) =>\nmove(delegate.panBy(pixelDelta), _zoom)",
+              "doc": "Content follows the finger: delegate handles the 1/cos(lat) compensation."
+            },
+            {
+              "name": "zoomBy",
+              "kind": "method",
+              "signature": "void zoomBy(double factor, Offset anchor)",
+              "doc": "Pinch: multiply zoom by [factor], keeping [anchor] (screen px) fixed."
+            },
+            {
+              "name": "zoomAround",
+              "kind": "method",
+              "signature": "void zoomAround(Offset focal, double newZoom)",
+              "doc": "Lab-verified anchor zoom (`_zoomAround` + `_anchorCenter`): first-order\ncorrection for the radius change, then `panCenter` with the view direction."
+            },
+            {
+              "name": "recenter",
+              "kind": "method",
+              "signature": "void recenter(LatLng target) => move(target, _zoom)",
+              "doc": null
+            },
+            {
+              "name": "setViewport",
+              "kind": "method",
+              "signature": "void setViewport(Size size)",
+              "doc": "Viewport size changed (layout pass)."
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/diagnostics/geo_diagnostics.dart",
+      "types": [
+        {
+          "name": "GeoDiagnostics",
+          "kind": "class",
+          "signature": "class GeoDiagnostics",
+          "doc": null,
+          "members": [
+            {
+              "name": "GeoDiagnostics",
+              "kind": "constructor",
+              "signature": "GeoDiagnostics._()",
+              "doc": null
+            },
+            {
+              "name": "enabled",
+              "kind": "field",
+              "signature": "static bool enabled = true",
+              "doc": "总开关（debug 构建默认 true；release 恒关）。"
+            },
+            {
+              "name": "frameIntervalMs",
+              "kind": "field",
+              "signature": "static int frameIntervalMs = 500",
+              "doc": null
+            },
+            {
+              "name": "missDetailIntervalMs",
+              "kind": "field",
+              "signature": "static int missDetailIntervalMs = 2000",
+              "doc": null
+            },
+            {
+              "name": "trace",
+              "kind": "field",
+              "signature": "static bool trace = false",
+              "doc": "逐瓦片 trace（key + 屏幕位置）。定位选片洞/覆盖缺口时打开；\n每帧限量 + 500ms 限速，避免刷屏。"
+            },
+            {
+              "name": "tracePerFrame",
+              "kind": "field",
+              "signature": "static int tracePerFrame = 40",
+              "doc": null
+            },
+            {
+              "name": "traceOn",
+              "kind": "getter",
+              "signature": "static bool get traceOn => enabled && kDebugMode && trace",
+              "doc": null
+            },
+            {
+              "name": "traceLine",
+              "kind": "method",
+              "signature": "static void traceLine(String message)",
+              "doc": null
+            },
+            {
+              "name": "frame",
+              "kind": "method",
+              "signature": "static void frame(String message)",
+              "doc": null
+            },
+            {
+              "name": "missDetail",
+              "kind": "method",
+              "signature": "static void missDetail(String message)",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/engine/tile_engine.dart",
+      "types": [
+        {
+          "name": "TileImage",
+          "kind": "class",
+          "signature": "class TileImage",
+          "doc": "A decoded tile image plus its shader.",
+          "members": [
+            {
+              "name": "TileImage",
+              "kind": "constructor",
+              "signature": "TileImage(this.image, this.shader, {this.loadedAt})",
+              "doc": null
+            },
+            {
+              "name": "image",
+              "kind": "field",
+              "signature": "final ui.Image image",
+              "doc": null
+            },
+            {
+              "name": "shader",
+              "kind": "field",
+              "signature": "final ui.ImageShader shader",
+              "doc": null
+            },
+            {
+              "name": "loadedAt",
+              "kind": "field",
+              "signature": "final int? loadedAt",
+              "doc": "Wall-clock time (ms) the image finished decoding, used for the self\nfade-in (MapLibre `fadeDuration`). `null` marks a pre-settled image that\nalways draws at full opacity."
+            },
+            {
+              "name": "bytes",
+              "kind": "getter",
+              "signature": "int get bytes => image.width * image.height * 4",
+              "doc": null
+            },
+            {
+              "name": "dispose",
+              "kind": "method",
+              "signature": "void dispose()",
+              "doc": null
+            }
+          ]
+        },
+        {
+          "name": "TileResolution",
+          "kind": "class",
+          "signature": "class TileResolution",
+          "doc": "How a screen tile is going to be filled.\n\n* [exact] — the requested tile itself is available.\n* [ancestor] — a coarser tile is stretched over the requested footprint;\n[ancestorDz] tells how many levels up it lives (UV = sub-rect).\n* [descendants] — finer tiles are already loaded and cover the requested\nfootprint (MapLibre `_retainLoadedChildren`).",
+          "members": [
+            {
+              "name": "TileResolution",
+              "kind": "constructor",
+              "signature": "const TileResolution.exact(this.image)\n: ancestor = null,\nancestorDz = 0,\ndescendants = const [],\ndescendantImages = const []",
+              "doc": null
+            },
+            {
+              "name": "TileResolution",
+              "kind": "constructor",
+              "signature": "const TileResolution.ancestor(this.image, this.ancestorDz)\n: ancestor = image,\ndescendants = const [],\ndescendantImages = const []",
+              "doc": null
+            },
+            {
+              "name": "TileResolution",
+              "kind": "constructor",
+              "signature": "const TileResolution.descendants(this.descendants, this.descendantImages)\n: image = null,\nancestor = null,\nancestorDz = 0",
+              "doc": null
+            },
+            {
+              "name": "image",
+              "kind": "field",
+              "signature": "final TileImage? image",
+              "doc": "The exact tile (if any)."
+            },
+            {
+              "name": "ancestor",
+              "kind": "field",
+              "signature": "final TileImage? ancestor",
+              "doc": "The ancestor used as a fallback (if any)."
+            },
+            {
+              "name": "ancestorDz",
+              "kind": "field",
+              "signature": "final int ancestorDz",
+              "doc": "How many zoom levels up [ancestor] is."
+            },
+            {
+              "name": "descendants",
+              "kind": "field",
+              "signature": "final List<TileKey> descendants",
+              "doc": "Loaded descendants covering the footprint."
+            },
+            {
+              "name": "descendantImages",
+              "kind": "field",
+              "signature": "final List<TileImage> descendantImages",
+              "doc": "The images of [descendants] (same order)."
+            },
+            {
+              "name": "isEmpty",
+              "kind": "getter",
+              "signature": "bool get isEmpty => image == null && ancestor == null && descendants.isEmpty",
+              "doc": null
+            }
+          ]
+        },
+        {
+          "name": "TileDraw",
+          "kind": "class",
+          "signature": "class TileDraw",
+          "doc": "One drawing instruction for a screen tile.\n\n[geoKey] is the **footprint** (which piece of the world is covered),\nthe UV values are the **texture region** inside [image] (in image pixels).",
+          "members": [
+            {
+              "name": "TileDraw",
+              "kind": "constructor",
+              "signature": "const TileDraw({\nrequired this.geoKey,\nrequired this.sourceKey,\nrequired this.image,\nrequired this.u0,\nrequired this.v0,\nrequired this.spanU,\nrequired this.spanV,\n})",
+              "doc": null
+            },
+            {
+              "name": "geoKey",
+              "kind": "field",
+              "signature": "final TileKey geoKey",
+              "doc": "The tile whose geographic footprint is drawn."
+            },
+            {
+              "name": "sourceKey",
+              "kind": "field",
+              "signature": "final TileKey sourceKey",
+              "doc": "The tile the [image] was decoded from (an ancestor when falling back)."
+            },
+            {
+              "name": "image",
+              "kind": "field",
+              "signature": "final TileImage image",
+              "doc": null
+            },
+            {
+              "name": "u0",
+              "kind": "field",
+              "signature": "final double u0",
+              "doc": "Texture origin (image pixels)."
+            },
+            {
+              "name": "v0",
+              "kind": "field",
+              "signature": "final double v0",
+              "doc": "Texture origin (image pixels)."
+            },
+            {
+              "name": "spanU",
+              "kind": "field",
+              "signature": "final double spanU",
+              "doc": "Texture extent (image pixels)."
+            },
+            {
+              "name": "spanV",
+              "kind": "field",
+              "signature": "final double spanV",
+              "doc": "Texture extent (image pixels)."
+            },
+            {
+              "name": "sourceRect",
+              "kind": "getter",
+              "signature": "ui.Rect get sourceRect => ui.Rect.fromLTWH(u0, v0, spanU, spanV)",
+              "doc": "The source rect inside the image."
+            }
+          ]
+        },
+        {
+          "name": "CapDraw",
+          "kind": "class",
+          "signature": "class CapDraw",
+          "doc": "A polar-cap drawing instruction (mercator only).\n\nA cap instruction covers a **longitude interval**, not a single column.\nThat makes the two regimes the same shape:\n\n* one column wide (`spanLng == grid.tileWidthDeg`) — a crisp wedge\ntextured with that column's own tile;\n* up to `360°` — a smeared strip textured with a single image, used when\nthe camera sits inside the cap.",
+          "members": [
+            {
+              "name": "CapDraw",
+              "kind": "constructor",
+              "signature": "const CapDraw({\nrequired this.zoom,\nrequired this.north,\nrequired this.startLng,\nrequired this.spanLng,\nrequired this.sourceKey,\nrequired this.image,\nrequired this.u0,\nrequired this.spanU,\nrequired this.v0,\nrequired this.vSpan,\n})",
+              "doc": null
+            },
+            {
+              "name": "zoom",
+              "kind": "field",
+              "signature": "final int zoom",
+              "doc": "The data-zoom level the cap belongs to."
+            },
+            {
+              "name": "north",
+              "kind": "field",
+              "signature": "final bool north",
+              "doc": "Northern or southern cap."
+            },
+            {
+              "name": "startLng",
+              "kind": "field",
+              "signature": "final double startLng",
+              "doc": "West edge of the interval (degrees, unwrapped)."
+            },
+            {
+              "name": "spanLng",
+              "kind": "field",
+              "signature": "final double spanLng",
+              "doc": "Width of the interval (degrees)."
+            },
+            {
+              "name": "sourceKey",
+              "kind": "field",
+              "signature": "final TileKey sourceKey",
+              "doc": "The tile the [image] was decoded from (for eviction protection)."
+            },
+            {
+              "name": "image",
+              "kind": "field",
+              "signature": "final TileImage image",
+              "doc": null
+            },
+            {
+              "name": "u0",
+              "kind": "field",
+              "signature": "final double u0",
+              "doc": "Texture region (image pixels)."
+            },
+            {
+              "name": "spanU",
+              "kind": "field",
+              "signature": "final double spanU",
+              "doc": "Texture extent (image pixels)."
+            },
+            {
+              "name": "v0",
+              "kind": "field",
+              "signature": "final double v0",
+              "doc": "Texture origin (image pixels)."
+            },
+            {
+              "name": "vSpan",
+              "kind": "field",
+              "signature": "final double vSpan",
+              "doc": "Texture extent (image pixels)."
+            }
+          ]
+        },
+        {
+          "name": "TileEngine",
+          "kind": "class",
+          "signature": "class TileEngine extends ChangeNotifier",
+          "doc": "The tile engine: selection, requests, cache, fallback.",
+          "members": [
+            {
+              "name": "TileEngine",
+              "kind": "constructor",
+              "signature": "TileEngine({required this.source})\n: _policy = TileCachePolicy(\nmaxConcurrentRequests: source.maxConcurrentRequests,\n)",
+              "doc": null
+            },
+            {
+              "name": "source",
+              "kind": "field",
+              "signature": "final GlobeRasterSource source",
+              "doc": null
+            },
+            {
+              "name": "policy",
+              "kind": "getter",
+              "signature": "TileCachePolicy<String> get policy => _policy",
+              "doc": "Failure / retry bookkeeping (exposed for the diagnostics HUD)."
+            },
+            {
+              "name": "scheduler",
+              "kind": "getter",
+              "signature": "TileScheduler get scheduler => _scheduler",
+              "doc": "Scheduler (exposed so the host can flag camera gestures)."
+            },
+            {
+              "name": "imageCount",
+              "kind": "getter",
+              "signature": "int get imageCount => _images.length",
+              "doc": null
+            },
+            {
+              "name": "pendingCount",
+              "kind": "getter",
+              "signature": "int get pendingCount => _pending.length",
+              "doc": null
+            },
+            {
+              "name": "inFlight",
+              "kind": "getter",
+              "signature": "int get inFlight => _policy.inFlight",
+              "doc": null
+            },
+            {
+              "name": "queuedCount",
+              "kind": "getter",
+              "signature": "int get queuedCount => _scheduler.pendingCount",
+              "doc": null
+            },
+            {
+              "name": "requestedCount",
+              "kind": "getter",
+              "signature": "int get requestedCount => _requested.length",
+              "doc": null
+            },
+            {
+              "name": "previousDrawCount",
+              "kind": "getter",
+              "signature": "int get previousDrawCount => _previousDraws.length",
+              "doc": null
+            },
+            {
+              "name": "keyOf",
+              "kind": "method",
+              "signature": "static String keyOf(TileKey key) => '${key.z}/${key.x}/${key.y}'",
+              "doc": null
+            },
+            {
+              "name": "imageOf",
+              "kind": "method",
+              "signature": "TileImage? imageOf(TileKey key) => _images[keyOf(key)]",
+              "doc": "The decoded image of a tile, or `null`."
+            },
+            {
+              "name": "wasRequested",
+              "kind": "method",
+              "signature": "bool wasRequested(TileKey key) => _requested.contains(keyOf(key))",
+              "doc": "Whether a tile was ever requested (MapLibre `wasRequested`)."
+            },
+            {
+              "name": "isLive",
+              "kind": "method",
+              "signature": "bool isLive(TileDraw draw) => _images[keyOf(draw.sourceKey)] == draw.image",
+              "doc": "Whether the image behind a draw command is still cached."
+            },
+            {
+              "name": "request",
+              "kind": "method",
+              "signature": "void request(TileKey key)",
+              "doc": "Request a tile (idempotent; failures are graded, never blacklisted).\n\nThe tile is **enqueued** on the [TileScheduler] priority queue and a pump\ndispatches as many as the concurrency gate allows. A tile that finds every\nslot busy is no longer silently dropped (and re-requested next frame) — it\nwaits its turn and is dispatched the moment a slot frees."
+            },
+            {
+              "name": "resolve",
+              "kind": "method",
+              "signature": "TileResolution resolve(TileKey key, int dataZoom)",
+              "doc": "Resolve one ideal tile: exact → descendants → ancestors.\n\nThe **ideal** tile is always requested (MapLibre `_updateRetainedTiles`\n→ `_addTile(idealID)`), *even when a fallback is already drawable*. This\nis not an optimisation detail: requesting only when nothing at all is\ncached means that the moment a coarse tile is in the cache — which is\ntrue after **every** zoom-in — the finer tile is never fetched and the\nview stays pinned to the coarse level forever.\n\nThe **ancestor chain** is different: it escalates one level per round and\nonly after the level below has actually failed (MapLibre\n`parentWasRequested`). Requesting the whole pyramid at once is what\nproduced request storms (and the black holes that followed)."
+            },
+            {
+              "name": "drawsFor",
+              "kind": "method",
+              "signature": "List<TileDraw> drawsFor(TileKey key, int dataZoom)",
+              "doc": "The drawing commands for one ideal tile.\n\n* exact hit → one command (whole texture);\n* loaded descendants → one command per child (they tile the footprint);\n* loaded ancestor → one command: the *fine* footprint with the\nancestor's sub-rectangle as texture region.\n\nAn empty list means \"nothing available yet\" — the caller keeps the\nprevious frame underneath so the screen never flashes black."
+            },
+            {
+              "name": "capDraws",
+              "kind": "method",
+              "signature": "List<CapDraw> capDraws({\nrequired CameraState camera,\nrequired int dataZoom,\n})",
+              "doc": "The polar caps that should be drawn for the current camera.\n\nOnly mercator has a blind spot (|lat| > 85.05°); the cap stretches the\nedge pixel row of the first / last tile row onto the pole.\n\nTwo regimes, chosen by [PolarCapBuilder.columnCountFor]:\n\n* **wedge** — the span is a handful of columns wide: each column is drawn\nas its own strip, textured with its own tile. Crisp, and the request\ncount is proportional to the visible cap.\n* **smeared** — the span needs more columns than\n[GeoEngineTuning.maxPolarCapColumns] allows (the camera is inside the\ncap, so the arc wraps the pole): **one** strip, one image. Drawing a\nwedge per column there meant 4096 meshes per frame, each with a\ndifferent picture, i.e. a sunburst across the whole viewport."
+            },
+            {
+              "name": "fadeDurationMs",
+              "kind": "field",
+              "signature": "static const int fadeDurationMs = 300",
+              "doc": "Self-fade window for a freshly decoded raster tile (ms). Mirrors\nMapLibre's `fadeDuration` (default 300)."
+            },
+            {
+              "name": "fadeOpacity",
+              "kind": "method",
+              "signature": "double fadeOpacity(TileImage image, int now) =>\nselfFadeOpacity(image.loadedAt, now, fadeDurationMs)",
+              "doc": "Linear self-fade opacity (0→1) for [image] at wall-clock [now].\n\nA `null` [TileImage.loadedAt] (e.g. a pre-cached image) is always 1. This\nis the raster-only \"load fade\" of MapLibre — a tile is blended in from\ntransparent to opaque instead of popping in (see `draw_raster.ts`\n`getSelfFadeValues`). The math lives in `geo_map_core` so it is\nunit-testable without `dart:ui`."
+            },
+            {
+              "name": "hasFadingTiles",
+              "kind": "method",
+              "signature": "bool hasFadingTiles([int? now])",
+              "doc": "Whether any cached tile is still inside its fade window at [now].\n\nDrives the per-frame repaint loop: while this is true the layer keeps\nredrawing so the fade actually animates (MapLibre keeps `triggerRepaint`\nalive while `hasRasterTransition`)."
+            },
+            {
+              "name": "crossFadeDurationMs",
+              "kind": "field",
+              "signature": "static const int crossFadeDurationMs = 300",
+              "doc": "Duration of a zoom-level cross-fade (ms). Mirrors MapLibre's\n`fadeDuration`-based zoom transition between a parent and its child."
+            },
+            {
+              "name": "onCrossFadeStart",
+              "kind": "field",
+              "signature": "VoidCallback? onCrossFadeStart",
+              "doc": "Notifies the host when a new zoom transition starts, so it can begin the\nper-frame repaint loop even while the camera is otherwise stationary."
+            },
+            {
+              "name": "noteDataZoom",
+              "kind": "method",
+              "signature": "bool noteDataZoom(int dataZoom, int now)",
+              "doc": "Record the data level of this frame. When it differs from the previous\nframe a cross-fade begins; returns true on the first frame of a transition."
+            },
+            {
+              "name": "crossFadeFromZoom",
+              "kind": "getter",
+              "signature": "int? get crossFadeFromZoom => _crossFadeFrom",
+              "doc": "The level currently being faded *from*, or null when not cross-fading."
+            },
+            {
+              "name": "crossFadeProgressAt",
+              "kind": "method",
+              "signature": "double crossFadeProgressAt(int now)",
+              "doc": "Cross-fade progress (0→1) at [now]; 1 means the transition is complete."
+            },
+            {
+              "name": "isCrossFading",
+              "kind": "method",
+              "signature": "bool isCrossFading(int now) =>\n_crossFadeFrom != null &&\nisWithinFade(_crossFadeStartMs, now, crossFadeDurationMs)",
+              "doc": "Whether a zoom cross-fade is still animating at [now]."
+            },
+            {
+              "name": "zoomSettleMs",
+              "kind": "field",
+              "signature": "static const int zoomSettleMs = 250",
+              "doc": "How long after the last zoom change the camera is still treated as\n\"zooming\" (ms). Long enough to cover a continuous pinch, short enough to\nresume parent requests promptly after the finger lifts."
+            },
+            {
+              "name": "noteRenderZoom",
+              "kind": "method",
+              "signature": "void noteRenderZoom(double zoom, int now)",
+              "doc": "Record the render zoom of this frame. Any change of zoom marks the camera\nas zooming until [zoomSettleMs] after the last change."
+            },
+            {
+              "name": "isZooming",
+              "kind": "getter",
+              "signature": "bool get isZooming => _nowMs < _zoomingUntilMs",
+              "doc": "Whether the camera is currently zooming (within [zoomSettleMs] of the last\nzoom change). Drives [planTileRequest]'s `suspendAncestors`."
+            },
+            {
+              "name": "beginFrame",
+              "kind": "method",
+              "signature": "void beginFrame()",
+              "doc": "Start a frame: the *previous* render set stays protected, the current one\nis rebuilt. Also reclaims stuck queue entries and pumps the queue once."
+            },
+            {
+              "name": "markRendered",
+              "kind": "method",
+              "signature": "void markRendered(TileKey key) => _policy.addRenderTile(keyOf(key))",
+              "doc": "Mark a tile as drawn this frame (protects it from eviction)."
+            },
+            {
+              "name": "previousDraws",
+              "kind": "getter",
+              "signature": "List<TileDraw> get previousDraws =>\n_previousDraws.where(isLive).toList(growable: false)",
+              "doc": "The draw commands of the previous frame (still cached ones only)."
+            },
+            {
+              "name": "commitFrame",
+              "kind": "method",
+              "signature": "void commitFrame(List<TileDraw> draws)",
+              "doc": "Promote the current frame's draws to the \"previous\" underlay."
+            },
+            {
+              "name": "noteCameraChange",
+              "kind": "method",
+              "signature": "void noteCameraChange({required bool interacting})",
+              "doc": "Note a camera interaction (used for the request debounce)."
+            },
+            {
+              "name": "invalidate",
+              "kind": "method",
+              "signature": "void invalidate()",
+              "doc": "Drop in-flight results of an older camera generation, and clear queued\nrequests that belong to the old view."
+            },
+            {
+              "name": "dispose",
+              "kind": "method",
+              "signature": "void dispose()",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/engine/tile_geometry.dart",
+      "types": [
+        {
+          "name": "TileGeometry",
+          "kind": "class",
+          "signature": "abstract class TileGeometry",
+          "doc": "Draws a frame of tile commands.",
+          "members": [
+            {
+              "name": "TileGeometry",
+              "kind": "constructor",
+              "signature": "const TileGeometry()",
+              "doc": null
+            },
+            {
+              "name": "drawTile",
+              "kind": "method",
+              "signature": "void drawTile(\nCanvas canvas,\nTileDraw draw, {\nrequired CameraState camera,\nrequired double opacity,\n})",
+              "doc": "Draw one tile command."
+            },
+            {
+              "name": "drawCap",
+              "kind": "method",
+              "signature": "void drawCap(\nCanvas canvas,\nCapDraw cap, {\nrequired CameraState camera,\nrequired double opacity,\n})",
+              "doc": "Draw one polar cap command."
+            }
+          ]
+        },
+        {
+          "name": "SphericalGeometry",
+          "kind": "class",
+          "signature": "class SphericalGeometry extends TileGeometry",
+          "doc": "Orthographic (3D globe) geometry.",
+          "members": [
+            {
+              "name": "SphericalGeometry",
+              "kind": "constructor",
+              "signature": "const SphericalGeometry({\nrequired this.projector,\nrequired this.scheme,\nthis.meshBuilder,\n})",
+              "doc": null
+            },
+            {
+              "name": "projector",
+              "kind": "field",
+              "signature": "final GeoProjector projector",
+              "doc": null
+            },
+            {
+              "name": "scheme",
+              "kind": "field",
+              "signature": "final TileSchemeKind scheme",
+              "doc": null
+            },
+            {
+              "name": "meshBuilder",
+              "kind": "field",
+              "signature": "final TileMeshBuilder? meshBuilder",
+              "doc": "Shared mesh cache — the unit meshes are projection independent, so they\nsurvive panning and zoom changes."
+            },
+            {
+              "name": "drawTile",
+              "kind": "method",
+              "signature": "void drawTile(\nCanvas canvas,\nTileDraw draw, {\nrequired CameraState camera,\nrequired double opacity,\n})",
+              "doc": null
+            },
+            {
+              "name": "drawCap",
+              "kind": "method",
+              "signature": "void drawCap(\nCanvas canvas,\nCapDraw cap, {\nrequired CameraState camera,\nrequired double opacity,\n})",
+              "doc": null
+            }
+          ]
+        },
+        {
+          "name": "AffineGeometry",
+          "kind": "class",
+          "signature": "class AffineGeometry extends TileGeometry",
+          "doc": "Web Mercator (2D) geometry: world-pixel rectangles.",
+          "members": [
+            {
+              "name": "AffineGeometry",
+              "kind": "constructor",
+              "signature": "const AffineGeometry({required this.scheme})",
+              "doc": null
+            },
+            {
+              "name": "scheme",
+              "kind": "field",
+              "signature": "final TileSchemeKind scheme",
+              "doc": null
+            },
+            {
+              "name": "worldCopies",
+              "kind": "field",
+              "signature": "static const int worldCopies = 1",
+              "doc": "How many world copies are drawn around the camera longitude."
+            },
+            {
+              "name": "drawTile",
+              "kind": "method",
+              "signature": "void drawTile(\nCanvas canvas,\nTileDraw draw, {\nrequired CameraState camera,\nrequired double opacity,\n})",
+              "doc": null
+            },
+            {
+              "name": "drawCap",
+              "kind": "method",
+              "signature": "void drawCap(\nCanvas canvas,\nCapDraw cap, {\nrequired CameraState camera,\nrequired double opacity,\n})",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/engine/tile_layer.dart",
+      "types": [
+        {
+          "name": "TileLayerMode",
+          "kind": "enum",
+          "signature": "enum TileLayerMode",
+          "doc": "Which projection the layer renders with.",
+          "members": [
+            {
+              "name": "mercator",
+              "kind": "enum-value",
+              "signature": "mercator",
+              "doc": null
+            },
+            {
+              "name": "globe",
+              "kind": "enum-value",
+              "signature": "globe",
+              "doc": null
+            }
+          ]
+        },
+        {
+          "name": "TileLayer",
+          "kind": "class",
+          "signature": "class TileLayer extends StatefulWidget",
+          "doc": "Raster tile layer for both 2D and 3D.\n\n### Engine ownership\n\nThe layer accepts an optional [engine]. When one is injected, **it belongs\nto the host** and the layer must never dispose it: the whole point of the\nshared engine is that the 2D and 3D layers trade places without dropping\nthe cache, and the layer that is being unmounted has no idea whether a\nsibling is about to mount with the same engine.\n\nGetting this backwards is not subtle — disposing the injected engine kills\nevery in-flight decode (`_decode` drops the frame on `_disposed`) and the\nvery next build asserts `A TileEngine was used after being disposed`, which\nsurfaces as \"the globe basemap never loads\".",
+          "members": [
+            {
+              "name": "TileLayer",
+              "kind": "constructor",
+              "signature": "const TileLayer({\nrequired this.source,\nrequired this.mode,\nthis.engine,\nsuper.key,\n})",
+              "doc": null
+            },
+            {
+              "name": "source",
+              "kind": "field",
+              "signature": "final GlobeRasterSource source",
+              "doc": null
+            },
+            {
+              "name": "engine",
+              "kind": "field",
+              "signature": "final TileEngine? engine",
+              "doc": "The shared engine. When `null` the layer creates one and owns it."
+            },
+            {
+              "name": "mode",
+              "kind": "field",
+              "signature": "final TileLayerMode mode",
+              "doc": null
+            },
+            {
+              "name": "createState",
+              "kind": "method",
+              "signature": "State<TileLayer> createState() => _TileLayerState()",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/gesture/globe_gesture_overlay.dart",
+      "types": [
+        {
+          "name": "GlobeGestureOverlay",
+          "kind": "class",
+          "signature": "class GlobeGestureOverlay extends StatefulWidget",
+          "doc": null,
+          "members": [
+            {
+              "name": "GlobeGestureOverlay",
+              "kind": "constructor",
+              "signature": "const GlobeGestureOverlay({\nrequired this.controller,\nthis.onTap,\nthis.minZoom,\nthis.maxZoom,\nsuper.key,\n})",
+              "doc": null
+            },
+            {
+              "name": "controller",
+              "kind": "field",
+              "signature": "final GeoMapController controller",
+              "doc": null
+            },
+            {
+              "name": "onTap",
+              "kind": "method",
+              "signature": "final void Function(LatLng latLng)? onTap",
+              "doc": null
+            },
+            {
+              "name": "minZoom",
+              "kind": "field",
+              "signature": "final double? minZoom",
+              "doc": "Zoom clamps for wheel/double-tap; null = controller's own range."
+            },
+            {
+              "name": "maxZoom",
+              "kind": "field",
+              "signature": "final double? maxZoom",
+              "doc": null
+            },
+            {
+              "name": "createState",
+              "kind": "method",
+              "signature": "State<GlobeGestureOverlay> createState() => _GlobeGestureOverlayState()",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/query/geo_feature_registry.dart",
+      "types": [
+        {
+          "name": "GeoFeatureRegistry",
+          "kind": "class",
+          "signature": "class GeoFeatureRegistry",
+          "doc": "The registry of queryable features.",
+          "members": [
+            {
+              "name": "setSource",
+              "kind": "method",
+              "signature": "void setSource(\nString sourceId,\nList<GeoJsonFeature> features, {\nbool visible = true,\nString? layerId,\ndouble? pointRadiusPx,\nGeoPopupBinding? popup,\n})",
+              "doc": "Register (or replace) the features of one source.\n\n[visible] hides the whole source without removing it — a layer that is\nswitched off must not be pickable. [pointRadiusPx] overrides the query's\ndefault pick radius for this source, and [layerId] records which layer\nit came from.\n\n[popup] optionally binds a popup card to this source (the SDK equivalent of\nMapLibre `map.on('click', layerId, handler)`); see [GeoPopupBinding]. A\nsource without a popup is still pickable — it just won't open a card via\n[GeoPopupController] (the host may drive a SnackBar or selection instead)."
+            },
+            {
+              "name": "removeSource",
+              "kind": "method",
+              "signature": "void removeSource(String sourceId) => _sources.remove(sourceId)",
+              "doc": "Drop a source. Its features are no longer pickable."
+            },
+            {
+              "name": "clear",
+              "kind": "method",
+              "signature": "void clear() => _sources.clear()",
+              "doc": "Drop every source."
+            },
+            {
+              "name": "containsSource",
+              "kind": "method",
+              "signature": "bool containsSource(String sourceId) => _sources.containsKey(sourceId)",
+              "doc": null
+            },
+            {
+              "name": "popupOf",
+              "kind": "method",
+              "signature": "GeoPopupBinding? popupOf(String sourceId) => _sources[sourceId]?.popup",
+              "doc": "The popup binding registered for [sourceId], or `null` if that source has\nno popup card (e.g. it only drives a SnackBar or a selection state)."
+            },
+            {
+              "name": "sourceIds",
+              "kind": "getter",
+              "signature": "Iterable<String> get sourceIds => _sources.keys",
+              "doc": "The registered source ids, in registration order."
+            },
+            {
+              "name": "length",
+              "kind": "getter",
+              "signature": "int get length => _sources.length",
+              "doc": null
+            },
+            {
+              "name": "queryFeatures",
+              "kind": "method",
+              "signature": "List<GeoQueryHit> queryFeatures(\nLatLng tap, {\nrequired GeoMapController controller,\ndouble? pointRadiusPx,\nSet<String>? sourceIds,\nSet<GeoGeometryKind>? geometries,\nint? limit,\n})",
+              "doc": "The features under [tap].\n\nPoint features are matched in **screen space** (within [pointRadiusPx]);\narea features in **geographic space** (point-in-polygon). The two are\ndispatched per feature by its geometry type — see\n`planFeatureQuery` in `geo_map_core` for the full contract.\n\n[sourceIds] and [geometries] narrow the query; [limit] truncates the\nresult after sorting."
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/query/geo_pick_projection.dart",
+      "types": [],
+      "functions": [
+        {
+          "name": "projectForPick",
+          "signature": "Vec2? projectForPick(MapProjectionDelegate delegate, LatLng point)",
+          "doc": "The screen position of [point] for picking, or `null` when it cannot be\npicked (the far side of the globe, or a non-finite coordinate)."
+        }
+      ],
+      "constants": []
+    },
+    {
+      "file": "lib/src/globe/globe_image_layer.dart",
+      "types": [
+        {
+          "name": "GlobeImageLayer",
+          "kind": "class",
+          "signature": "class GlobeImageLayer extends StatefulWidget",
+          "doc": "Image overlay (weather radar, satellite swath, …) drawn on the globe.\n\nflutter_map's `OverlayImageLayer` maps the image onto a quad from four\ncorners, which on a sphere looks like a flat sheet: no curvature, no horizon\nclipping. This layer tessellates the bounds into a mesh and projects every\nvertex, so the overlay follows the surface and disappears behind it.",
+          "members": [
+            {
+              "name": "GlobeImageLayer",
+              "kind": "constructor",
+              "signature": "const GlobeImageLayer({\nsuper.key,\nrequired this.image,\nrequired this.bounds,\nthis.opacity = 0.85,\nthis.subdivisions = 24,\n})",
+              "doc": null
+            },
+            {
+              "name": "image",
+              "kind": "field",
+              "signature": "final ImageProvider image",
+              "doc": null
+            },
+            {
+              "name": "bounds",
+              "kind": "field",
+              "signature": "final LatLngBounds bounds",
+              "doc": null
+            },
+            {
+              "name": "opacity",
+              "kind": "field",
+              "signature": "final double opacity",
+              "doc": null
+            },
+            {
+              "name": "subdivisions",
+              "kind": "field",
+              "signature": "final int subdivisions",
+              "doc": null
+            },
+            {
+              "name": "createState",
+              "kind": "method",
+              "signature": "State<GlobeImageLayer> createState() => _GlobeImageLayerState()",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/globe/geojson_vector_source.dart",
+      "types": [
+        {
+          "name": "GeoJsonVectorSource",
+          "kind": "class",
+          "signature": "class GeoJsonVectorSource",
+          "doc": "Loads vector data for the debug overlay.\n\n\"Vector basemap\" here means: fetch a GeoJSON `FeatureCollection` over HTTP\nand feed its linework into [GlobeVectorLayer]. Vector **tiles** (MVT) would\nneed a full style/protobuf pipeline; GeoJSON is enough to eyeball whether\nthe projection is correct.",
+          "members": [
+            {
+              "name": "GeoJsonVectorSource",
+              "kind": "constructor",
+              "signature": "const GeoJsonVectorSource(this.url)",
+              "doc": null
+            },
+            {
+              "name": "url",
+              "kind": "field",
+              "signature": "final String url",
+              "doc": null
+            },
+            {
+              "name": "load",
+              "kind": "method",
+              "signature": "Future<List<GlobePolyline>> load({\nColor color = const Color(0xCCFFFFFF),\ndouble strokeWidth = 1.0,\n}) async",
+              "doc": null
+            },
+            {
+              "name": "loadAsset",
+              "kind": "method",
+              "signature": "static Future<List<GlobePolyline>> loadAsset(\nString assetPath, {\nColor color = const Color(0xCCFFFFFF),\ndouble strokeWidth = 1.0,\n}) async",
+              "doc": "Loads a GeoJSON file bundled as an asset (works offline)."
+            },
+            {
+              "name": "parse",
+              "kind": "method",
+              "signature": "static List<GlobePolyline> parse(\nString body, {\nColor color = const Color(0xCCFFFFFF),\ndouble strokeWidth = 1.0,\n})",
+              "doc": "Parses `LineString`, `MultiLineString` and `Polygon` (outer rings only)."
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/globe/globe_projection.dart",
+      "types": [
+        {
+          "name": "GlobeProjectionDelegate",
+          "kind": "class",
+          "signature": "class GlobeProjectionDelegate implements MapProjectionDelegate",
+          "doc": "Orthographic globe projection plugged into flutter_map through the\n(fork-only) `MapProjectionDelegate` hook.\n\nScreen space replaces world space:\n* `project()` returns **screen pixels** (or far-away coordinates for points\non the far side, so flutter_map's own culling removes them),\n* `pixelOrigin` is forced to zero by the forked `MapCamera`,\n* `pixelBounds` is the viewport.",
+          "members": [
+            {
+              "name": "GlobeProjectionDelegate",
+              "kind": "constructor",
+              "signature": "GlobeProjectionDelegate({this.tileSize = 256})",
+              "doc": null
+            },
+            {
+              "name": "tileSize",
+              "kind": "field",
+              "signature": "final double tileSize",
+              "doc": null
+            },
+            {
+              "name": "maxCameraLatitude",
+              "kind": "field",
+              "signature": "static const double maxCameraLatitude = 89.999",
+              "doc": "The camera may look straight at a pole. 85.0511° is a **tile data** limit\n(Web Mercator), not a projection limit — clamping the camera there makes\nthe globe feel truncated, so only stop just short of the degenerate pole."
+            },
+            {
+              "name": "center",
+              "kind": "getter",
+              "signature": "LatLng get center => _center",
+              "doc": null
+            },
+            {
+              "name": "zoom",
+              "kind": "getter",
+              "signature": "double get zoom => _zoom",
+              "doc": null
+            },
+            {
+              "name": "radius",
+              "kind": "getter",
+              "signature": "double get radius => tileSize * math.pow(2, _zoom) / (2 * math.pi)",
+              "doc": "Disc radius in logical pixels — a function of zoom only.\n\nMultiplying by `1/cos(lat)` (mercator's trick) would make the globe grow\nas you drag towards the poles; on a sphere the apparent size is fixed."
+            },
+            {
+              "name": "updateCamera",
+              "kind": "method",
+              "signature": "void updateCamera(LatLng center, double zoom, Size size)",
+              "doc": null
+            },
+            {
+              "name": "project",
+              "kind": "method",
+              "signature": "Offset project(LatLng point)",
+              "doc": null
+            },
+            {
+              "name": "projectForVector",
+              "kind": "method",
+              "signature": "Offset projectForVector(LatLng point)",
+              "doc": null
+            },
+            {
+              "name": "isVisible",
+              "kind": "method",
+              "signature": "bool isVisible(LatLng point) => _toView(point).$3 > -0.03",
+              "doc": null
+            },
+            {
+              "name": "unproject",
+              "kind": "method",
+              "signature": "LatLng? unproject(Offset local)",
+              "doc": null
+            },
+            {
+              "name": "panBy",
+              "kind": "method",
+              "signature": "LatLng panBy(Offset pixelDelta) => panCenter(_center, pixelDelta, _zoom)",
+              "doc": null
+            },
+            {
+              "name": "anchorCenter",
+              "kind": "method",
+              "signature": "LatLng anchorCenter(\nLatLng center, LatLng anchor, double fromZoom, double toZoom)",
+              "doc": null
+            },
+            {
+              "name": "panCenter",
+              "kind": "method",
+              "signature": "LatLng panCenter(LatLng from, Offset delta, double zoom)",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/globe/flat_tile_layer.dart",
+      "types": [
+        {
+          "name": "FlatTileLayer",
+          "kind": "class",
+          "signature": "class FlatTileLayer extends StatelessWidget",
+          "doc": null,
+          "members": [
+            {
+              "name": "FlatTileLayer",
+              "kind": "constructor",
+              "signature": "const FlatTileLayer({\nrequired this.source,\nthis.engine,\nsuper.key,\n})",
+              "doc": null
+            },
+            {
+              "name": "source",
+              "kind": "field",
+              "signature": "final GlobeRasterSource source",
+              "doc": null
+            },
+            {
+              "name": "engine",
+              "kind": "field",
+              "signature": "final TileEngine? engine",
+              "doc": "The shared engine. When `null` the layer creates one and owns it."
+            },
+            {
+              "name": "build",
+              "kind": "method",
+              "signature": "Widget build(BuildContext context) => TileLayer(\nsource: source,\nengine: engine,\nmode: TileLayerMode.mercator,\n)",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/globe/globe_tile_layer.dart",
+      "types": [
+        {
+          "name": "GlobeTileLayer",
+          "kind": "class",
+          "signature": "class GlobeTileLayer extends StatelessWidget",
+          "doc": null,
+          "members": [
+            {
+              "name": "GlobeTileLayer",
+              "kind": "constructor",
+              "signature": "const GlobeTileLayer({\nrequired this.source,\nthis.engine,\nsuper.key,\n})",
+              "doc": null
+            },
+            {
+              "name": "source",
+              "kind": "field",
+              "signature": "final GlobeRasterSource source",
+              "doc": null
+            },
+            {
+              "name": "engine",
+              "kind": "field",
+              "signature": "final TileEngine? engine",
+              "doc": "The shared engine. When `null` the layer creates one and owns it."
+            },
+            {
+              "name": "build",
+              "kind": "method",
+              "signature": "Widget build(BuildContext context) => TileLayer(\nsource: source,\nengine: engine,\nmode: TileLayerMode.globe,\n)",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/globe/globe_vector_layer.dart",
+      "types": [
+        {
+          "name": "GlobePolyline",
+          "kind": "class",
+          "signature": "class GlobePolyline",
+          "doc": "A polyline on the sphere, drawn in screen space.",
+          "members": [
+            {
+              "name": "GlobePolyline",
+              "kind": "constructor",
+              "signature": "const GlobePolyline({\nrequired this.points,\nrequired this.color,\nthis.strokeWidth = 1.2,\nthis.closed = false,\nthis.dashPattern,\n})",
+              "doc": null
+            },
+            {
+              "name": "points",
+              "kind": "field",
+              "signature": "final List<LatLng> points",
+              "doc": null
+            },
+            {
+              "name": "color",
+              "kind": "field",
+              "signature": "final Color color",
+              "doc": null
+            },
+            {
+              "name": "strokeWidth",
+              "kind": "field",
+              "signature": "final double strokeWidth",
+              "doc": null
+            },
+            {
+              "name": "closed",
+              "kind": "field",
+              "signature": "final bool closed",
+              "doc": null
+            },
+            {
+              "name": "dashPattern",
+              "kind": "field",
+              "signature": "final List<double>? dashPattern",
+              "doc": "屏幕像素的虚线样式：`[2, 2]` 表示实 2px / 空 2px 交替。null 为实线。"
+            }
+          ]
+        },
+        {
+          "name": "GlobePolygonShape",
+          "kind": "class",
+          "signature": "class GlobePolygonShape",
+          "doc": "A filled polygon on the sphere (fill + border), used in globe mode instead\nof flutter_map's `PolygonLayer`, whose painter cannot clip to the horizon.",
+          "members": [
+            {
+              "name": "GlobePolygonShape",
+              "kind": "constructor",
+              "signature": "const GlobePolygonShape({\nrequired this.points,\nrequired this.fill,\nrequired this.stroke,\nthis.strokeWidth = 2,\nthis.label,\nthis.labelStyle = const TextStyle(color: Colors.white, fontSize: 12),\n})",
+              "doc": null
+            },
+            {
+              "name": "points",
+              "kind": "field",
+              "signature": "final List<LatLng> points",
+              "doc": null
+            },
+            {
+              "name": "fill",
+              "kind": "field",
+              "signature": "final Color fill",
+              "doc": null
+            },
+            {
+              "name": "stroke",
+              "kind": "field",
+              "signature": "final Color stroke",
+              "doc": null
+            },
+            {
+              "name": "strokeWidth",
+              "kind": "field",
+              "signature": "final double strokeWidth",
+              "doc": null
+            },
+            {
+              "name": "label",
+              "kind": "field",
+              "signature": "final String? label",
+              "doc": "Optional text drawn at the ring's centroid (3D counterpart of\n`Polygon.label`, which only the native painter handles)."
+            },
+            {
+              "name": "labelStyle",
+              "kind": "field",
+              "signature": "final TextStyle labelStyle",
+              "doc": null
+            }
+          ]
+        },
+        {
+          "name": "GlobeLabel",
+          "kind": "class",
+          "signature": "class GlobeLabel",
+          "doc": "A text label anchored at a geographic point.",
+          "members": [
+            {
+              "name": "GlobeLabel",
+              "kind": "constructor",
+              "signature": "const GlobeLabel({\nrequired this.point,\nrequired this.text,\nthis.style = const TextStyle(color: Colors.white, fontSize: 11),\nthis.offset = const Offset(0, -16),\nthis.background = const Color(0xCC0F2440),\n})",
+              "doc": null
+            },
+            {
+              "name": "point",
+              "kind": "field",
+              "signature": "final LatLng point",
+              "doc": null
+            },
+            {
+              "name": "text",
+              "kind": "field",
+              "signature": "final String text",
+              "doc": null
+            },
+            {
+              "name": "style",
+              "kind": "field",
+              "signature": "final TextStyle style",
+              "doc": null
+            },
+            {
+              "name": "offset",
+              "kind": "field",
+              "signature": "final Offset offset",
+              "doc": null
+            },
+            {
+              "name": "background",
+              "kind": "field",
+              "signature": "final Color background",
+              "doc": null
+            }
+          ]
+        },
+        {
+          "name": "GlobeVectorLayer",
+          "kind": "class",
+          "signature": "class GlobeVectorLayer extends StatelessWidget",
+          "doc": "Vector debug layer for the globe.\n\nDeliberately **not** flutter_map's `PolylineLayer`/`PolygonLayer`: those\nre-project with `crs.transform` after `camera.project`, which is wrong once\na projection delegate is in play. Here every vertex goes through\n`camera.project` (the delegate) and great-circle densification, so the layer\nalso serves as the reference for what those layers will need later.",
+          "members": [
+            {
+              "name": "GlobeVectorLayer",
+              "kind": "constructor",
+              "signature": "const GlobeVectorLayer({\nsuper.key,\nrequired this.lines,\nthis.polygons = const [],\nthis.dots = const [],\nthis.dotColors,\nthis.labels = const [],\nthis.dotRadius = 1.6,\nthis.dotColor = const Color(0x803DDC97),\nthis.opacity = 1,\n})",
+              "doc": null
+            },
+            {
+              "name": "lines",
+              "kind": "field",
+              "signature": "final List<GlobePolyline> lines",
+              "doc": null
+            },
+            {
+              "name": "polygons",
+              "kind": "field",
+              "signature": "final List<GlobePolygonShape> polygons",
+              "doc": null
+            },
+            {
+              "name": "dots",
+              "kind": "field",
+              "signature": "final List<LatLng> dots",
+              "doc": "Points (e.g. graticule intersections) drawn in the same projection as the\nlines — avoids the mismatch you get from mixing in a separate layer."
+            },
+            {
+              "name": "dotColors",
+              "kind": "field",
+              "signature": "final List<Color>? dotColors",
+              "doc": "Per-dot override colors. Length must match [dots] or be null (all use\n[dotColor]). Entries can be [dotColor] for individual dots to fall back."
+            },
+            {
+              "name": "labels",
+              "kind": "field",
+              "signature": "final List<GlobeLabel> labels",
+              "doc": null
+            },
+            {
+              "name": "dotRadius",
+              "kind": "field",
+              "signature": "final double dotRadius",
+              "doc": null
+            },
+            {
+              "name": "dotColor",
+              "kind": "field",
+              "signature": "final Color dotColor",
+              "doc": null
+            },
+            {
+              "name": "opacity",
+              "kind": "field",
+              "signature": "final double opacity",
+              "doc": null
+            },
+            {
+              "name": "build",
+              "kind": "method",
+              "signature": "Widget build(BuildContext context)",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [
+        {
+          "name": "densifyPath",
+          "signature": "List<LatLng> densifyPath(List<LatLng> points, {double stepDeg = 2})",
+          "doc": "Densifies a path along great circles.\n\nflutter_map's polygon/polyline painters connect projected points with\nstraight screen lines, so data fed to them must already be densified for the\nedges to follow the sphere."
+        },
+        {
+          "name": "buildGraticule",
+          "signature": "List<GlobePolyline> buildGraticule({\ndouble latStep = 15,\ndouble lngStep = 15,\ndouble maxLat = 80,\nColor color = const Color(0x553DDC97),\n})",
+          "doc": "Meridians every [lngStep]° and parallels every [latStep]°.\n\nParallels are sampled densely so they visibly curve — that curvature is the\nfirst thing to check when the projection is off."
+        },
+        {
+          "name": "buildTissot",
+          "signature": "List<GlobePolyline> buildTissot({\ndouble latStep = 30,\ndouble lngStep = 30,\ndouble radiusDeg = 9,\nint segments = 48,\nColor color = const Color(0x88FFC107),\n})",
+          "doc": "Tissot indicatrices: small equal-radius circles on the sphere.\n\nOn a correct orthographic projection they stay circular at the disc centre\nand squash into ellipses towards the limb — an instant visual check for\ndistortion and for wrong great-circle interpolation."
+        },
+        {
+          "name": "buildGreatCircle",
+          "signature": "GlobePolyline buildGreatCircle(\nLatLng from,\nLatLng to, {\nColor color = const Color(0xCCFF1744),\ndouble strokeWidth = 2,\n}) => GlobePolyline(points: [from, to], color: color, strokeWidth: strokeWidth)",
+          "doc": "Great-circle segment between two points (for checking long distances)."
+        }
+      ],
+      "constants": []
+    },
+    {
+      "file": "lib/src/globe/tile_source.dart",
+      "types": [
+        {
+          "name": "GlobeRasterSource",
+          "kind": "typedef",
+          "signature": "typedef GlobeRasterSource = GeoTileSource",
+          "doc": "Backwards-compatible name for [GeoTileSource].",
+          "members": []
+        },
+        {
+          "name": "HttpTileSource",
+          "kind": "class",
+          "signature": "class HttpTileSource implements GlobeRasterSource",
+          "doc": "WMTS / XYZ over HTTP.\n\nURL building (templates, TMS flip, quadkey, bbox, subdomains, ratio) is\ndelegated to the pure [TileUrlBuilder] in core, so it is unit-tested there.\nThis class only owns the 404-vs-network failure split; the socket itself is\nthe shared transport in `platform/http_get.dart`, which has a browser\nimplementation so this file compiles for web.\n\n[urlTemplate] supports `{z}`, `{x}`, `{y}`, `{TileMatrix}`, `{TileRow}`,\n`{TileCol}`, `{prefix}`, `{ratio}`, `{quadkey}`, `{bbox}`,\n`{bbox-epsg-3857}`. Both RESTful WMTS and plain XYZ templates work, e.g.:\n\n```\nWMTS (EPSG:4326, NASA GIBS):\nhttps://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/2026-10-20/250m/{z}/{y}/{x}.jpg\n\nXYZ:\nhttps://tile.openstreetmap.org/{z}/{x}/{y}.png\n```",
+          "members": [
+            {
+              "name": "HttpTileSource",
+              "kind": "constructor",
+              "signature": "HttpTileSource({\nrequired this.urlTemplate,\nrequired this.scheme,\nrequired this.maxZoom,\nthis.minZoom = 0,\nthis.attribution = '',\nthis.headers = const {},\nthis.rowOrder = TileRowOrder.xyzTopDown,\nthis.userAgent = 'geo_map/0.1',\nthis.subdomains = const [],\nthis.tileRatio = 1,\n})",
+              "doc": null
+            },
+            {
+              "name": "urlTemplate",
+              "kind": "field",
+              "signature": "final String urlTemplate",
+              "doc": null
+            },
+            {
+              "name": "scheme",
+              "kind": "field",
+              "signature": "final TileSchemeKind scheme",
+              "doc": null
+            },
+            {
+              "name": "rowOrder",
+              "kind": "field",
+              "signature": "final TileRowOrder rowOrder",
+              "doc": null
+            },
+            {
+              "name": "minZoom",
+              "kind": "field",
+              "signature": "final int minZoom",
+              "doc": null
+            },
+            {
+              "name": "maxZoom",
+              "kind": "field",
+              "signature": "final int maxZoom",
+              "doc": null
+            },
+            {
+              "name": "attribution",
+              "kind": "field",
+              "signature": "final String attribution",
+              "doc": null
+            },
+            {
+              "name": "maxConcurrentRequests",
+              "kind": "getter",
+              "signature": "int get maxConcurrentRequests => GeoEngineTuning.maxParallelRequests",
+              "doc": null
+            },
+            {
+              "name": "headers",
+              "kind": "field",
+              "signature": "final Map<String, String> headers",
+              "doc": null
+            },
+            {
+              "name": "userAgent",
+              "kind": "field",
+              "signature": "final String userAgent",
+              "doc": null
+            },
+            {
+              "name": "subdomains",
+              "kind": "field",
+              "signature": "final List<String> subdomains",
+              "doc": "Subdomains spread by `{prefix}` (empty disables it)."
+            },
+            {
+              "name": "tileRatio",
+              "kind": "field",
+              "signature": "final int tileRatio",
+              "doc": "Pixel ratio rendered by `{ratio}` (`> 1` → `@Nx`)."
+            },
+            {
+              "name": "lastError",
+              "kind": "field",
+              "signature": "String? lastError",
+              "doc": "Last transport error, surfaced in the debug HUD (DNS failure, timeout…)."
+            },
+            {
+              "name": "lastStatusCode",
+              "kind": "field",
+              "signature": "int? lastStatusCode",
+              "doc": "Last HTTP status code that was **not** 200 (`null` after a success)."
+            },
+            {
+              "name": "urlFor",
+              "kind": "method",
+              "signature": "String urlFor(int z, int x, int y) => _urls.urlFor(z, x, y)",
+              "doc": null
+            },
+            {
+              "name": "fetch",
+              "kind": "method",
+              "signature": "Future<TileFetchResult> fetch(int z, int x, int y) async",
+              "doc": null
+            },
+            {
+              "name": "HttpTileSource",
+              "kind": "constructor",
+              "signature": "factory HttpTileSource.gibsTrueColor({DateTime? date})",
+              "doc": "NASA GIBS daily true-colour mosaic (no API key, EPSG:4326 WMTS).\n\nGood demo for the 2:1 matrix set: coastlines must line up with the\nbundled MBTiles basemap when both are visible."
+            },
+            {
+              "name": "HttpTileSource",
+              "kind": "constructor",
+              "signature": "factory HttpTileSource.osm() => HttpTileSource(\nurlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',\nscheme: TileSchemeKind.webMercator,\nminZoom: 0,\nmaxZoom: 18,\nattribution: '© OpenStreetMap contributors',\n)",
+              "doc": "Plain XYZ raster (OSM). Only for smoke tests — respect the tile policy."
+            },
+            {
+              "name": "decodeBase64",
+              "kind": "method",
+              "signature": "static Uint8List? decodeBase64(String value) => base64Decode(value)",
+              "doc": null
+            },
+            {
+              "name": "dispose",
+              "kind": "method",
+              "signature": "void dispose()",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/source/debug_tiles_source.dart",
+      "types": [
+        {
+          "name": "DebugTilesMode",
+          "kind": "enum",
+          "signature": "enum DebugTilesMode",
+          "doc": null,
+          "members": []
+        },
+        {
+          "name": "DebugTilesSource",
+          "kind": "class",
+          "signature": "class DebugTilesSource implements GlobeRasterSource",
+          "doc": null,
+          "members": [
+            {
+              "name": "DebugTilesSource",
+              "kind": "constructor",
+              "signature": "DebugTilesSource.maplibreNumber({this.maxZoom = 22})\n: mode = DebugTilesMode.maplibreNumber,\nminZoom = 0",
+              "doc": null
+            },
+            {
+              "name": "DebugTilesSource",
+              "kind": "constructor",
+              "signature": "DebugTilesSource.labeled({this.maxZoom = 8})\n: mode = DebugTilesMode.labeled,\nminZoom = 0",
+              "doc": null
+            },
+            {
+              "name": "mode",
+              "kind": "field",
+              "signature": "final DebugTilesMode mode",
+              "doc": null
+            },
+            {
+              "name": "minZoom",
+              "kind": "field",
+              "signature": "final int minZoom",
+              "doc": null
+            },
+            {
+              "name": "maxZoom",
+              "kind": "field",
+              "signature": "final int maxZoom",
+              "doc": null
+            },
+            {
+              "name": "scheme",
+              "kind": "getter",
+              "signature": "TileSchemeKind get scheme => TileSchemeKind.webMercator",
+              "doc": null
+            },
+            {
+              "name": "rowOrder",
+              "kind": "getter",
+              "signature": "TileRowOrder get rowOrder => TileRowOrder.xyzTopDown",
+              "doc": null
+            },
+            {
+              "name": "maxConcurrentRequests",
+              "kind": "getter",
+              "signature": "int get maxConcurrentRequests => GeoEngineTuning.maxParallelRequests",
+              "doc": null
+            },
+            {
+              "name": "attribution",
+              "kind": "getter",
+              "signature": "String get attribution =>\nmode == DebugTilesMode.maplibreNumber\n? '© MapLibre debug tiles'\n: 'generated debug tiles'",
+              "doc": null
+            },
+            {
+              "name": "fetch",
+              "kind": "method",
+              "signature": "Future<TileFetchResult> fetch(int z, int x, int y) async",
+              "doc": null
+            },
+            {
+              "name": "dispose",
+              "kind": "method",
+              "signature": "void dispose()",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/source/mbtiles_source.dart",
+      "types": [
+        {
+          "name": "MbtilesTileSource",
+          "kind": "class",
+          "signature": "class MbtilesTileSource implements GlobeRasterSource",
+          "doc": null,
+          "members": [
+            {
+              "name": "MbtilesTileSource",
+              "kind": "constructor",
+              "signature": "MbtilesTileSource._(this.id, this._db, this.minZoom, this.maxZoom)",
+              "doc": null
+            },
+            {
+              "name": "id",
+              "kind": "field",
+              "signature": "final String id",
+              "doc": null
+            },
+            {
+              "name": "minZoom",
+              "kind": "field",
+              "signature": "final int minZoom",
+              "doc": null
+            },
+            {
+              "name": "maxZoom",
+              "kind": "field",
+              "signature": "final int maxZoom",
+              "doc": null
+            },
+            {
+              "name": "scheme",
+              "kind": "getter",
+              "signature": "TileSchemeKind get scheme => TileSchemeKind.webMercator",
+              "doc": null
+            },
+            {
+              "name": "rowOrder",
+              "kind": "getter",
+              "signature": "TileRowOrder get rowOrder => TileRowOrder.tmsBottomUp",
+              "doc": null
+            },
+            {
+              "name": "maxConcurrentRequests",
+              "kind": "getter",
+              "signature": "int get maxConcurrentRequests => GeoEngineTuning.sqliteParallelRequests",
+              "doc": null
+            },
+            {
+              "name": "attribution",
+              "kind": "getter",
+              "signature": "String get attribution => 'MBTiles: $id'",
+              "doc": null
+            },
+            {
+              "name": "open",
+              "kind": "method",
+              "signature": "static Future<MbtilesTileSource> open({\nrequired String id,\nrequired String assetPath,\n}) async",
+              "doc": "Open (and lazily copy) an MBTiles asset."
+            },
+            {
+              "name": "fetch",
+              "kind": "method",
+              "signature": "Future<TileFetchResult> fetch(int z, int x, int y) async",
+              "doc": null
+            },
+            {
+              "name": "dispose",
+              "kind": "method",
+              "signature": "void dispose() => _db.dispose()",
+              "doc": null
+            }
+          ]
+        },
+        {
+          "name": "GeoTileDefaults",
+          "kind": "class",
+          "signature": "abstract class GeoTileDefaults",
+          "doc": null,
+          "members": [
+            {
+              "name": "maxZoom",
+              "kind": "field",
+              "signature": "static const int maxZoom = 18",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/source/mbtiles_source_stub.dart",
+      "types": [
+        {
+          "name": "MbtilesTileSource",
+          "kind": "class",
+          "signature": "class MbtilesTileSource implements GeoTileSource",
+          "doc": "Always throws: MBTiles is native-only.",
+          "members": [
+            {
+              "name": "MbtilesTileSource",
+              "kind": "constructor",
+              "signature": "MbtilesTileSource._(this.id, this.minZoom, this.maxZoom)",
+              "doc": null
+            },
+            {
+              "name": "id",
+              "kind": "field",
+              "signature": "final String id",
+              "doc": null
+            },
+            {
+              "name": "minZoom",
+              "kind": "field",
+              "signature": "final int minZoom",
+              "doc": null
+            },
+            {
+              "name": "maxZoom",
+              "kind": "field",
+              "signature": "final int maxZoom",
+              "doc": null
+            },
+            {
+              "name": "scheme",
+              "kind": "getter",
+              "signature": "TileSchemeKind get scheme => TileSchemeKind.webMercator",
+              "doc": null
+            },
+            {
+              "name": "rowOrder",
+              "kind": "getter",
+              "signature": "TileRowOrder get rowOrder => TileRowOrder.tmsBottomUp",
+              "doc": null
+            },
+            {
+              "name": "maxConcurrentRequests",
+              "kind": "getter",
+              "signature": "int get maxConcurrentRequests => GeoEngineTuning.sqliteParallelRequests",
+              "doc": null
+            },
+            {
+              "name": "attribution",
+              "kind": "getter",
+              "signature": "String get attribution => 'MBTiles: $id'",
+              "doc": null
+            },
+            {
+              "name": "open",
+              "kind": "method",
+              "signature": "static Future<MbtilesTileSource> open({\nrequired String id,\nrequired String assetPath,\n}) async =>\nthrow UnsupportedError(_message)",
+              "doc": "Always throws [UnsupportedError]."
+            },
+            {
+              "name": "fetch",
+              "kind": "method",
+              "signature": "Future<Never> fetch(int z, int x, int y) async => throw UnsupportedError(_message)",
+              "doc": null
+            },
+            {
+              "name": "dispose",
+              "kind": "method",
+              "signature": "void dispose()",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/style/style_controller.dart",
+      "types": [
+        {
+          "name": "GeoStyleController",
+          "kind": "class",
+          "signature": "class GeoStyleController extends ChangeNotifier",
+          "doc": null,
+          "members": [
+            {
+              "name": "GeoStyleController",
+              "kind": "constructor",
+              "signature": "GeoStyleController(StyleSpec spec) : _document = StyleDocument.fromSpec(spec)",
+              "doc": null
+            },
+            {
+              "name": "GeoStyleController",
+              "kind": "constructor",
+              "signature": "GeoStyleController.document(StyleDocument document)\n: _document = document",
+              "doc": null
+            },
+            {
+              "name": "document",
+              "kind": "getter",
+              "signature": "StyleDocument get document => _document",
+              "doc": null
+            },
+            {
+              "name": "revision",
+              "kind": "getter",
+              "signature": "int get revision => _revision",
+              "doc": "Monotonic revision; changes only when the document actually changed."
+            },
+            {
+              "name": "addSource",
+              "kind": "method",
+              "signature": "void addSource(String id, Map<String, Object?> source) =>\n_set(_document.addSource(id, source))",
+              "doc": null
+            },
+            {
+              "name": "removeSource",
+              "kind": "method",
+              "signature": "void removeSource(String id) => _set(_document.removeSource(id))",
+              "doc": null
+            },
+            {
+              "name": "addLayer",
+              "kind": "method",
+              "signature": "void addLayer(StyleLayer layer, {String? before}) =>\n_set(_document.addLayer(layer, before: before))",
+              "doc": null
+            },
+            {
+              "name": "removeLayer",
+              "kind": "method",
+              "signature": "void removeLayer(String id) => _set(_document.removeLayer(id))",
+              "doc": null
+            },
+            {
+              "name": "moveLayer",
+              "kind": "method",
+              "signature": "void moveLayer(String id, {String? before}) =>\n_set(_document.moveLayer(id, before: before))",
+              "doc": null
+            },
+            {
+              "name": "setPaintProperty",
+              "kind": "method",
+              "signature": "void setPaintProperty(String id, String name, Object? value) =>\n_set(_document.setPaintProperty(id, name, value))",
+              "doc": null
+            },
+            {
+              "name": "setLayoutProperty",
+              "kind": "method",
+              "signature": "void setLayoutProperty(String id, String name, Object? value) =>\n_set(_document.setLayoutProperty(id, name, value))",
+              "doc": null
+            },
+            {
+              "name": "setFilter",
+              "kind": "method",
+              "signature": "void setFilter(String id, Object? filter) =>\n_set(_document.setFilter(id, filter))",
+              "doc": null
+            },
+            {
+              "name": "setLayerZoomRange",
+              "kind": "method",
+              "signature": "void setLayerZoomRange(String id, num min, num max) =>\n_set(_document.setLayerZoomRange(id, min, max))",
+              "doc": null
+            },
+            {
+              "name": "setVisibility",
+              "kind": "method",
+              "signature": "void setVisibility(String id, String visibility) =>\n_set(_document.setVisibility(id, visibility))",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/style/sprite_atlas.dart",
+      "types": [
+        {
+          "name": "SpriteAtlas",
+          "kind": "class",
+          "signature": "class SpriteAtlas",
+          "doc": null,
+          "members": [
+            {
+              "name": "SpriteAtlas",
+              "kind": "constructor",
+              "signature": "SpriteAtlas({required this.image, required this.index})",
+              "doc": null
+            },
+            {
+              "name": "image",
+              "kind": "field",
+              "signature": "final ui.Image image",
+              "doc": "The decoded atlas."
+            },
+            {
+              "name": "index",
+              "kind": "field",
+              "signature": "final SpriteIndex index",
+              "doc": "Where each icon lives inside [image]."
+            },
+            {
+              "name": "length",
+              "kind": "getter",
+              "signature": "int get length => index.length",
+              "doc": null
+            },
+            {
+              "name": "sourceRect",
+              "kind": "method",
+              "signature": "Rect sourceRect(SpriteIcon icon) =>\nRect.fromLTWH(icon.x, icon.y, icon.width, icon.height)",
+              "doc": "Rectangular region of [image] occupied by [icon]."
+            },
+            {
+              "name": "decode",
+              "kind": "method",
+              "signature": "static Future<SpriteAtlas?> decode({\nrequired String json,\nrequired List<int> imageBytes,\n}) async",
+              "doc": "Decodes a sprite from its JSON text and PNG bytes.\n\nReturns `null` when the image cannot be decoded — the caller keeps drawing\nlabels and simply drops the icons, which is better than losing the layer."
+            },
+            {
+              "name": "dispose",
+              "kind": "method",
+              "signature": "void dispose() => image.dispose()",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/style/style_vector_layer.dart",
+      "types": [
+        {
+          "name": "StyleVectorLayer",
+          "kind": "class",
+          "signature": "class StyleVectorLayer extends StatelessWidget",
+          "doc": null,
+          "members": [
+            {
+              "name": "StyleVectorLayer",
+              "kind": "constructor",
+              "signature": "const StyleVectorLayer({\nsuper.key,\nthis.style,\nthis.controller,\nrequired this.features,\nthis.opacity = 1.0,\nthis.sprite,\n})  : sources = null,\nassert(style != null || controller != null,\n'provide either style or controller')",
+              "doc": null
+            },
+            {
+              "name": "StyleVectorLayer",
+              "kind": "constructor",
+              "signature": "const StyleVectorLayer.ofSources({\nsuper.key,\nthis.style,\nthis.controller,\nrequired Map<String, List<GeoJsonFeature>> this.sources,\nthis.opacity = 1.0,\nthis.sprite,\n})  : features = const [],\nassert(style != null || controller != null,\n'provide either style or controller')",
+              "doc": "Multi-source variant: each style layer draws only `sources[layer.source]`.\n\nWithout this, a style with two sources draws every feature twice — a\n`line` layer would happily stroke the polygons that belong to a different\nsource, which reads as a stray outline in the wrong colour."
+            },
+            {
+              "name": "style",
+              "kind": "field",
+              "signature": "final StyleSpec? style",
+              "doc": "A static style. Ignored when [controller] is provided."
+            },
+            {
+              "name": "controller",
+              "kind": "field",
+              "signature": "final GeoStyleController? controller",
+              "doc": "A runtime style controller (M1.4); the layer rebuilds on notify."
+            },
+            {
+              "name": "features",
+              "kind": "field",
+              "signature": "final List<GeoJsonFeature> features",
+              "doc": null
+            },
+            {
+              "name": "sources",
+              "kind": "field",
+              "signature": "final Map<String, List<GeoJsonFeature>>? sources",
+              "doc": "Features keyed by style source id (see [StyleVectorLayer.ofSources])."
+            },
+            {
+              "name": "opacity",
+              "kind": "field",
+              "signature": "final double opacity",
+              "doc": null
+            },
+            {
+              "name": "sprite",
+              "kind": "field",
+              "signature": "final SpriteAtlas? sprite",
+              "doc": "Icons for `icon-image`; without one the labels are still drawn."
+            },
+            {
+              "name": "build",
+              "kind": "method",
+              "signature": "Widget build(BuildContext context)",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/style/mvt_vector_layer.dart",
+      "types": [
+        {
+          "name": "MvtDiagnostics",
+          "kind": "class",
+          "signature": "class MvtDiagnostics",
+          "doc": "What the layer is currently doing, for a debug HUD.\n\n[dataZoom] is the level tiles are fetched at (0..source.maxZoom), which is\n`round(camera zoom)` — not the continuous camera zoom the HUD usually shows.\n[readyCount] / [tileCount] say how many visible tiles are decoded, and\n[lastStatusCode] surfaces the transport status when the source is HTTP.\n\n[firstFailed] names the tile behind [failedCount] (`z/x/y · status`). Without\nit a \"one tile failed\" report is not diagnosable — the key is what tells you\nwhether it is an edge tile, an out-of-range coordinate or a rate limit.",
+          "members": [
+            {
+              "name": "MvtDiagnostics",
+              "kind": "constructor",
+              "signature": "const MvtDiagnostics({\nrequired this.dataZoom,\nrequired this.tileCount,\nrequired this.readyCount,\nrequired this.failedCount,\nthis.lastStatusCode,\nthis.firstFailed,\n})",
+              "doc": null
+            },
+            {
+              "name": "dataZoom",
+              "kind": "field",
+              "signature": "final int dataZoom",
+              "doc": null
+            },
+            {
+              "name": "tileCount",
+              "kind": "field",
+              "signature": "final int tileCount",
+              "doc": null
+            },
+            {
+              "name": "readyCount",
+              "kind": "field",
+              "signature": "final int readyCount",
+              "doc": null
+            },
+            {
+              "name": "failedCount",
+              "kind": "field",
+              "signature": "final int failedCount",
+              "doc": null
+            },
+            {
+              "name": "lastStatusCode",
+              "kind": "field",
+              "signature": "final int? lastStatusCode",
+              "doc": null
+            },
+            {
+              "name": "firstFailed",
+              "kind": "field",
+              "signature": "final String? firstFailed",
+              "doc": null
+            },
+            {
+              "name": "operator ==",
+              "kind": "method",
+              "signature": "bool operator ==(Object other) =>\nother is MvtDiagnostics &&\nother.dataZoom == dataZoom &&\nother.tileCount == tileCount &&\nother.readyCount == readyCount &&\nother.failedCount == failedCount &&\nother.lastStatusCode == lastStatusCode &&\nother.firstFailed == firstFailed",
+              "doc": null
+            },
+            {
+              "name": "hashCode",
+              "kind": "getter",
+              "signature": "int get hashCode => Object.hash(dataZoom, tileCount, readyCount, failedCount,\nlastStatusCode, firstFailed)",
+              "doc": null
+            },
+            {
+              "name": "toString",
+              "kind": "method",
+              "signature": "String toString() => 'MvtDiagnostics(z$dataZoom, $readyCount/$tileCount, '\n'failed $failedCount${firstFailed == null ? '' : ' ($firstFailed)'}, '\n'http $lastStatusCode)';",
+              "doc": null
+            }
+          ]
+        },
+        {
+          "name": "MvtVectorLayer",
+          "kind": "class",
+          "signature": "class MvtVectorLayer extends StatefulWidget",
+          "doc": "Vector tiles rendered through a [StyleSpec].\n\nTransport is injected as a [GeoTileSource] so the same layer works with\nHTTP, MBTiles or a test fixture.",
+          "members": [
+            {
+              "name": "MvtVectorLayer",
+              "kind": "constructor",
+              "signature": "const MvtVectorLayer({\nsuper.key,\nrequired this.source,\nthis.style,\nthis.controller,\nthis.opacity = 1.0,\nthis.maxCachedTiles = 160,\nthis.renderWorldCopies = true,\nthis.sprite,\nthis.onDiagnostics,\n}) : assert(style != null || controller != null,\n'provide either style or controller')",
+              "doc": null
+            },
+            {
+              "name": "source",
+              "kind": "field",
+              "signature": "final GeoTileSource source",
+              "doc": null
+            },
+            {
+              "name": "style",
+              "kind": "field",
+              "signature": "final StyleSpec? style",
+              "doc": "A static style. Ignored when [controller] is provided."
+            },
+            {
+              "name": "controller",
+              "kind": "field",
+              "signature": "final GeoStyleController? controller",
+              "doc": "A runtime style controller (M1.4); the layer rebuilds on notify."
+            },
+            {
+              "name": "opacity",
+              "kind": "field",
+              "signature": "final double opacity",
+              "doc": null
+            },
+            {
+              "name": "maxCachedTiles",
+              "kind": "field",
+              "signature": "final int maxCachedTiles",
+              "doc": null
+            },
+            {
+              "name": "renderWorldCopies",
+              "kind": "field",
+              "signature": "final bool renderWorldCopies",
+              "doc": "Draw the world once per visible copy when panning past ±180°.\n\nDefaults to `true` (MapLibre's `renderWorldCopies`). Set `false` for a\nfixed single-world view: off-screen data is clipped instead of repeated."
+            },
+            {
+              "name": "sprite",
+              "kind": "field",
+              "signature": "final SpriteAtlas? sprite",
+              "doc": "Icons for `icon-image`; without one the labels are still drawn."
+            },
+            {
+              "name": "onDiagnostics",
+              "kind": "field",
+              "signature": "final ValueChanged<MvtDiagnostics>? onDiagnostics",
+              "doc": "Called after a frame when the diagnostics change (for a debug HUD)."
+            },
+            {
+              "name": "createState",
+              "kind": "method",
+              "signature": "State<MvtVectorLayer> createState() => _MvtVectorLayerState()",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/widget/geo_map.dart",
+      "types": [
+        {
+          "name": "GeoMapOptions",
+          "kind": "class",
+          "signature": "class GeoMapOptions",
+          "doc": null,
+          "members": [
+            {
+              "name": "GeoMapOptions",
+              "kind": "constructor",
+              "signature": "const GeoMapOptions({\nthis.initialCenter = const LatLng(30, 105),\nthis.initialZoom = 4.2,\nthis.minZoom = 1,\nthis.maxZoom = 8,\nthis.useGlobe = true,\nthis.background = const Color(0xFF000000),\n})",
+              "doc": null
+            },
+            {
+              "name": "initialCenter",
+              "kind": "field",
+              "signature": "final LatLng initialCenter",
+              "doc": null
+            },
+            {
+              "name": "initialZoom",
+              "kind": "field",
+              "signature": "final double initialZoom",
+              "doc": null
+            },
+            {
+              "name": "minZoom",
+              "kind": "field",
+              "signature": "final double minZoom",
+              "doc": null
+            },
+            {
+              "name": "maxZoom",
+              "kind": "field",
+              "signature": "final double maxZoom",
+              "doc": null
+            },
+            {
+              "name": "useGlobe",
+              "kind": "field",
+              "signature": "final bool useGlobe",
+              "doc": "true = 正交球面（3D）；false = Web Mercator 平面（2D）。\n切换时 center/zoom 连续（经 delegate 的 anchorCenter 各自实现）。"
+            },
+            {
+              "name": "background",
+              "kind": "field",
+              "signature": "final Color background",
+              "doc": null
+            }
+          ]
+        },
+        {
+          "name": "GeoMap",
+          "kind": "class",
+          "signature": "class GeoMap extends StatefulWidget",
+          "doc": "`GeoMap` — the host widget. Children stack on top of the raster layer.",
+          "members": [
+            {
+              "name": "GeoMap",
+              "kind": "constructor",
+              "signature": "const GeoMap({\nrequired this.options,\nrequired this.source,\nthis.controller,\nthis.children = const [],\nthis.onTap,\nsuper.key,\n})",
+              "doc": null
+            },
+            {
+              "name": "options",
+              "kind": "field",
+              "signature": "final GeoMapOptions options",
+              "doc": null
+            },
+            {
+              "name": "source",
+              "kind": "field",
+              "signature": "final GlobeRasterSource source",
+              "doc": null
+            },
+            {
+              "name": "controller",
+              "kind": "field",
+              "signature": "final GeoMapController? controller",
+              "doc": null
+            },
+            {
+              "name": "children",
+              "kind": "field",
+              "signature": "final List<Widget> children",
+              "doc": null
+            },
+            {
+              "name": "onTap",
+              "kind": "method",
+              "signature": "final void Function(LatLng latLng)? onTap",
+              "doc": null
+            },
+            {
+              "name": "createState",
+              "kind": "method",
+              "signature": "State<GeoMap> createState() => _GeoMapState()",
+              "doc": null
+            }
+          ]
+        },
+        {
+          "name": "GeoMapScope",
+          "kind": "class",
+          "signature": "class GeoMapScope extends StatelessWidget",
+          "doc": "Read-only camera access for children: `GeoMapScope.of(context).camera`.",
+          "members": [
+            {
+              "name": "GeoMapScope",
+              "kind": "constructor",
+              "signature": "const GeoMapScope({required this.controller, required this.child, super.key})",
+              "doc": null
+            },
+            {
+              "name": "controller",
+              "kind": "field",
+              "signature": "final GeoMapController controller",
+              "doc": null
+            },
+            {
+              "name": "child",
+              "kind": "field",
+              "signature": "final Widget child",
+              "doc": null
+            },
+            {
+              "name": "build",
+              "kind": "method",
+              "signature": "Widget build(BuildContext context) => MapInheritedModel(\ncamera: controller.camera,\nchild: child,\n)",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/widget/geo_anchored_popup.dart",
+      "types": [
+        {
+          "name": "AnchoredPopupLayout",
+          "kind": "class",
+          "signature": "class AnchoredPopupLayout",
+          "doc": "纯布局结果（`left/top` 是逻辑像素）。",
+          "members": [
+            {
+              "name": "AnchoredPopupLayout",
+              "kind": "constructor",
+              "signature": "const AnchoredPopupLayout({\nrequired this.left,\nrequired this.top,\nrequired this.visible,\n})",
+              "doc": null
+            },
+            {
+              "name": "left",
+              "kind": "field",
+              "signature": "final double left",
+              "doc": "卡片左上角相对视口的偏移。"
+            },
+            {
+              "name": "top",
+              "kind": "field",
+              "signature": "final double top",
+              "doc": "卡片左上角相对视口的偏移。"
+            },
+            {
+              "name": "visible",
+              "kind": "field",
+              "signature": "final bool visible",
+              "doc": "是否应显示（锚点出屏/非有限/被遮挡时为 false）。"
+            }
+          ]
+        },
+        {
+          "name": "GeoAnchoredPopup",
+          "kind": "class",
+          "signature": "class GeoAnchoredPopup extends StatelessWidget",
+          "doc": "跟随地图的浮层：每次相机变化重新投影 [anchor] 并重定位 [child]。\n\n纯展示容器——宿主自行决定 [anchor]（如点击命中的地理点）与 [child]（业务卡片）。",
+          "members": [
+            {
+              "name": "GeoAnchoredPopup",
+              "kind": "constructor",
+              "signature": "const GeoAnchoredPopup({\nsuper.key,\nrequired this.controller,\nrequired this.anchor,\nrequired this.child,\nrequired this.keepOut,\nrequired this.cardSize,\nthis.anchorSide = PopupAnchor.bottom,\n})",
+              "doc": null
+            },
+            {
+              "name": "controller",
+              "kind": "field",
+              "signature": "final GeoMapController controller",
+              "doc": null
+            },
+            {
+              "name": "anchor",
+              "kind": "field",
+              "signature": "final LatLng anchor",
+              "doc": null
+            },
+            {
+              "name": "child",
+              "kind": "field",
+              "signature": "final Widget child",
+              "doc": null
+            },
+            {
+              "name": "keepOut",
+              "kind": "field",
+              "signature": "final EdgeInsets keepOut",
+              "doc": null
+            },
+            {
+              "name": "cardSize",
+              "kind": "field",
+              "signature": "final Size cardSize",
+              "doc": "用于夹取的卡片逻辑尺寸（实际卡片可更小）。"
+            },
+            {
+              "name": "anchorSide",
+              "kind": "field",
+              "signature": "final PopupAnchor anchorSide",
+              "doc": "卡片贴锚点的哪一侧（九宫格）。默认 [PopupAnchor.bottom]（卡片在锚点上方）。"
+            },
+            {
+              "name": "build",
+              "kind": "method",
+              "signature": "Widget build(BuildContext context)",
+              "doc": null
+            }
+          ]
+        },
+        {
+          "name": "GeoMapPopupController",
+          "kind": "class",
+          "signature": "class GeoMapPopupController extends ChangeNotifier",
+          "doc": "跟随地图的浮层显隐状态（对标 MapLibre `Popup` 的 open/close）。\n\n只持有**锚点**：内容由宿主通过 [GeoMapPopup.builder] 注入。状态因此与业务\n完全解耦，SIGMET / 机场 / POI 等任意图层共用同一套\"显示—关闭\"逻辑。",
+          "members": [
+            {
+              "name": "isDisposed",
+              "kind": "getter",
+              "signature": "bool get isDisposed => _disposed",
+              "doc": "是否已 dispose（语义同 `GeoPopupController.isDisposed`：Riverpod 的\n`invalidateSelf()` —— hot reload 改到 provider 源码时的常规路径 —— 会\n先 dispose 再重建，这段窗口内的 `show/hide` 必须安静丢弃）。"
+            },
+            {
+              "name": "dispose",
+              "kind": "method",
+              "signature": "void dispose()",
+              "doc": null
+            },
+            {
+              "name": "anchor",
+              "kind": "getter",
+              "signature": "LatLng? get anchor => _anchor",
+              "doc": "当前锚点；`null` 表示浮层隐藏。"
+            },
+            {
+              "name": "isOpen",
+              "kind": "getter",
+              "signature": "bool get isOpen => _anchor != null",
+              "doc": "是否处于打开状态。"
+            },
+            {
+              "name": "show",
+              "kind": "method",
+              "signature": "void show(LatLng anchor)",
+              "doc": "在 [anchor] 处打开（覆盖式：重复 open 同一锚点幂等）。"
+            },
+            {
+              "name": "hide",
+              "kind": "method",
+              "signature": "void hide()",
+              "doc": "关闭浮层（锚点置空）。"
+            },
+            {
+              "name": "toggle",
+              "kind": "method",
+              "signature": "void toggle(LatLng anchor) => isOpen ? hide() : show(anchor)",
+              "doc": "点同一锚点切换开/关（MapLibre `togglePopup` 语义）。"
+            }
+          ]
+        },
+        {
+          "name": "GeoMapPopup",
+          "kind": "class",
+          "signature": "class GeoMapPopup extends StatelessWidget",
+          "doc": "把 [GeoMapPopupController] 的显隐状态接到 [GeoAnchoredPopup] 上。\n\n自监听 [popup]：调用 `popup.show/hide` 即自动重绘，宿主无需在父级 `watch`。\n业务内容通过 [builder]（入参含锚点）注入——这就是留给宿主的\"接口\"：在此\n返回自己的卡片（含关闭按钮，关闭按钮调用 [GeoMapPopupController.hide]）。",
+          "members": [
+            {
+              "name": "GeoMapPopup",
+              "kind": "constructor",
+              "signature": "const GeoMapPopup({\nsuper.key,\nrequired this.controller,\nrequired this.popup,\nrequired this.builder,\nrequired this.keepOut,\nrequired this.cardSize,\nthis.anchorSide = PopupAnchor.bottom,\n})",
+              "doc": null
+            },
+            {
+              "name": "controller",
+              "kind": "field",
+              "signature": "final GeoMapController controller",
+              "doc": "地图相机（用于每帧重投影锚点）。"
+            },
+            {
+              "name": "popup",
+              "kind": "field",
+              "signature": "final GeoMapPopupController popup",
+              "doc": "浮层显隐状态。"
+            },
+            {
+              "name": "builder",
+              "kind": "method",
+              "signature": "final Widget Function(BuildContext context, LatLng anchor) builder",
+              "doc": "业务内容构造器：给定锚点，返回卡片。"
+            },
+            {
+              "name": "keepOut",
+              "kind": "field",
+              "signature": "final EdgeInsets keepOut",
+              "doc": "留白区（顶栏 / 侧栏 / 底栏尺寸），浮层不会盖进去。"
+            },
+            {
+              "name": "cardSize",
+              "kind": "field",
+              "signature": "final Size cardSize",
+              "doc": "用于夹取的卡片逻辑尺寸（实际卡片可更小）。"
+            },
+            {
+              "name": "anchorSide",
+              "kind": "field",
+              "signature": "final PopupAnchor anchorSide",
+              "doc": "卡片贴锚点的哪一侧（九宫格）。默认 [PopupAnchor.bottom]（卡片在锚点上方）。"
+            },
+            {
+              "name": "build",
+              "kind": "method",
+              "signature": "Widget build(BuildContext context)",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [
+        {
+          "name": "anchorOffsetFor",
+          "signature": "Offset anchorOffsetFor(PopupAnchor side, Offset point, Size card, double tail)",
+          "doc": "卡片左上角的「未夹取」位置（九宫格）。\n\n给定投影后的锚点 [point] 与卡片尺寸 [card]，返回卡片左上角应处的逻辑像素，\n再交由 [layoutAnchoredPopup] 夹进 [EdgeInsets]。[tail] 是卡片朝向锚点那一侧\n留出的小尖角间距（仅 top/bottom/left/right 用；四角忽略）。\n\n纯函数，可纯 Dart 断言测试。"
+        },
+        {
+          "name": "layoutAnchoredPopup",
+          "signature": "AnchoredPopupLayout layoutAnchoredPopup({\nrequired Offset anchor,\nrequired Size viewport,\nrequired Size card,\nrequired EdgeInsets keepOut,\nPopupAnchor anchorSide = PopupAnchor.bottom,\ndouble tail = 8,\ndouble slop = 32,\n})",
+          "doc": "计算卡片左上角：按 [anchorSide] 九宫格把卡片某一侧对准 [anchor]，再夹进 [keepOut]。\n\n[anchor] / [viewport] / [card] 都是逻辑像素。锚点出屏、非有限、或球面背半球\n哨兵（`±1e6`）时返回 `visible:false`。宿主据此决定是否渲染卡片。\n\n[anchorSide] 默认 [PopupAnchor.bottom]，与旧行为（底边中点对准锚点）一致；\n其余八档见 [PopupAnchor]。"
+        }
+      ],
+      "constants": []
+    },
+    {
+      "file": "lib/src/widget/geo_popup_binding.dart",
+      "types": [
+        {
+          "name": "PopupAnchor",
+          "kind": "enum",
+          "signature": "enum PopupAnchor",
+          "doc": "Popup anchor — the nine-grid position (MapLibre `PositionAnchor`).\n\nDecides which edge/corner of the card sits against the anchor latitude/\nlongitude carried by [GeoMapPopupController]. Defaults to [bottom], which\nkeeps the existing \"card floats above the anchor\" behaviour.",
+          "members": [
+            {
+              "name": "center",
+              "kind": "enum-value",
+              "signature": "center",
+              "doc": null
+            },
+            {
+              "name": "top",
+              "kind": "enum-value",
+              "signature": "top",
+              "doc": null
+            },
+            {
+              "name": "bottom",
+              "kind": "enum-value",
+              "signature": "bottom",
+              "doc": null
+            },
+            {
+              "name": "left",
+              "kind": "enum-value",
+              "signature": "left",
+              "doc": null
+            },
+            {
+              "name": "right",
+              "kind": "enum-value",
+              "signature": "right",
+              "doc": null
+            },
+            {
+              "name": "topLeft",
+              "kind": "enum-value",
+              "signature": "topLeft",
+              "doc": null
+            },
+            {
+              "name": "topRight",
+              "kind": "enum-value",
+              "signature": "topRight",
+              "doc": null
+            },
+            {
+              "name": "bottomLeft",
+              "kind": "enum-value",
+              "signature": "bottomLeft",
+              "doc": null
+            },
+            {
+              "name": "bottomRight",
+              "kind": "enum-value",
+              "signature": "bottomRight",
+              "doc": null
+            }
+          ]
+        },
+        {
+          "name": "GeoPopupBinding",
+          "kind": "class",
+          "signature": "class GeoPopupBinding",
+          "doc": "A binding that ties a layer (its `sourceId` in [GeoFeatureRegistry]) to the\ncard shown when that layer is tapped.\n\nThis is the SDK equivalent of MapLibre's `map.on('click', layerId, handler)`:\nthe \"layer\" in our model is a `sourceId`, and binding a popup to it is how a\nbusiness layer declares \"when I'm hit, render this card\". Hit-testing, anchor\nprojection, positioning and close are all handled by [GeoPopupController] —\nthe business side only supplies [builder] (the card) plus a little metadata.",
+          "members": [
+            {
+              "name": "GeoPopupBinding",
+              "kind": "constructor",
+              "signature": "const GeoPopupBinding({\nthis.priority = 0,\nrequired this.cardSize,\nthis.anchor = PopupAnchor.bottom,\nthis.anchorOf,\nrequired this.builder,\n})",
+              "doc": null
+            },
+            {
+              "name": "priority",
+              "kind": "field",
+              "signature": "final int priority",
+              "doc": "Arbitration priority when several layers are hit at once (e.g. a SIGMET\npolygon overlapping an airport). Higher wins; ties go to the first hit in\nthe query result (already sorted by screen distance within a source)."
+            },
+            {
+              "name": "cardSize",
+              "kind": "field",
+              "signature": "final Size cardSize",
+              "doc": "The card's logical maximum size, used by the layout to clamp inside\n[GeoMapPopupHost.keepOut]. Pass the card's real maximum width/height."
+            },
+            {
+              "name": "anchor",
+              "kind": "field",
+              "signature": "final PopupAnchor anchor",
+              "doc": "Which side of the card meets the anchor (nine-grid)."
+            },
+            {
+              "name": "anchorOf",
+              "kind": "method",
+              "signature": "final LatLng? Function(GeoQueryHit hit)? anchorOf",
+              "doc": "Override the default anchor point. The default is the tap point (MapLibre\n`setLngLat(e.lngLat)` semantics); pass this to pin the bubble to the\nfeature geometry instead (e.g. an airport icon's own coordinate)."
+            },
+            {
+              "name": "builder",
+              "kind": "method",
+              "signature": "final Widget Function(BuildContext context, GeoQueryHit hit) builder",
+              "doc": "The business card builder, invoked by the render host after a hit. Receive\nthe [GeoQueryHit] to map its `feature.id` back to your domain object."
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/widget/geo_popup_card.dart",
+      "types": [
+        {
+          "name": "GeoPopupCard",
+          "kind": "class",
+          "signature": "class GeoPopupCard extends StatelessWidget",
+          "doc": "统一的弹窗卡片外壳。\n\n结构：\n- 最外层 [GestureDetector]（`behavior: opaque`）吞掉卡片内的空白点击，\n避免漏给下面的地图（等价于 MapLibre Popup 作为独立 DOM 覆盖层的事件隔离）。\n- [header] 右侧可带一个 SDK 关闭按钮（[onClose] 非空时渲染），命中区 ≥32px。",
+          "members": [
+            {
+              "name": "GeoPopupCard",
+              "kind": "constructor",
+              "signature": "const GeoPopupCard({\nsuper.key,\nrequired this.child,\nthis.header,\nthis.onClose,\nthis.width = 280,\nthis.padding = const EdgeInsets.all(12),\nthis.decoration,\n})",
+              "doc": null
+            },
+            {
+              "name": "child",
+              "kind": "field",
+              "signature": "final Widget child",
+              "doc": "卡片内容。"
+            },
+            {
+              "name": "header",
+              "kind": "field",
+              "signature": "final Widget? header",
+              "doc": "标题区（业务排版）。为 null 时不渲染标题行。"
+            },
+            {
+              "name": "onClose",
+              "kind": "field",
+              "signature": "final VoidCallback? onClose",
+              "doc": "关闭回调；非空时在标题行右侧渲染关闭按钮。"
+            },
+            {
+              "name": "width",
+              "kind": "field",
+              "signature": "final double width",
+              "doc": "卡片宽度（逻辑像素）。"
+            },
+            {
+              "name": "padding",
+              "kind": "field",
+              "signature": "final EdgeInsets padding",
+              "doc": "内容内边距。"
+            },
+            {
+              "name": "decoration",
+              "kind": "field",
+              "signature": "final BoxDecoration? decoration",
+              "doc": "卡片背景/边框/阴影；为 null 时使用主题色的默认外观。"
+            },
+            {
+              "name": "build",
+              "kind": "method",
+              "signature": "Widget build(BuildContext context)",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/widget/geo_popup_controller.dart",
+      "types": [
+        {
+          "name": "GeoPopupController",
+          "kind": "class",
+          "signature": "class GeoPopupController extends ChangeNotifier",
+          "doc": "Glue between [GeoFeatureRegistry] and the shared [GeoMapPopupController].\n\nSee the library doc comment for the usage flow. One instance is owned by the\nhost app (typically via a Riverpod provider that wires in the underlying\npopup controller).",
+          "members": [
+            {
+              "name": "GeoPopupController",
+              "kind": "constructor",
+              "signature": "GeoPopupController(this.geoPopup)",
+              "doc": "[geoPopup] is the shared show/hide/anchor state, owned by the host. The\nfeature registry is passed to [handleTap] per tap so the controller never\nholds a stale snapshot."
+            },
+            {
+              "name": "geoPopup",
+              "kind": "field",
+              "signature": "final GeoMapPopupController geoPopup",
+              "doc": null
+            },
+            {
+              "name": "isDisposed",
+              "kind": "getter",
+              "signature": "bool get isDisposed => _disposed",
+              "doc": "Whether [dispose] has run.\n\n宿主可能在这个窗口里仍然调到本实例：Riverpod 的 `invalidateSelf()`\n（hot reload 改到 provider 源码时的常规路径，或业务主动 `ref.invalidate`）\n会**先 `runOnDispose()` 再重建**，也就是说 notify 监听方的 dispose 先发生、\n新实例下一帧才出现。旧实例这段\"僵尸期\"内收到的点击必须安静地丢弃，\n而不是让 `notifyListeners()` 抛 assert 打断整条手势链路。"
+            },
+            {
+              "name": "dispose",
+              "kind": "method",
+              "signature": "void dispose()",
+              "doc": null
+            },
+            {
+              "name": "registerPopup",
+              "kind": "method",
+              "signature": "void registerPopup(String sourceId, GeoPopupBinding binding)",
+              "doc": "Bind a popup to [sourceId] imperatively. Call from a layer's setup and pair\nit with [unregisterPopup] on teardown so stale bindings never fire."
+            },
+            {
+              "name": "unregisterPopup",
+              "kind": "method",
+              "signature": "void unregisterPopup(String sourceId)",
+              "doc": "Drop an imperative binding. If it is the one currently shown, the popup\ncloses."
+            },
+            {
+              "name": "get",
+              "kind": "method",
+              "signature": "Widget? Function(BuildContext context, LatLng anchor)? get activeBuilder =>\n_active == null\n? null\n: (context, anchor) => _active!.binding.builder(context, _active!.hit)",
+              "doc": "The card builder for the open popup, or `null` when nothing is open. The\nrender host calls this with the projected anchor."
+            },
+            {
+              "name": "activeCardSize",
+              "kind": "getter",
+              "signature": "Size get activeCardSize => _active?.binding.cardSize ?? const Size(280, 240)",
+              "doc": "The open card's maximum size, for keepOut clamping."
+            },
+            {
+              "name": "activeAnchor",
+              "kind": "getter",
+              "signature": "PopupAnchor get activeAnchor => _active?.binding.anchor ?? PopupAnchor.bottom",
+              "doc": "The open card's anchor side (nine-grid)."
+            },
+            {
+              "name": "handleTap",
+              "kind": "method",
+              "signature": "List<GeoQueryHit> handleTap(\nLatLng tap, {\nrequired GeoMapController controller,\nrequired GeoFeatureRegistry registry,\ndouble? pointRadiusPx,\nList<GeoQueryHit>? hits,\n})",
+              "doc": "The single entry point for a map tap.\n\nQueries [registry], filters to sources that registered a popup, and opens\nthe highest-priority one. No hit, or a hit on a source without a popup\n(e.g. an airport that only fires a SnackBar), closes any open popup.\n\nPass [hits] when the host already ran the query (it usually needs the same\nresults for its own business reactions) — this avoids querying twice.\n\nDisposed controller (see [isDisposed]) → no-op: the popup it owned no longer\nexists, and the freshly created replacement will handle the next tap.\n\nReturns the query result so the host can reuse it for its own reactions\n(SnackBar / selection) without querying a second time."
+            },
+            {
+              "name": "close",
+              "kind": "method",
+              "signature": "void close()",
+              "doc": "Close the popup (anchor cleared, active binding dropped)."
+            }
+          ]
+        },
+        {
+          "name": "GeoMapPopupHost",
+          "kind": "class",
+          "signature": "class GeoMapPopupHost extends StatelessWidget",
+          "doc": "Render host for the popup control layer.\n\nMount exactly one of these as a direct child of the `Stack` outside `GeoMap`\n(same constraint as [GeoMapPopup]: it must be a direct child of the outer\n`Stack`, never inside `GeoMap.children`). It reads the open binding from\n[popup] and renders the matching card, repositioned on every camera move by\nthe underlying [GeoMapPopup].",
+          "members": [
+            {
+              "name": "GeoMapPopupHost",
+              "kind": "constructor",
+              "signature": "const GeoMapPopupHost({\nsuper.key,\nrequired this.controller,\nrequired this.popup,\nrequired this.keepOut,\n})",
+              "doc": null
+            },
+            {
+              "name": "controller",
+              "kind": "field",
+              "signature": "final GeoMapController controller",
+              "doc": "Map camera (re-projects the anchor each frame)."
+            },
+            {
+              "name": "popup",
+              "kind": "field",
+              "signature": "final GeoPopupController popup",
+              "doc": "The popup control layer that decides what to show."
+            },
+            {
+              "name": "keepOut",
+              "kind": "field",
+              "signature": "final EdgeInsets keepOut",
+              "doc": "Insets the card never covers (top bar / side bar / bottom bar)."
+            },
+            {
+              "name": "build",
+              "kind": "method",
+              "signature": "Widget build(BuildContext context)",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/vendor/flutter_map_camera/flutter_map_camera.dart",
+      "types": [],
+      "functions": [],
+      "constants": []
+    },
+    {
+      "file": "lib/src/vendor/flutter_map_camera/latlng_bounds.dart",
+      "types": [
+        {
+          "name": "LatLngBounds",
+          "kind": "class",
+          "signature": "class LatLngBounds",
+          "doc": "Data structure representing rectangular bounding box constrained by its\nnorthwest and southeast corners",
+          "members": [
+            {
+              "name": "minLatitude",
+              "kind": "field",
+              "signature": "static const double minLatitude = -90",
+              "doc": "minimum latitude value, south"
+            },
+            {
+              "name": "maxLatitude",
+              "kind": "field",
+              "signature": "static const double maxLatitude = 90",
+              "doc": "maximum latitude value, north"
+            },
+            {
+              "name": "minLongitude",
+              "kind": "field",
+              "signature": "static const double minLongitude = -180",
+              "doc": "minimum longitude value, west"
+            },
+            {
+              "name": "maxLongitude",
+              "kind": "field",
+              "signature": "static const double maxLongitude = 180",
+              "doc": "maximum longitude value, east"
+            },
+            {
+              "name": "north",
+              "kind": "field",
+              "signature": "double north",
+              "doc": "The latitude north edge of the bounds"
+            },
+            {
+              "name": "south",
+              "kind": "field",
+              "signature": "double south",
+              "doc": "The latitude south edge of the bounds"
+            },
+            {
+              "name": "east",
+              "kind": "field",
+              "signature": "double east",
+              "doc": "The longitude east edge of the bounds"
+            },
+            {
+              "name": "west",
+              "kind": "field",
+              "signature": "double west",
+              "doc": "The longitude west edge of the bounds"
+            },
+            {
+              "name": "LatLngBounds",
+              "kind": "constructor",
+              "signature": "factory LatLngBounds(LatLng corner1, LatLng corner2)",
+              "doc": "Create new [LatLngBounds] by providing two corners. Both corners have to\nbe on opposite sites but it doesn't matter which opposite corners or in\nwhat order the corners are provided.\n\nIf you want to create [LatLngBounds] with raw values, use the\n[LatLngBounds.unsafe] constructor instead."
+            },
+            {
+              "name": "LatLngBounds",
+              "kind": "constructor",
+              "signature": "LatLngBounds.unsafe({\nrequired this.north,\nrequired this.south,\nrequired this.east,\nrequired this.west,\n})  : assert(north <= maxLatitude,\n\"The north latitude can't be bigger than $maxLatitude: $north\"),\nassert(north >= minLatitude,\n\"The north latitude can't be smaller than $minLatitude: $north\"),\nassert(south <= maxLatitude,\n\"The south latitude can't be bigger than $maxLatitude: $south\"),\nassert(south >= minLatitude,\n\"The south latitude can't be smaller than $minLatitude: $south\"),\nassert(east <= maxLongitude,\n\"The east longitude can't be bigger than $maxLongitude: $east\"),\nassert(east >= minLongitude,\n\"The east longitude can't be smaller than $minLongitude: $east\"),\nassert(west <= maxLongitude,\n\"The west longitude can't be bigger than $maxLongitude: $west\"),\nassert(west >= minLongitude,\n\"The west longitude can't be smaller than $minLongitude: $west\"),\nassert(\nnorth >= south,\n\"The north latitude ($north) can't be smaller than the \"\n'south latitude ($south)',\n),\nassert(\neast >= west,\n\"The west longitude ($west) can't be smaller than the \"\n'east longitude ($east)',\n)",
+              "doc": "Create a [LatLngBounds] instance from raw edge values.\n\nPotentially throws assertion errors if the coordinates exceed their max\nor min values or if coordinates are meant to be smaller / bigger\nbut aren't."
+            },
+            {
+              "name": "LatLngBounds",
+              "kind": "constructor",
+              "signature": "factory LatLngBounds.fromPoints(List<LatLng> points)",
+              "doc": "Create a new [LatLngBounds] from a list of [LatLng] points. This\ncalculates the bounding box of the provided points."
+            },
+            {
+              "name": "extend",
+              "kind": "method",
+              "signature": "void extend(LatLng latLng)",
+              "doc": "Expands bounding box by [latLng] coordinate point. This method mutates\nthe bounds object on which it is called."
+            },
+            {
+              "name": "extendBounds",
+              "kind": "method",
+              "signature": "void extendBounds(LatLngBounds bounds)",
+              "doc": "Expands bounding box by other [bounds] object. If provided [bounds] object\nis smaller than current one, it is not shrunk. This method mutates\nthe bounds object on which it is called."
+            },
+            {
+              "name": "southWest",
+              "kind": "getter",
+              "signature": "LatLng get southWest => LatLng(south, west)",
+              "doc": "Obtain coordinates of southwest corner of the bounds.\n\nInstead of using latitude or longitude of the corner, use [south] or\n[west] instead!"
+            },
+            {
+              "name": "northEast",
+              "kind": "getter",
+              "signature": "LatLng get northEast => LatLng(north, east)",
+              "doc": "Obtain coordinates of northeast corner of the bounds.\n\nInstead of using latitude or longitude of the corner, use [north] or\n[east] instead!"
+            },
+            {
+              "name": "northWest",
+              "kind": "getter",
+              "signature": "LatLng get northWest => LatLng(north, west)",
+              "doc": "Obtain coordinates of northwest corner of the bounds.\n\nInstead of using latitude or longitude of the corner, use [north] or\n[west] instead!"
+            },
+            {
+              "name": "southEast",
+              "kind": "getter",
+              "signature": "LatLng get southEast => LatLng(south, east)",
+              "doc": "Obtain coordinates of southeast corner of the bounds.\n\nInstead of using latitude or longitude of the corner, use [south] or\n[east] instead!"
+            },
+            {
+              "name": "center",
+              "kind": "getter",
+              "signature": "LatLng get center",
+              "doc": "Obtain coordinates of the bounds center"
+            },
+            {
+              "name": "simpleCenter",
+              "kind": "getter",
+              "signature": "LatLng get simpleCenter => LatLng((south + north) / 2, (east + west) / 2)",
+              "doc": "Obtain simple coordinates of the bounds center"
+            },
+            {
+              "name": "contains",
+              "kind": "method",
+              "signature": "bool contains(LatLng point) =>\npoint.longitude >= west &&\npoint.longitude <= east &&\npoint.latitude >= south &&\npoint.latitude <= north",
+              "doc": "Checks whether [point] is inside bounds"
+            },
+            {
+              "name": "containsBounds",
+              "kind": "method",
+              "signature": "bool containsBounds(LatLngBounds other) =>\nother.south >= south &&\nother.north <= north &&\nother.west >= west &&\nother.east <= east",
+              "doc": "Checks whether the [other] bounding box is contained inside bounds."
+            },
+            {
+              "name": "isOverlapping",
+              "kind": "method",
+              "signature": "bool isOverlapping(LatLngBounds other) => !(south > other.north ||\nnorth < other.south ||\neast < other.west ||\nwest > other.east)",
+              "doc": "Checks whether at least one edge of the [other] bounding box  is\noverlapping with this bounding box.\n\nBounding boxes that touch each other but don't overlap are counted as\nnot overlapping."
+            },
+            {
+              "name": "hashCode",
+              "kind": "getter",
+              "signature": "int get hashCode => Object.hash(south, north, east, west)",
+              "doc": null
+            },
+            {
+              "name": "operator ==",
+              "kind": "method",
+              "signature": "bool operator ==(Object other) =>\nidentical(this, other) ||\n(other is LatLngBounds &&\nother.north == north &&\nother.south == south &&\nother.east == east &&\nother.west == west)",
+              "doc": null
+            },
+            {
+              "name": "toString",
+              "kind": "method",
+              "signature": "String toString() =>\n'LatLngBounds(north: $north, south: $south, east: $east, west: $west)'",
+              "doc": null
+            }
+          ]
+        }
+      ],
+      "functions": [],
+      "constants": []
+    }
+  ],
+  "geo_map_core_reexport": [
+    {
+      "name": "Expr",
+      "kind": "class",
+      "signature": "abstract class Expr",
+      "doc": "A parsed expression node.",
+      "members": [
+        {
+          "name": "Expr",
+          "kind": "constructor",
+          "signature": "const Expr()",
+          "doc": null
+        },
+        {
+          "name": "evaluate",
+          "kind": "method",
+          "signature": "Object? evaluate(ExpressionContext ctx)",
+          "doc": null
+        },
+        {
+          "name": "isFeatureConstant",
+          "kind": "getter",
+          "signature": "bool get isFeatureConstant",
+          "doc": "True when the value does **not** depend on feature properties."
+        },
+        {
+          "name": "isZoomConstant",
+          "kind": "getter",
+          "signature": "bool get isZoomConstant",
+          "doc": "True when the value does **not** depend on the zoom."
+        },
+        {
+          "name": "isConstant",
+          "kind": "getter",
+          "signature": "bool get isConstant => isFeatureConstant && isZoomConstant",
+          "doc": "True when this is a compile-time constant."
+        }
+      ]
+    },
+    {
+      "name": "ExpressionContext",
+      "kind": "class",
+      "signature": "class ExpressionContext",
+      "doc": "The evaluation inputs for an expression.\n\nMirrors MapLibre's `EvaluationParameters` / `EvaluationContext`: `zoom` is\nthe only global needed for a spike; `properties` stands in for a feature's\nproperty map (which is why `get`/`has` make an expression feature-dependent).",
+      "members": [
+        {
+          "name": "ExpressionContext",
+          "kind": "constructor",
+          "signature": "const ExpressionContext({\nrequired this.zoom,\nthis.properties = const {},\nthis.variables = const {},\n})",
+          "doc": null
+        },
+        {
+          "name": "zoom",
+          "kind": "field",
+          "signature": "final double zoom",
+          "doc": null
+        },
+        {
+          "name": "properties",
+          "kind": "field",
+          "signature": "final Map<String, Object?> properties",
+          "doc": null
+        },
+        {
+          "name": "variables",
+          "kind": "field",
+          "signature": "final Map<String, Object?> variables",
+          "doc": "Bindings introduced by [`let`] expressions."
+        }
+      ]
+    },
+    {
+      "name": "FeaturePredicate",
+      "kind": "typedef",
+      "signature": "typedef FeaturePredicate = bool Function(\nMap<String, Object?> properties, [\ndouble? zoom,\n])",
+      "doc": "Predicate over one feature at one zoom level.\n\nThe zoom is optional so a caller that has no camera (a test, a filter that\nnever mentions `[\"zoom\"]`) can still ask `matches(props)`; it then means\n\"zoom 0\".",
+      "members": []
+    },
+    {
+      "name": "GeoEngineTuning",
+      "kind": "class",
+      "signature": "class GeoEngineTuning",
+      "doc": null,
+      "members": [
+        {
+          "name": "GeoEngineTuning",
+          "kind": "constructor",
+          "signature": "const GeoEngineTuning._()",
+          "doc": null
+        },
+        {
+          "name": "epsDepth",
+          "kind": "field",
+          "signature": "static const double epsDepth = 0.02",
+          "doc": "Depth below which a vertex counts as \"behind the horizon\"."
+        },
+        {
+          "name": "maxCameraLatitude",
+          "kind": "field",
+          "signature": "static const double maxCameraLatitude = 89.999",
+          "doc": "Camera latitude clamp — keeps the orthographic camera out of the exact pole\n(avoids NaN in `1/cos(lat)` compensation and degenerate tangents)."
+        },
+        {
+          "name": "pickZoomCosFloor",
+          "kind": "field",
+          "signature": "static const double pickZoomCosFloor = 0.2",
+          "doc": "Floor for `cos(lat)` when picking a tile zoom near the poles."
+        },
+        {
+          "name": "tileSize",
+          "kind": "field",
+          "signature": "static const int tileSize = 256",
+          "doc": "Raster tile edge in pixels. Single source of truth."
+        },
+        {
+          "name": "tileSizeD",
+          "kind": "field",
+          "signature": "static const double tileSizeD = tileSize * 1.0",
+          "doc": "[tileSize] as a double (const-usable default parameter)."
+        },
+        {
+          "name": "densifyPixelError",
+          "kind": "field",
+          "signature": "static const double densifyPixelError = 0.5",
+          "doc": "Maximum chord error allowed when densifying great circles (screen px)."
+        },
+        {
+          "name": "selectMargin",
+          "kind": "field",
+          "signature": "static const double selectMargin = 64",
+          "doc": "Extra margin (px) used when testing whether a tile touches the viewport."
+        },
+        {
+          "name": "subdivMin",
+          "kind": "field",
+          "signature": "static const int subdivMin = 6",
+          "doc": "Mesh subdivision bounds per tile / image quad."
+        },
+        {
+          "name": "subdivMax",
+          "kind": "field",
+          "signature": "static const int subdivMax = 16",
+          "doc": null
+        },
+        {
+          "name": "subdivPx",
+          "kind": "field",
+          "signature": "static const double subdivPx = 20",
+          "doc": "Target number of screen pixels per subdivision cell."
+        },
+        {
+          "name": "cacheBudgetBytes",
+          "kind": "field",
+          "signature": "static const int cacheBudgetBytes = 96 << 20",
+          "doc": "Raster cache budget (bytes) — replaces the old \"384 images\" count cap."
+        },
+        {
+          "name": "defaultTileBytes",
+          "kind": "field",
+          "signature": "static const int defaultTileBytes = 256 * 1024",
+          "doc": "Default estimated bytes per decoded tile, used before a real measurement."
+        },
+        {
+          "name": "tapSlopPx",
+          "kind": "field",
+          "signature": "static const double tapSlopPx = 12",
+          "doc": "Tap slop and fling thresholds for the gesture layer."
+        },
+        {
+          "name": "tapMaxMillis",
+          "kind": "field",
+          "signature": "static const int tapMaxMillis = 400",
+          "doc": null
+        },
+        {
+          "name": "doubleTapMaxMillis",
+          "kind": "field",
+          "signature": "static const int doubleTapMaxMillis = 320",
+          "doc": null
+        },
+        {
+          "name": "flingMinVelocityPxPerSec",
+          "kind": "field",
+          "signature": "static const double flingMinVelocityPxPerSec = 600",
+          "doc": null
+        },
+        {
+          "name": "tileRequestDebounceMillis",
+          "kind": "field",
+          "signature": "static const int tileRequestDebounceMillis = 120",
+          "doc": "Debounce before issuing new tile requests while the camera is moving."
+        },
+        {
+          "name": "maxUnderzooming",
+          "kind": "field",
+          "signature": "static const int maxUnderzooming = 10",
+          "doc": "How many zoom levels up the ancestor chain may be used as a fallback.\n\nMapLibre: `maxUnderzooming` (default 10). The chain stops at\n`source.minzoom`."
+        },
+        {
+          "name": "maxOverzooming",
+          "kind": "field",
+          "signature": "static const int maxOverzooming = 3",
+          "doc": "How many zoom levels down the descendant chain may be used as a fallback.\n\nMapLibre: `maxOverzooming` (default 3). The whole generation must be\npresent before it is drawn."
+        },
+        {
+          "name": "tileCacheZoomLevels",
+          "kind": "field",
+          "signature": "static const int tileCacheZoomLevels = 5",
+          "doc": "Zoom levels kept in the cache (MapLibre `MAX_TILE_CACHE_ZOOM_LEVELS`)."
+        },
+        {
+          "name": "maxParallelRequests",
+          "kind": "field",
+          "signature": "static const int maxParallelRequests = 16",
+          "doc": "Maximum concurrent raster tile requests (MapLibre\n`MAX_PARALLEL_IMAGE_REQUESTS`)."
+        },
+        {
+          "name": "sqliteParallelRequests",
+          "kind": "field",
+          "signature": "static const int sqliteParallelRequests = 4",
+          "doc": "Concurrent requests for a sqlite-backed source — a single file handle\ndoes not benefit from more."
+        },
+        {
+          "name": "requestTimeoutMs",
+          "kind": "field",
+          "signature": "static const int requestTimeoutMs = 15000",
+          "doc": "TCP connect timeout for tile requests."
+        },
+        {
+          "name": "bodyTimeoutMs",
+          "kind": "field",
+          "signature": "static const int bodyTimeoutMs = 30000",
+          "doc": "Timeout for reading the response body of a tile request."
+        },
+        {
+          "name": "pendingTimeoutMs",
+          "kind": "field",
+          "signature": "static const int pendingTimeoutMs = 45000",
+          "doc": "A pending request that never completed within this window is reclaimed."
+        },
+        {
+          "name": "maxTrackedTileKeys",
+          "kind": "field",
+          "signature": "static const int maxTrackedTileKeys = 4096",
+          "doc": "Upper bound on the number of tracked request/failure keys."
+        },
+        {
+          "name": "networkFailureTtlMs",
+          "kind": "field",
+          "signature": "static const int networkFailureTtlMs = 3000",
+          "doc": "Network / timeout failures are transient — retry quickly."
+        },
+        {
+          "name": "notFoundTtlMs",
+          "kind": "field",
+          "signature": "static const int notFoundTtlMs = 30000",
+          "doc": "A missing tile (HTTP 404) stays missing for longer: MapLibre does not\nblacklist it, it just falls back to parent/child tiles."
+        },
+        {
+          "name": "decodeFailureTtlMs",
+          "kind": "field",
+          "signature": "static const int decodeFailureTtlMs = 8000",
+          "doc": "Decode failures (corrupt payload) — retry, but not immediately."
+        },
+        {
+          "name": "failureBackoffBaseMs",
+          "kind": "field",
+          "signature": "static const int failureBackoffBaseMs = 1000",
+          "doc": "Exponential backoff base for repeated failures of the same tile\n(MapLibre `tile.ts`: `1000 * 2^(n-1)`)."
+        },
+        {
+          "name": "failureBackoffMaxMs",
+          "kind": "field",
+          "signature": "static const int failureBackoffMaxMs = 30000",
+          "doc": "Cap for the exponential backoff."
+        },
+        {
+          "name": "maxPolarCapColumns",
+          "kind": "field",
+          "signature": "static const int maxPolarCapColumns = 64",
+          "doc": "Upper bound on the number of **separate meshes** used to draw one polar\ncap.\n\nTwo regimes exist and this constant is the switch between them:\n\n* **wedge regime** (`columns ≤ maxPolarCapColumns`) — every visible grid\ncolumn gets its own strip textured with that column's own tile. This is\nthe crisp path and it is what a cap seen from *outside* looks like.\n* **smeared regime** (`columns > maxPolarCapColumns`) — the whole visible\narc is drawn as **one** strip with a single texture. The camera is\ninside the cap here, the arc wraps all the way around the pole, and a\nper-column wedge would mean thousands of meshes each sampling a\ndifferent image: that is precisely the radial sunburst that used to\nfill the viewport.\n\nThe bound therefore has to stay small enough that the wedge regime stays\ncheap, and the smeared regime is only reached where the cap is a\nfeatureless blob anyway."
+        },
+        {
+          "name": "featurePickRadiusPx",
+          "kind": "field",
+          "signature": "static const double featurePickRadiusPx = 24",
+          "doc": "Default screen-space pick radius (px) for point features.\n\n24 px is roughly twice the on-screen diameter of a 12 px symbol, so a\ndot is grabbable without demanding pixel accuracy. Hosts may override it\nper query or per feature."
+        },
+        {
+          "name": "hiddenPointSentinelPx",
+          "kind": "field",
+          "signature": "static const double hiddenPointSentinelPx = 1e6",
+          "doc": "Magnitude at which a projected screen coordinate is treated as the\n\"not drawable\" sentinel.\n\nThe globe projector returns `(-1e6, -1e6)` for the far side of the\nsphere. Such a coordinate is finite, so a naive distance check would\ntreat it as \"very far away\" rather than \"not pickable\" — both are\nrejected, but the sentinel must be detected explicitly."
+        },
+        {
+          "name": "featureBoundaryEpsilonDeg",
+          "kind": "field",
+          "signature": "static const double featureBoundaryEpsilonDeg = 1e-7",
+          "doc": "Tolerance (degrees) for \"the tap is exactly on the ring boundary\".\n\n1e-7° is about a centimetre — it only absorbs floating-point noise, it\ndoes not widen the shape."
+        }
+      ]
+    },
+    {
+      "name": "GeoGeometryKind",
+      "kind": "enum",
+      "signature": "enum GeoGeometryKind",
+      "doc": "The geometry kinds a query can consider.",
+      "members": []
+    },
+    {
+      "name": "GeoJsonFeature",
+      "kind": "class",
+      "signature": "class GeoJsonFeature",
+      "doc": null,
+      "members": [
+        {
+          "name": "GeoJsonFeature",
+          "kind": "constructor",
+          "signature": "const GeoJsonFeature({\nthis.id,\nthis.properties = const {},\nrequired this.geometry,\n})",
+          "doc": null
+        },
+        {
+          "name": "id",
+          "kind": "field",
+          "signature": "final String? id",
+          "doc": null
+        },
+        {
+          "name": "properties",
+          "kind": "field",
+          "signature": "final Map<String, Object?> properties",
+          "doc": null
+        },
+        {
+          "name": "geometry",
+          "kind": "field",
+          "signature": "final GeoJsonGeometry geometry",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "GeoJsonGeometry",
+      "kind": "class",
+      "signature": "sealed class GeoJsonGeometry",
+      "doc": null,
+      "members": [
+        {
+          "name": "GeoJsonGeometry",
+          "kind": "constructor",
+          "signature": "const GeoJsonGeometry()",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "GeoTileSource",
+      "kind": "class",
+      "signature": "abstract class GeoTileSource",
+      "doc": "A raster tile provider (HTTP, MBTiles, …).",
+      "members": [
+        {
+          "name": "minZoom",
+          "kind": "getter",
+          "signature": "int get minZoom",
+          "doc": null
+        },
+        {
+          "name": "maxZoom",
+          "kind": "getter",
+          "signature": "int get maxZoom",
+          "doc": null
+        },
+        {
+          "name": "scheme",
+          "kind": "getter",
+          "signature": "TileSchemeKind get scheme",
+          "doc": "The tile grid geometry of this source."
+        },
+        {
+          "name": "rowOrder",
+          "kind": "getter",
+          "signature": "TileRowOrder get rowOrder => TileRowOrder.xyzTopDown",
+          "doc": "Row order used **on the wire** (TMS / MBTiles count rows from south)."
+        },
+        {
+          "name": "maxConcurrentRequests",
+          "kind": "getter",
+          "signature": "int get maxConcurrentRequests => GeoEngineTuning.maxParallelRequests",
+          "doc": "How many requests may be in flight at the same time. A local sqlite file\ngains nothing from parallel reads, so MBTiles overrides this with a much\nsmaller number."
+        },
+        {
+          "name": "fetch",
+          "kind": "method",
+          "signature": "Future<TileFetchResult> fetch(int z, int x, int y)",
+          "doc": "Fetch one tile. [x] / [y] are canonical XYZ (row 0 = north); the source\nconverts to its own wire order internally."
+        },
+        {
+          "name": "attribution",
+          "kind": "getter",
+          "signature": "String get attribution",
+          "doc": "Attribution shown in debug UI."
+        },
+        {
+          "name": "dispose",
+          "kind": "method",
+          "signature": "void dispose()",
+          "doc": "Release any resource held by the source (sqlite handle, http client)."
+        }
+      ]
+    },
+    {
+      "name": "LineStringGeometry",
+      "kind": "class",
+      "signature": "class LineStringGeometry extends GeoJsonGeometry",
+      "doc": null,
+      "members": [
+        {
+          "name": "LineStringGeometry",
+          "kind": "constructor",
+          "signature": "const LineStringGeometry(this.points)",
+          "doc": null
+        },
+        {
+          "name": "points",
+          "kind": "field",
+          "signature": "final List<LatLng> points",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "MultiLineStringGeometry",
+      "kind": "class",
+      "signature": "class MultiLineStringGeometry extends GeoJsonGeometry",
+      "doc": null,
+      "members": [
+        {
+          "name": "MultiLineStringGeometry",
+          "kind": "constructor",
+          "signature": "const MultiLineStringGeometry(this.lines)",
+          "doc": null
+        },
+        {
+          "name": "lines",
+          "kind": "field",
+          "signature": "final List<List<LatLng>> lines",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "MultiPolygonGeometry",
+      "kind": "class",
+      "signature": "class MultiPolygonGeometry extends GeoJsonGeometry",
+      "doc": null,
+      "members": [
+        {
+          "name": "MultiPolygonGeometry",
+          "kind": "constructor",
+          "signature": "const MultiPolygonGeometry(this.polygons)",
+          "doc": null
+        },
+        {
+          "name": "polygons",
+          "kind": "field",
+          "signature": "final List<List<List<LatLng>>> polygons",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "PointGeometry",
+      "kind": "class",
+      "signature": "class PointGeometry extends GeoJsonGeometry",
+      "doc": null,
+      "members": [
+        {
+          "name": "PointGeometry",
+          "kind": "constructor",
+          "signature": "const PointGeometry(this.point)",
+          "doc": null
+        },
+        {
+          "name": "point",
+          "kind": "field",
+          "signature": "final LatLng point",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "PolygonGeometry",
+      "kind": "class",
+      "signature": "class PolygonGeometry extends GeoJsonGeometry",
+      "doc": null,
+      "members": [
+        {
+          "name": "PolygonGeometry",
+          "kind": "constructor",
+          "signature": "const PolygonGeometry(this.rings)",
+          "doc": null
+        },
+        {
+          "name": "rings",
+          "kind": "field",
+          "signature": "final List<List<LatLng>> rings",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "PropertyValue",
+      "kind": "class",
+      "signature": "class PropertyValue",
+      "doc": "A paint/layout value: a constant, or an expression evaluated per draw.",
+      "members": [
+        {
+          "name": "PropertyValue",
+          "kind": "constructor",
+          "signature": "PropertyValue._(this._constant, this._expr, this.isColor)",
+          "doc": null
+        },
+        {
+          "name": "PropertyValue",
+          "kind": "constructor",
+          "signature": "factory PropertyValue.fromJson(Object? json, {bool isColor = false})",
+          "doc": null
+        },
+        {
+          "name": "isColor",
+          "kind": "field",
+          "signature": "final bool isColor",
+          "doc": null
+        },
+        {
+          "name": "isExpression",
+          "kind": "getter",
+          "signature": "bool get isExpression => _expr != null",
+          "doc": null
+        },
+        {
+          "name": "isFeatureConstant",
+          "kind": "getter",
+          "signature": "bool get isFeatureConstant => _expr?.isFeatureConstant ?? true",
+          "doc": "True when the value does not depend on feature properties."
+        },
+        {
+          "name": "isZoomConstant",
+          "kind": "getter",
+          "signature": "bool get isZoomConstant => _expr?.isZoomConstant ?? true",
+          "doc": "True when the value does not depend on zoom."
+        },
+        {
+          "name": "evaluate",
+          "kind": "method",
+          "signature": "Object? evaluate(ExpressionContext ctx)",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "SpriteIcon",
+      "kind": "class",
+      "signature": "class SpriteIcon",
+      "doc": "One icon's rectangle inside the atlas.",
+      "members": [
+        {
+          "name": "SpriteIcon",
+          "kind": "constructor",
+          "signature": "const SpriteIcon({\nrequired this.x,\nrequired this.y,\nrequired this.width,\nrequired this.height,\nthis.pixelRatio = 1,\nthis.sdf = false,\n})",
+          "doc": null
+        },
+        {
+          "name": "x",
+          "kind": "field",
+          "signature": "final double x",
+          "doc": null
+        },
+        {
+          "name": "y",
+          "kind": "field",
+          "signature": "final double y",
+          "doc": null
+        },
+        {
+          "name": "width",
+          "kind": "field",
+          "signature": "final double width",
+          "doc": null
+        },
+        {
+          "name": "height",
+          "kind": "field",
+          "signature": "final double height",
+          "doc": null
+        },
+        {
+          "name": "pixelRatio",
+          "kind": "field",
+          "signature": "final double pixelRatio",
+          "doc": null
+        },
+        {
+          "name": "sdf",
+          "kind": "field",
+          "signature": "final bool sdf",
+          "doc": null
+        },
+        {
+          "name": "displayWidth",
+          "kind": "getter",
+          "signature": "double get displayWidth => pixelRatio <= 0 ? width : width / pixelRatio",
+          "doc": "Size on screen at `icon-size: 1`, i.e. sprite pixels divided by density."
+        },
+        {
+          "name": "displayHeight",
+          "kind": "getter",
+          "signature": "double get displayHeight => pixelRatio <= 0 ? height : height / pixelRatio",
+          "doc": null
+        },
+        {
+          "name": "toString",
+          "kind": "method",
+          "signature": "String toString() =>\n'SpriteIcon($x,$y ${width}x$height @${pixelRatio}x)'",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "SpriteIndex",
+      "kind": "class",
+      "signature": "class SpriteIndex",
+      "doc": "Name → icon lookup for one sprite.",
+      "members": [
+        {
+          "name": "SpriteIndex",
+          "kind": "constructor",
+          "signature": "const SpriteIndex(this.icons)",
+          "doc": null
+        },
+        {
+          "name": "icons",
+          "kind": "field",
+          "signature": "final Map<String, SpriteIcon> icons",
+          "doc": null
+        },
+        {
+          "name": "length",
+          "kind": "getter",
+          "signature": "int get length => icons.length",
+          "doc": null
+        },
+        {
+          "name": "SpriteIndex",
+          "kind": "constructor",
+          "signature": "factory SpriteIndex.parse(Object? json)",
+          "doc": "Parses the sprite JSON, skipping entries that are malformed.\n\nTolerant on purpose: a sprite atlas is third-party data, and one broken\nentry should cost that icon, not the whole layer."
+        }
+      ]
+    },
+    {
+      "name": "StyleColor",
+      "kind": "class",
+      "signature": "class StyleColor",
+      "doc": null,
+      "members": [
+        {
+          "name": "StyleColor",
+          "kind": "constructor",
+          "signature": "const StyleColor(this.r, this.g, this.b, [this.a = 255])",
+          "doc": null
+        },
+        {
+          "name": "r",
+          "kind": "field",
+          "signature": "final int r",
+          "doc": null
+        },
+        {
+          "name": "g",
+          "kind": "field",
+          "signature": "final int g",
+          "doc": null
+        },
+        {
+          "name": "b",
+          "kind": "field",
+          "signature": "final int b",
+          "doc": null
+        },
+        {
+          "name": "a",
+          "kind": "field",
+          "signature": "final int a",
+          "doc": null
+        },
+        {
+          "name": "parse",
+          "kind": "method",
+          "signature": "static StyleColor parse(Object? value)",
+          "doc": "Parse a CSS color: `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()`, a\nfew named colors, an `0xAARRGGBB` int, or an existing [StyleColor]."
+        },
+        {
+          "name": "lerp",
+          "kind": "method",
+          "signature": "static StyleColor lerp(StyleColor x, StyleColor y, double t) => StyleColor(\n(x.r + (y.r - x.r) * t).round(),\n(x.g + (y.g - x.g) * t).round(),\n(x.b + (y.b - x.b) * t).round(),\n(x.a + (y.a - x.a) * t).round(),\n)",
+          "doc": null
+        },
+        {
+          "name": "toCss",
+          "kind": "method",
+          "signature": "String toCss()",
+          "doc": null
+        },
+        {
+          "name": "operator ==",
+          "kind": "method",
+          "signature": "bool operator ==(Object other) =>\nother is StyleColor &&\nother.r == r &&\nother.g == g &&\nother.b == b &&\nother.a == a",
+          "doc": null
+        },
+        {
+          "name": "hashCode",
+          "kind": "getter",
+          "signature": "int get hashCode => Object.hash(r, g, b, a)",
+          "doc": null
+        },
+        {
+          "name": "toString",
+          "kind": "method",
+          "signature": "String toString() => 'StyleColor(${toCss()})'",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "StyleDocument",
+      "kind": "class",
+      "signature": "class StyleDocument",
+      "doc": null,
+      "members": [
+        {
+          "name": "StyleDocument",
+          "kind": "constructor",
+          "signature": "StyleDocument({\nthis.version = 8,\nMap<String, Map<String, Object?>> sources = const {},\nList<StyleLayer> layers = const [],\n})  : sources = Map.unmodifiable(sources),\nlayers = List.unmodifiable(layers)",
+          "doc": null
+        },
+        {
+          "name": "StyleDocument",
+          "kind": "constructor",
+          "signature": "factory StyleDocument.fromSpec(StyleSpec spec) => StyleDocument(\nversion: spec.version,\nsources: spec.sources,\nlayers: spec.layers,\n)",
+          "doc": null
+        },
+        {
+          "name": "version",
+          "kind": "field",
+          "signature": "final int version",
+          "doc": null
+        },
+        {
+          "name": "sources",
+          "kind": "field",
+          "signature": "final Map<String, Map<String, Object?>> sources",
+          "doc": null
+        },
+        {
+          "name": "layers",
+          "kind": "field",
+          "signature": "final List<StyleLayer> layers",
+          "doc": null
+        },
+        {
+          "name": "toSpec",
+          "kind": "method",
+          "signature": "StyleSpec toSpec() =>\nStyleSpec(version: version, sources: sources, layers: layers)",
+          "doc": null
+        },
+        {
+          "name": "layer",
+          "kind": "method",
+          "signature": "StyleLayer? layer(String id)",
+          "doc": null
+        },
+        {
+          "name": "addSource",
+          "kind": "method",
+          "signature": "StyleDocument addSource(String id, Map<String, Object?> source)",
+          "doc": null
+        },
+        {
+          "name": "removeSource",
+          "kind": "method",
+          "signature": "StyleDocument removeSource(String id)",
+          "doc": null
+        },
+        {
+          "name": "addLayer",
+          "kind": "method",
+          "signature": "StyleDocument addLayer(StyleLayer layer, {String? before})",
+          "doc": null
+        },
+        {
+          "name": "removeLayer",
+          "kind": "method",
+          "signature": "StyleDocument removeLayer(String id)",
+          "doc": null
+        },
+        {
+          "name": "moveLayer",
+          "kind": "method",
+          "signature": "StyleDocument moveLayer(String id, {String? before})",
+          "doc": null
+        },
+        {
+          "name": "setPaintProperty",
+          "kind": "method",
+          "signature": "StyleDocument setPaintProperty(String id, String name, Object? value) =>\n_updateLayer(id, (l) {\nfinal def = layerPaintDefs[l.type]?[name];\nreturn l.copyWith(paint: {\n...l.paint,\nname: PropertyValue.fromJson(\nvalue,\nisColor: def?.type == StylePropertyType.color,\n),\n});\n})",
+          "doc": null
+        },
+        {
+          "name": "setLayoutProperty",
+          "kind": "method",
+          "signature": "StyleDocument setLayoutProperty(String id, String name, Object? value) =>\n_updateLayer(id, (l) {\nfinal def = layerLayoutDefs[l.type]?[name];\nreturn l.copyWith(layout: {\n...l.layout,\nname: PropertyValue.fromJson(\nvalue,\nisColor: def?.type == StylePropertyType.color,\n),\n});\n})",
+          "doc": null
+        },
+        {
+          "name": "setFilter",
+          "kind": "method",
+          "signature": "StyleDocument setFilter(String id, Object? filter) =>\n_updateLayer(id, (l) => l.copyWith(filter: compileFilter(filter)))",
+          "doc": null
+        },
+        {
+          "name": "setLayerZoomRange",
+          "kind": "method",
+          "signature": "StyleDocument setLayerZoomRange(String id, num min, num max) =>\n_updateLayer(id, (l) => l.copyWith(minZoom: min, maxZoom: max))",
+          "doc": null
+        },
+        {
+          "name": "setVisibility",
+          "kind": "method",
+          "signature": "StyleDocument setVisibility(String id, String visibility) =>\nsetLayoutProperty(id, 'visibility', visibility)",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "StyleLayer",
+      "kind": "class",
+      "signature": "class StyleLayer",
+      "doc": null,
+      "members": [
+        {
+          "name": "StyleLayer",
+          "kind": "constructor",
+          "signature": "StyleLayer({\nrequired this.id,\nrequired this.type,\nthis.source,\nthis.sourceLayer,\nthis.minZoom,\nthis.maxZoom,\nthis.paint = const {},\nthis.layout = const {},\nthis.filter = matchAllFeatures,\n})",
+          "doc": null
+        },
+        {
+          "name": "id",
+          "kind": "field",
+          "signature": "final String id",
+          "doc": null
+        },
+        {
+          "name": "type",
+          "kind": "field",
+          "signature": "final String type",
+          "doc": "`fill` or `line` in the M1 subset (other types parse but are not drawn)."
+        },
+        {
+          "name": "source",
+          "kind": "field",
+          "signature": "final String? source",
+          "doc": null
+        },
+        {
+          "name": "sourceLayer",
+          "kind": "field",
+          "signature": "final String? sourceLayer",
+          "doc": null
+        },
+        {
+          "name": "minZoom",
+          "kind": "field",
+          "signature": "final num? minZoom",
+          "doc": null
+        },
+        {
+          "name": "maxZoom",
+          "kind": "field",
+          "signature": "final num? maxZoom",
+          "doc": null
+        },
+        {
+          "name": "paint",
+          "kind": "field",
+          "signature": "final Map<String, PropertyValue> paint",
+          "doc": null
+        },
+        {
+          "name": "layout",
+          "kind": "field",
+          "signature": "final Map<String, PropertyValue> layout",
+          "doc": null
+        },
+        {
+          "name": "filter",
+          "kind": "field",
+          "signature": "final FeaturePredicate filter",
+          "doc": "Compiled filter over feature properties (always-true when absent).\n\nCall it through [matches], which supplies the zoom."
+        },
+        {
+          "name": "matches",
+          "kind": "method",
+          "signature": "bool matches(Map<String, Object?> properties, double zoom) =>\nfilter(properties, zoom)",
+          "doc": "Whether this layer wants [properties] at [zoom].\n\nThe zoom argument exists because MapLibre lets a filter reference\n`[\"zoom\"]`; see `style_filter.dart`."
+        },
+        {
+          "name": "isSupported",
+          "kind": "getter",
+          "signature": "bool get isSupported => type == 'fill' || type == 'line' || type == 'symbol'",
+          "doc": "Whether the M1 renderer can draw this layer type."
+        },
+        {
+          "name": "parse",
+          "kind": "method",
+          "signature": "static StyleLayer parse(Map<String, Object?> json)",
+          "doc": null
+        },
+        {
+          "name": "valueOf",
+          "kind": "method",
+          "signature": "Object? valueOf(String name, ExpressionContext ctx)",
+          "doc": "Evaluate any paint or layout property (paint first, then layout)."
+        },
+        {
+          "name": "number",
+          "kind": "method",
+          "signature": "double? number(String name, ExpressionContext ctx)",
+          "doc": null
+        },
+        {
+          "name": "color",
+          "kind": "method",
+          "signature": "StyleColor? color(String name, ExpressionContext ctx)",
+          "doc": null
+        },
+        {
+          "name": "string",
+          "kind": "method",
+          "signature": "String? string(String name, ExpressionContext ctx) =>\nvalueOf(name, ctx)?.toString()",
+          "doc": null
+        },
+        {
+          "name": "boolean",
+          "kind": "method",
+          "signature": "bool? boolean(String name, ExpressionContext ctx)",
+          "doc": null
+        },
+        {
+          "name": "isVisibleAt",
+          "kind": "method",
+          "signature": "bool isVisibleAt(double zoom)",
+          "doc": "MapLibre visibility: `minzoom <= zoom < maxzoom` and `visibility != none`."
+        },
+        {
+          "name": "copyWith",
+          "kind": "method",
+          "signature": "StyleLayer copyWith({\nMap<String, PropertyValue>? paint,\nMap<String, PropertyValue>? layout,\nnum? minZoom,\nnum? maxZoom,\nFeaturePredicate? filter,\n}) =>\nStyleLayer(\nid: id,\ntype: type,\nsource: source,\nsourceLayer: sourceLayer,\nminZoom: minZoom ?? this.minZoom,\nmaxZoom: maxZoom ?? this.maxZoom,\npaint: paint ?? this.paint,\nlayout: layout ?? this.layout,\nfilter: filter ?? this.filter,\n)",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "StyleSpec",
+      "kind": "class",
+      "signature": "class StyleSpec",
+      "doc": null,
+      "members": [
+        {
+          "name": "StyleSpec",
+          "kind": "constructor",
+          "signature": "StyleSpec({\nrequired this.version,\nrequired this.sources,\nrequired this.layers,\n})",
+          "doc": null
+        },
+        {
+          "name": "version",
+          "kind": "field",
+          "signature": "final int version",
+          "doc": null
+        },
+        {
+          "name": "sources",
+          "kind": "field",
+          "signature": "final Map<String, Map<String, Object?>> sources",
+          "doc": null
+        },
+        {
+          "name": "layers",
+          "kind": "field",
+          "signature": "final List<StyleLayer> layers",
+          "doc": null
+        },
+        {
+          "name": "parse",
+          "kind": "method",
+          "signature": "static StyleSpec parse(Map<String, Object?> json)",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "TileFailureKind",
+      "kind": "enum",
+      "signature": "enum TileFailureKind",
+      "doc": "Why a tile could not be produced.\n\nThe distinction matters: a missing tile (404) must **not** be blacklisted\n(MapLibre `tile_manager.ts` `_loadTile` just calls `update()` again and\nkeeps falling back to parent/child tiles), while a network error is\ntransient and should be retried quickly.",
+      "members": [
+        {
+          "name": "notFound",
+          "kind": "enum-value",
+          "signature": "notFound",
+          "doc": null
+        },
+        {
+          "name": "network",
+          "kind": "enum-value",
+          "signature": "network",
+          "doc": null
+        },
+        {
+          "name": "decode",
+          "kind": "enum-value",
+          "signature": "decode",
+          "doc": null
+        },
+        {
+          "name": "empty",
+          "kind": "enum-value",
+          "signature": "empty",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "TileFetchResult",
+      "kind": "class",
+      "signature": "class TileFetchResult",
+      "doc": "The outcome of a single tile fetch.\n\nMapLibre draws a hard line between \"the server says there is no such tile\"\n(404 — never blacklisted, the engine keeps falling back) and \"the request\nbroke\" (network error — retried quickly). Collapsing both into `null` is\nwhat made the old engine blacklist tiles after two failures.",
+      "members": [
+        {
+          "name": "TileFetchResult",
+          "kind": "constructor",
+          "signature": "const TileFetchResult.ok(this.bytes) : failure = null",
+          "doc": null
+        },
+        {
+          "name": "TileFetchResult",
+          "kind": "constructor",
+          "signature": "const TileFetchResult.failed(this.failure) : bytes = null",
+          "doc": null
+        },
+        {
+          "name": "bytes",
+          "kind": "field",
+          "signature": "final Uint8List? bytes",
+          "doc": "The decoded payload, or `null` when [failure] is set."
+        },
+        {
+          "name": "failure",
+          "kind": "field",
+          "signature": "final TileFailureKind? failure",
+          "doc": "Why the tile could not be produced (`null` on success)."
+        },
+        {
+          "name": "isOk",
+          "kind": "getter",
+          "signature": "bool get isOk => failure == null && bytes != null",
+          "doc": null
+        },
+        {
+          "name": "isNotFound",
+          "kind": "getter",
+          "signature": "bool get isNotFound => failure == TileFailureKind.notFound",
+          "doc": null
+        },
+        {
+          "name": "toString",
+          "kind": "method",
+          "signature": "String toString() => isOk\n? 'TileFetchResult.ok(${bytes?.length} bytes)'\n: 'TileFetchResult.failed($failure)'",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "TileRowOrder",
+      "kind": "enum",
+      "signature": "enum TileRowOrder",
+      "doc": "Row order used **on the wire**.\n\nThe internal (canonical) row order is always XYZ — row 0 is the northern\nedge of the grid. Some services (TMS, MBTiles) number rows from the south,\nso the row index must be flipped when a URL is built or a row is read from\na local file.\n\nMapLibre does the same in one line: `tile_id.ts` L48\n`y = scheme === 'tms' ? 2^z - y - 1 : y`.",
+      "members": [
+        {
+          "name": "xyzTopDown",
+          "kind": "enum-value",
+          "signature": "xyzTopDown",
+          "doc": null
+        },
+        {
+          "name": "tmsBottomUp",
+          "kind": "enum-value",
+          "signature": "tmsBottomUp",
+          "doc": null
+        }
+      ]
+    },
+    {
+      "name": "TileSchemeKind",
+      "kind": "enum",
+      "signature": "enum TileSchemeKind",
+      "doc": null,
+      "members": []
+    },
+    {
+      "name": "compileFilter",
+      "kind": "function",
+      "signature": "FeaturePredicate compileFilter(Object? json)",
+      "doc": null,
+      "members": []
+    },
+    {
+      "name": "normalizeRingWinding",
+      "kind": "function",
+      "signature": "List<List<LatLng>> normalizeRingWinding(List<List<LatLng>> rings)",
+      "doc": "Reverse the rings whose winding matches the outer ring's.\n\nCanvas fills with the nonzero rule, so a hole wound like its outer ring\ndoes **not** punch through; reversing it restores the hole. The outer ring\nkeeps its orientation, and a single-ring polygon is returned unchanged.",
+      "members": []
+    },
+    {
+      "name": "parseGeoJsonFeatures",
+      "kind": "function",
+      "signature": "List<GeoJsonFeature> parseGeoJsonFeatures(Map<String, Object?> json)",
+      "doc": "Parse a GeoJSON `FeatureCollection` or a single `Feature`.",
+      "members": []
+    },
+    {
+      "name": "pointInMultiPolygon",
+      "kind": "function",
+      "signature": "bool pointInMultiPolygon(\nList<List<List<LatLng>>> polygons,\nLatLng point, {\nbool includeBoundary = true,\n})",
+      "doc": "Whether [point] lies inside any sub-polygon of [polygons] (MultiPolygon).\n\nThe sub-polygons are evaluated independently (union semantics), which\nmatches how the renderer draws them — one `addPolygon` per ring.",
+      "members": []
+    },
+    {
+      "name": "pointInPolygon",
+      "kind": "function",
+      "signature": "bool pointInPolygon(\nList<List<LatLng>> rings,\nLatLng point, {\nbool includeBoundary = true,\n})",
+      "doc": "Whether [point] lies inside the polygon [rings] (first ring = outer ring,\nthe rest = holes).\n\nThe interior is \"outer ring minus holes\" (RFC 7946). Boundary handling:\na point on the **outer** boundary counts as inside; a point on a **hole's**\nboundary counts as outside — the hole wins.",
+      "members": []
+    },
+    {
+      "name": "pointInRing",
+      "kind": "function",
+      "signature": "bool pointInRing(\nList<LatLng> ring,\nLatLng point, {\nbool includeBoundary = true,\n})",
+      "doc": "Whether [point] lies inside the closed ring [ring].\n\nUses the even-odd rule, so the ring's winding does not matter.\n[includeBoundary] decides whether a point exactly on an edge counts as\ninside (default: yes).\n\nReturns `false` for rings with fewer than three vertices.",
+      "members": []
+    },
+    {
+      "name": "ringSignedArea",
+      "kind": "function",
+      "signature": "double ringSignedArea(List<LatLng> ring)",
+      "doc": "Signed area of [ring], measured on **unwrapped** longitudes.\n\nPositive means counter-clockwise. Unwrapping matters: a ring near ±180°\nwould otherwise flip sign and silently change which ring is treated as the\nouter one.",
+      "members": []
+    },
+    {
+      "name": "splitRingAtSeam",
+      "kind": "function",
+      "signature": "List<List<LatLng>> splitRingAtSeam(List<LatLng> ring, double seamLng)",
+      "doc": "Split [ring] on the meridian [seamLng], returning one or two closed pieces.\n\nThe ring is unwrapped first, so a +179°/−179° edge is recognised as crossing\nthe seam. If the ring lies entirely on one side, `[ring]` is returned\nunchanged. Pieces with fewer than three vertices are dropped.\n\nThis mirrors how MapLibre splits GeoJSON at ±180° during tiling. The\nrenderer itself only needs [unwrapLongitudes] plus world copies; this helper\nkeeps that behaviour testable and lets callers clip explicitly.",
+      "members": []
+    },
+    {
+      "name": "unwrapLongitudes",
+      "kind": "function",
+      "signature": "List<double> unwrapLongitudes(List<double> lons)",
+      "doc": "Sequentially unwrap [lons] so every consecutive delta stays in (-180, 180].\n\n`out[0] == lons[0]`; `out[i] = out[i-1] + wrapLongitude(lons[i] - lons[i-1])`.\nA ring that \"jumps\" from +179° to −179° becomes +179° → +181° (a 2° step)\ninstead of a −358° step, so it can be projected continuously.",
+      "members": []
+    }
+  ]
+}

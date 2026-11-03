@@ -11,6 +11,7 @@ library;
 
 import 'dart:convert';
 import 'dart:math' show Point;
+import 'dart:ui' show ImageByteFormat;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -273,5 +274,61 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(diag!.readyCount, greaterThan(0));
     expect(await _opaquePixelsOf(tester), greaterThan(0));
+  });
+
+  group('background layer', () {
+    StyleSpec _bgStyle({Object? opacity}) =>
+        StyleSpec.parse(<String, Object?>{
+          'version': 8,
+          'sources': <String, Object?>{
+            's': <String, Object?>{'type': 'vector'}
+          },
+          'layers': <Object?>[
+            <String, Object?>{
+              'id': 'bg',
+              'type': 'background',
+              'paint': <String, Object?>{
+                'background-color': '#D7E3EC',
+                if (opacity != null) 'background-opacity': opacity,
+              },
+            },
+          ],
+        });
+
+    testWidgets('paints the full viewport opaquely', (tester) async {
+      await tester.pumpWidget(
+        _host(MvtVectorLayer(
+          source: _MemMvtSource(_sampleTile()),
+          style: _bgStyle(),
+        )),
+      );
+      await tester.pump();
+      // 800×600 全部不透明（background 与瓦片解码无关，首帧即画）。
+      expect(await _opaquePixelsOf(tester), 800 * 600);
+    });
+
+    testWidgets('background-opacity 0.5 yields half-alpha pixels',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(MvtVectorLayer(
+          source: _MemMvtSource(_sampleTile()),
+          style: _bgStyle(opacity: 0.5),
+        )),
+      );
+      await tester.pump();
+      final rb = tester.element(find.byType(RepaintBoundary)).renderObject!
+          as RenderRepaintBoundary;
+      await tester.runAsync(() async {
+        final image = await rb.toImage();
+        final data =
+            await image.toByteData(format: ImageByteFormat.rawRgba);
+        // 首像素：alpha = (255 * 0.5).round() = 128。rawRgba 读回的是
+        // 预乘字节：R/G/B ≈ 样式色 × (128/255)。
+        expect(data!.getUint8(0), (0xD7 * 128 / 255).round()); // 108
+        expect(data.getUint8(1), (0xE3 * 128 / 255).round()); // 114
+        expect(data.getUint8(2), (0xEC * 128 / 255).round()); // 118
+        expect(data.getUint8(3), 128);
+      });
+    });
   });
 }

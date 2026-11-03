@@ -43,12 +43,17 @@ class VectorDrawTiles {
 }
 
 /// Resolves [visible] ideals against the decoded cache.
+///
+/// [isKnownEmpty] marks tiles the source definitively answered do not exist
+/// (see [planTileResolution]); a known-empty ideal draws nothing instead of
+/// falling back to an ancestor placeholder.
 VectorDrawTiles resolveVectorDrawTiles({
   required List<TileKey> visible,
   required bool Function(TileKey key) isLoaded,
   required int sourceMinZoom,
   required int sourceMaxZoom,
   required TileSchemeKind scheme,
+  bool Function(TileKey key)? isKnownEmpty,
 }) {
   final placeholders = <TileKey>[];
   final ready = <TileKey>[];
@@ -63,6 +68,7 @@ VectorDrawTiles resolveVectorDrawTiles({
       sourceMaxZoom: sourceMaxZoom,
       scheme: scheme,
       isLoaded: isLoaded,
+      isKnownEmpty: isKnownEmpty,
     );
     switch (decision.kind) {
       case TileFallbackKind.exact:

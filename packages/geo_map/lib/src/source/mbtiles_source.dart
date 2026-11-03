@@ -4,6 +4,12 @@
 /// rollback-journal mode (a read-only WAL copy without its `-wal` sidecar cannot
 /// be opened), and self-heals corrupted cache copies (delete main + `-wal` +
 /// `-shm`, then re-copy on the next call).
+///
+/// The cached copy is **content-verified against the asset on every open**
+/// (size + chunked byte compare) — re-shipping an updated asset under the same
+/// filename replaces the stale cache automatically. This is what keeps the
+/// vector basemap's bundled MBTiles and the on-disk cache in sync when only
+/// the asset changes (e.g. adding a `land` layer to the same `world_borders.mbtiles`).
 library;
 
 import 'dart:io';
@@ -51,6 +57,14 @@ class MbtilesTileSource implements GlobeRasterSource {
   String get attribution => 'MBTiles: $id';
 
   /// Open (and lazily copy) an MBTiles asset.
+  ///
+  /// The cached copy in the documents dir is **content-verified against the
+  /// asset on every open**: file size first (cheap reject), then a chunked
+  /// byte compare. A re-shipped asset under the same filename therefore
+  /// replaces a stale cache automatically — no manual cache clearing, no id
+  /// versioning. Cost: one full asset read per open (fast for typical
+  /// basemaps; the journal-mode header bytes are excluded from the compare,
+  /// see [_matchesAsset]).
   static Future<MbtilesTileSource> open({
     required String id,
     required String assetPath,
@@ -61,15 +75,23 @@ class MbtilesTileSource implements GlobeRasterSource {
     final target = File(p.join(dir.path, p.basename(assetPath)));
 
     debugPrint('[geo_map:mbtiles] open: $assetPath');
-    if (!target.existsSync()) {
-      final bytes = await rootBundle.load(assetPath);
-      await target.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
-      if (target.lengthSync() != bytes.lengthInBytes) {
+    final asset = await rootBundle.load(assetPath);
+    final bytes =
+        Uint8List.sublistView(asset, asset.offsetInBytes, asset.lengthInBytes);
+
+    if (!_matchesAsset(target, bytes)) {
+      debugPrint('[geo_map:mbtiles] cache missing/stale — re-copying');
+      _deleteTrio(target);
+      await target.writeAsBytes(bytes, flush: true);
+      if (target.lengthSync() != bytes.length) {
         await target.delete();
         throw StateError('MBTiles copy incomplete: $assetPath');
       }
       _toRollbackJournal(target.path);
       debugPrint('[geo_map:mbtiles] copied ${target.lengthSync()} bytes');
+    } else {
+      debugPrint('[geo_map:mbtiles] cache matches asset '
+          '(${target.lengthSync()} bytes)');
     }
 
     if (!_hasTilesTable(target.path)) {
@@ -77,8 +99,7 @@ class MbtilesTileSource implements GlobeRasterSource {
       // delete the trio and re-copy once.
       debugPrint('[geo_map:mbtiles] cache copy corrupt — self-healing');
       _deleteTrio(target);
-      final bytes = await rootBundle.load(assetPath);
-      await target.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
+      await target.writeAsBytes(bytes, flush: true);
       _toRollbackJournal(target.path);
       if (!_hasTilesTable(target.path)) {
         throw StateError('MBTiles re-copy still has no tiles table: $assetPath');
@@ -94,6 +115,37 @@ class MbtilesTileSource implements GlobeRasterSource {
     debugPrint('[geo_map:mbtiles] ready z${meta.$1 ?? 0}-${meta.$2 ?? GeoTileDefaults.maxZoom}');
     return MbtilesTileSource._(
         id, db, meta.$1 ?? 0, meta.$2 ?? GeoTileDefaults.maxZoom);
+  }
+
+  /// Whether the cached copy is byte-identical to the asset.
+  ///
+  /// Journal-mode header bytes (SQLite header offsets 18/19) are excluded:
+  /// [_toRollbackJournal] legitimately rewrites them on the cached copy, and
+  /// comparing them would turn every open into a pointless re-copy. Size is
+  /// checked first (cheap reject); bytes are then compared in 1 MiB chunks
+  /// with early exit on the first difference.
+  static bool _matchesAsset(File target, Uint8List asset) {
+    if (!target.existsSync()) return false;
+    if (target.lengthSync() != asset.length) return false;
+    final raf = target.openSync(mode: FileMode.read);
+    try {
+      const chunkSize = 1 << 20;
+      final buf = Uint8List(chunkSize);
+      for (var offset = 0; offset < asset.length; offset += chunkSize) {
+        var want = chunkSize;
+        if (offset + want > asset.length) want = asset.length - offset;
+        final got = raf.readIntoSync(buf, 0, want);
+        if (got != want) return false;
+        for (var i = 0; i < want; i++) {
+          final pos = offset + i;
+          if (pos == 18 || pos == 19) continue; // journal-mode bytes
+          if (buf[i] != asset[pos]) return false;
+        }
+      }
+      return true;
+    } finally {
+      raf.closeSync();
+    }
   }
 
   static void _toRollbackJournal(String path) {
@@ -195,11 +247,31 @@ class MbtilesTileSource implements GlobeRasterSource {
       if (data is! Uint8List || data.isEmpty) {
         return const TileFetchResult.failed(TileFailureKind.empty);
       }
-      return TileFetchResult.ok(data);
+      // tippecanoe 默认 gzip 压缩 MVT 再写入 MBTiles（HTTP 路径由 HttpClient
+      // 自动解压，直读 sqlite 拿到的是原始 gzip 字节，不解压则全部解码失败）。
+      // 按魔数 1F 8B 判定透传解压；栅格 png/jpg 无此魔数，原样返回。
+      return TileFetchResult.ok(_maybeGunzip(data));
     } catch (e) {
       debugPrint('[geo_map:mbtiles] fetch error $z/$x/$y: $e');
       return const TileFetchResult.failed(TileFailureKind.network);
     }
+  }
+
+  /// 瓦片若是 gzip（魔数 `1F 8B`）则解压，否则原样返回。
+  ///
+  /// 覆盖两类场景：tippecanoe 默认 gzip 的 MVT（不解压则 MVT 解码必然失败），
+  /// 以及个别工具 gzip 的栅格包。解压错误按原字节返回，交由上层解码报错——
+  /// 坏瓦片的归因路径不变。
+  static Uint8List _maybeGunzip(Uint8List data) {
+    if (data.length >= 2 && data[0] == 0x1F && data[1] == 0x8B) {
+      try {
+        return Uint8List.fromList(GZipCodec().decode(data));
+      } catch (_) {
+        // 非法 gzip：原样交回，让 MVT/图像解码器给出一致错误路径。
+        return data;
+      }
+    }
+    return data;
   }
 
   @override

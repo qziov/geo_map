@@ -87,6 +87,14 @@ export 'src/source/mbtiles_source.dart'
 export 'src/vendor/flutter_map_camera/flutter_map_camera.dart'
     hide CrsWithStaticTransformation, Projection;
 export 'src/widget/geo_map.dart';
+// 实时帧率叠加层（调试 / 性能分析）。
+export 'src/widget/fps_overlay.dart';
 // Anchor-following popup: re-projects a LatLng on every camera change so a
 // business card can ride along with pan/zoom (MapLibre `Popup.setLngLat`).
 export 'src/widget/geo_anchored_popup.dart';
+// Popup control layer: bind a card to a feature source and let the controller
+// arbitrate which one opens on tap (MapLibre `map.on('click', layerId, handler)`
+// + a shared `Popup`).
+export 'src/widget/geo_popup_binding.dart';
+export 'src/widget/geo_popup_card.dart';
+export 'src/widget/geo_popup_controller.dart';

@@ -54,6 +54,58 @@
   - 复用时宿主只需：提供 `builder` 卡片、`keepOut`、点空白调 `hide()`、卡片关闭按钮调
     `hide()`；无需自己维护 `ValueNotifier<LatLng?>` 与 `if (anchor!=null) …` 样板。
 
+### Added — 弹窗绑定层（`map.on('click', layerId, handler)` 的等价物）
+
+把"哪个图层被点中、弹哪张卡、多个命中谁优先"从业务代码里收进 SDK：
+
+- 新增 `GeoPopupBinding`（`src/widget/geo_popup_binding.dart`）：**声明式**绑定
+  （`priority` / `cardSize` / `anchor` / `anchorOf` / `builder`）。通过
+  `GeoFeatureRegistry.setSource(..., popup: binding)` 挂在要素源上，绑定与要素同生命周期，
+  源重建/关闭时不会留下悬空绑定；读取用 `registry.popupOf(sourceId)`。
+- 新增 `PopupAnchor` 九宫格枚举（`center` / `top` / `bottom` / `left` / `right` / 四角），
+  对齐 MapLibre `PositionAnchor`。`layoutAnchoredPopup` 与 `GeoAnchoredPopup` /
+  `GeoMapPopup` 均新增可选 `anchorSide`（默认 `bottom`，**旧行为不变**），并抽出纯函数
+  `anchorOffsetFor(anchorSide, point, card, tail)` 便于单独断言。
+- 新增 `GeoPopupController`（`src/widget/geo_popup_controller.dart`，`ChangeNotifier`）：
+  `handleTap(tap, controller:, registry:, hits?, pointRadiusPx?)` 一条链路完成
+  查询 → 过滤出注册了弹窗的源 → 按 `priority` 仲裁 → `show/close`（closeOnClick 语义）。
+  另有 `registerPopup` / `unregisterPopup`（运行时挂载）与 `close()`。
+  **不持有注册表**（每次由宿主传入），因此不会读到旧快照，也不会与宿主的
+  Riverpod provider 形成循环依赖。`hits` 参数允许复用宿主已查过的结果，避免二次查询。
+- 新增 `GeoMapPopupHost`：渲染侧唯一挂载点，把 `activeBuilder` / `activeCardSize` /
+  `activeAnchor` 喂给底层 `GeoMapPopup`，业务层不必再手写 `GeoMapPopup(builder: ...)`。
+- `GeoQueryHit` 抽到叶子文件 `src/query/geo_query_hit.dart`（仍由 `geo_feature_registry.dart`
+  re-export），解除 `registry ↔ binding` 的循环导入。
+
+### Fixes — 弹窗 dispose 安全
+
+- `GeoPopupController` / `GeoMapPopupController` 现在 **dispose 后安全**：新增
+  `isDisposed`，`dispose()` 置位后 `handleTap` / `close` / `show` / `hide` / `toggle`
+  一律安静返回，`notifyListeners` 走内部 `_safeNotify()`。
+  起因是一个真实崩溃：hot reload 改到 provider 源码时，Riverpod 的
+  `ProviderElementBase.invalidateSelf()` 会**先 `runOnDispose()`（即 `notifier.dispose()`）
+  再在下一帧重建**，这段"僵尸期"内点地图仍会把事件送到旧实例，`notifyListeners()`
+  直接抛 `A GeoPopupController was used after being disposed` 打断整条手势链路。
+  同样覆盖业务侧 `ref.invalidate(xxxPopupControllerProvider)` 的场景。
+- 回归测试：`geo_popup_controller_test.dart` 新增 disposed-safety 组（2 例）。
+
+### Fixes — 球面面要素封口走向（整球被涂满）
+
+- **回归修复**：`db6d631` 把 limb 封口弧从"永远短弧"改成"按隐藏顶点的角度均值
+  在长短弧之间选"。隐藏顶点在正交投影下落在**圆盘内部**，其角度与 limb 方位无关，
+  一旦均值落到短弧区间之外就会选成长弧 —— 而"可见段 + 长弧"围出的正是
+  *整个圆盘减去这块区域*，表现为 3D 球面被某块 SIGMET 颜色涂满。
+  实测：10° 小矩形、相机 (30°, -12°)、z4 时填充覆盖 **99%** 圆盘（真值 <1%）。
+- 改为**恒走短弧**：简单环的可见部分永远不会超过半个 limb，长弧没有正确场景。
+  `clipRingToHorizon` 与 `GlobeVectorLayer._polygonPaths` 两处同步修正。
+- 顺带补上"无旋转"带来的另一个缺口：可见段跨数组首尾时（首、末顶点都可见），
+  原先被切成两个 run、中间被补一条 limb 弧。现在先合并成一段再封口 ——
+  实测多个机位的 run 数从 2 降到 1，填充与真值一致。
+- 新增 `core/test/projection/horizon_clip_cover_test.dart`：用"圆盘采样 + 球面
+  point-in-ring"做**独立真值**，断言填充覆盖率与真值偏差 < max(5%, 30%)，
+  并锁定"整球被填"的具体机位（覆盖率必须 < 10%）。原有 flicker 测试（连续性）
+  全部保留且通过。
+
 ### Tests
 
 - 新增 `geo_map_core/test/math/antimeridian_test.dart`、`geo_map/test/flat_infinite_pan_test.dart`
@@ -67,8 +119,13 @@
   闭区间、平局上层优先、过滤、排序契约、limit）——共 45 例
 - 新增 `geo_map/test/geo_feature_registry_test.dart`（17 例：点命中、**球面背面哨兵**、
   **平面跨缝命中**、面命中、过滤、要素 id/properties 回传）
+- 新增 `geo_map/test/geo_popup_anchor_test.dart`（九宫格九档未夹取偏移、`tail` 只作用于
+  四边、出屏/非有限/背半球哨兵判 `visible:false`、`keepOut` 夹取）
+- 新增 `geo_map/test/geo_popup_controller_test.dart`（命中开、无命中关=closeOnClick、
+  `priority` 仲裁、`anchorOf` 覆盖锚点 / 默认用点击点、未绑定弹窗的源不触发、
+  `registerPopup` 命令式绑定与 `unregisterPopup` 关闭当前卡片）
 - `geo_map_core` 398 → **460**；`geo_map` 27 → **41** 项（本轮另新增引擎测试 17 例，
-  需在可运行 `flutter test` 的环境执行）
+  需在可运行 `flutter test` 的环境执行；上述弹窗测试已实跑通过，见 0.2.1 弹窗绑定层）
 
 ## 0.2.0 (2026-10-27)
 

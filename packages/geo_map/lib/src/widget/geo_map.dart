@@ -15,6 +15,7 @@ import '../engine/tile_layer.dart';
 import '../globe/tile_source.dart';
 import '../gesture/globe_gesture_overlay.dart';
 import '../vendor/flutter_map_camera/flutter_map_camera.dart';
+import 'fps_overlay.dart';
 
 class GeoMapOptions {
   const GeoMapOptions({
@@ -24,6 +25,7 @@ class GeoMapOptions {
     this.maxZoom = 8,
     this.useGlobe = true,
     this.background = const Color(0xFF000000),
+    this.showFps = false,
   });
 
   final LatLng initialCenter;
@@ -36,6 +38,12 @@ class GeoMapOptions {
   final bool useGlobe;
 
   final Color background;
+
+  /// 是否在地图组件内显示实时帧率叠加层（调试 / 性能分析用）。
+  ///
+  /// 默认 false：叠加层不挂载，零开销。开启后由 [FpsOverlay] 用 Ticker 持续
+  /// 心跳测帧，关闭时（或被移除时）Ticker 停止，不再产生额外帧。
+  final bool showFps;
 }
 
 /// `GeoMap` — the host widget. Children stack on top of the raster layer.
@@ -157,6 +165,7 @@ class _GeoMapState extends State<GeoMap> {
                   controller: _controller,
                   onTap: widget.onTap,
                 ),
+                if (widget.options.showFps) const FpsOverlay(),
               ],
             ),
           ),

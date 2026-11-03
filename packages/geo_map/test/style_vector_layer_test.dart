@@ -310,4 +310,25 @@ void main() {
       expect(await _opaquePixelsOf(tester), greaterThan(0));
     });
   });
+
+  group('background layer', () {
+    testWidgets('background-only style paints fullscreen', (tester) async {
+      final style = StyleSpec.parse(<String, Object?>{
+        'version': 8,
+        'layers': <Object?>[
+          <String, Object?>{
+            'id': 'bg',
+            'type': 'background',
+            'paint': <String, Object?>{'background-color': '#D7E3EC'},
+          },
+        ],
+      });
+      await tester.pumpWidget(
+        _host(StyleVectorLayer(style: style, features: const [])),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(await _opaquePixelsOf(tester), 800 * 600);
+    });
+  });
 }

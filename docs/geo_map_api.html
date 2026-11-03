@@ -167,6 +167,7 @@
       <li><a href="#sec7">7. 样式系统</a></li>
       <li><a href="#sec8">8. 约束与踩坑</a></li>
       <li><a href="#sec9">9. 与 app_client 的落地对照</a></li>
+      <li><a href="#sec10">10. 浮层 / 弹窗（Popup）</a></li>
     </ul>
   </nav>
 
@@ -184,11 +185,12 @@
         <li><a href="#sec7">7. 样式系统</a></li>
         <li><a href="#sec8">8. 约束与踩坑</a></li>
         <li><a href="#sec9">9. 与 app_client 的落地对照</a></li>
+        <li><a href="#sec10">10. 浮层 / 弹窗（Popup）</a></li>
       </ul>
     </div>
 
 <h1>geo_map API 文档</h1>
-<p class="lead">风格参考 MapLibre GL JS 官方文档，面向 Dart / Flutter 开发者。 覆盖范围：包结构、快速开始、<code>GeoMapController</code>、栅格瓦片源、图层体系、<strong>要素查询（queryRenderedFeatures）</strong>、典型使用场景、样式系统（含 <strong>symbol 符号与标注</strong>全量属性）、约束与踩坑、与本项目（<code>app_client</code>）的落地对照。  对应版本 <code>0.2.0</code>（M1 style spec / M2 MVT / M3 符号与标注 均已落地）。</p>
+<p class="lead">风格参考 MapLibre GL JS 官方文档，面向 Dart / Flutter 开发者。 覆盖范围：包结构、快速开始、<code>GeoMapController</code>、栅格瓦片源、图层体系、<strong>要素查询（queryRenderedFeatures）</strong>、典型使用场景、样式系统（含 <strong>symbol 符号与标注</strong>全量属性）、约束与踩坑、与本项目（<code>app_client</code>）的落地对照。  对应版本 <code>0.2.1</code>（M1 style spec / M2 MVT / M3 符号与标注 / 要素查询 / <strong>弹窗控制层</strong> 均已落地）。</p>
 <h2 id="sec0">0. 这是什么</h2>
 <p><code>geo_map</code> 是一个自研的 Flutter 地图渲染包，由两层构成：</p>
 <ul>
@@ -728,6 +730,7 @@ StyleVectorLayer(style: style, features: feats, sprite: atlas);
 <tr><td>2D/3D 开关</td><td><code>lib/features/map/providers/map_mode_provider.dart</code></td><td><code>mapUseGlobeProvider</code>，默认 <code>false</code></td></tr>
 <tr><td>图层构造</td><td><code>lib/features/map/layers/layer_builder.dart</code></td><td><code>buildMapLayer</code> 穷举 <code>switch</code>（无 default，强制覆盖）</td></tr>
 <tr><td>真实图层范例</td><td><code>satellite_layer.dart</code> / <code>airport_symbol_layer.dart</code> / <code>restricted_area_layer.dart</code></td><td>卫星、机场符号、限制区</td></tr>
+<tr><td>弹窗绑定</td><td><code>providers/map_feature_registry_provider.dart</code>（<code>popup:</code> 绑定）+ <code>aero_weather_layout.dart</code>（<code>GeoMapPopupHost</code>）</td><td>面板/弹窗见 <a href="#103-绑定式弹窗推荐">10.3</a></td></tr>
 </tbody>
 </table>
 <p><code>MbtilesRegistryTileSource</code> 实现了 <code>GeoTileSource</code>，把多个 MBTiles 包按区域路由到统一源，是「自定义源」章节（<a href="#34-自定义源">3.4</a>）的参考实现。</p>
@@ -751,6 +754,119 @@ StyleVectorLayer(style: style, features: feats, sprite: atlas);
     );
   }
 }</code></pre>
+<h2 id="sec10">10. 浮层 / 弹窗（Popup）</h2>
+<p>对标 MapLibre 的 <code>Popup</code>：<strong>锚在一个经纬度上、随相机平移缩放跟着走</strong>的卡片。 本包提供三层能力，从"只要定位"到"点了哪层弹哪张卡"依次叠加。</p>
+<h3 id="101-为什么不能放进-geomapchildren">10.1 为什么不能放进 <code>GeoMap.children</code></h3>
+<p><code>children</code> 位于 <code>GeoMap</code> 内部的 opaque 手势层（<code>GlobeGestureOverlay</code>）之下，收不到指针。 所以<strong>交互 UI 必须放在 <code>GeoMap</code> 外层的 <code>Stack</code> 里</strong>，与地图平级、位于其后。 这也是本包所有弹窗 widget 唯一的硬约束。</p>
+<h3 id="102-三层结构状态-定位-绑定">10.2 三层结构：状态 / 定位 / 绑定</h3>
+<table>
+<thead><tr><th>组件</th><th>职责</th><th>对应 MapLibre</th></tr></thead>
+<tbody>
+<tr><td><code>GeoMapPopupController</code></td><td>只存<strong>锚点</strong>（<code>LatLng?</code>），<code>show/hide/toggle</code></td><td><code>Popup</code> 的 open/close 状态</td></tr>
+<tr><td><code>GeoAnchoredPopup</code> / <code>GeoMapPopup</code></td><td>每帧重投影锚点、夹进 <code>keepOut</code>、渲染任意 child</td><td><code>Popup.setLngLat()</code> + 自动 reposition</td></tr>
+<tr><td><code>GeoPopupController</code> + <code>GeoMapPopupHost</code></td><td>命中仲裁 + 按图层选卡片</td><td><code>map.on('click', layerId, handler)</code></td></tr>
+</tbody>
+</table>
+<p>纯定位层最小用法（自己管显隐、自己给内容）：</p>
+<pre><code>Stack(
+  children: [
+    GeoMap(controller: controller, onTap: ...),
+    GeoMapPopup(
+      controller: controller,
+      popup: popup,                 // GeoMapPopupController
+      cardSize: const Size(280, 240),   // 卡片最大尺寸，夹取用
+      anchorSide: PopupAnchor.bottom,   // 可选，默认 bottom（卡片在锚点上方）
+      keepOut: EdgeInsets.only(top: 54, left: 110, right: 85, bottom: 72),
+      builder: (context, anchor) =&gt; MyCard(onClose: popup.hide),
+    ),
+  ],
+);</code></pre>
+<p>布局是纯函数，可单独断言：</p>
+<pre><code>// 未夹取位置（逻辑像素）；tail 是卡片朝锚点那侧的尖角间距
+final p = anchorOffsetFor(PopupAnchor.bottom, const Offset(100, 100), Size(80, 40), 8);
+// p == Offset(60, 52)
+
+// 再夹进 keepOut；锚点出屏 / 非有限 / 球面背半球哨兵（±1e6）→ visible:false
+final layout = layoutAnchoredPopup(
+  anchor: p, viewport: controller.viewport, card: const Size(80, 40),
+  keepOut: const EdgeInsets.all(16),
+);
+if (layout.visible) { /* Positioned(left: layout.left, top: layout.top) */ }</code></pre>
+<p>投影分支已内置：平面走 <code>projectForVector</code>（折回最近的世界副本，跨日界线才准）， 球面走 <code>project</code>（背半球返回哨兵 → 布局判隐藏）。宿主不必自己判背半球。</p>
+<h3 id="103-绑定式弹窗推荐">10.3 绑定式弹窗（推荐）</h3>
+<p>先给要素源声明"我点了弹什么"，再挂一个宿主，点击只调一个方法。</p>
+<p><strong>① 绑定</strong>——挂在 <code>setSource</code> 上，与要素同生命周期：</p>
+<pre><code>registry.setSource(
+  &#x27;sigmet&#x27;,
+  features,
+  visible: true,
+  popup: GeoPopupBinding(
+    priority: 10,                        // 重叠命中时的仲裁权重，大者胜
+    cardSize: Size(280, 268),            // 夹取用的最大尺寸
+    anchor: PopupAnchor.bottom,          // 卡片贴锚点哪一侧
+    anchorOf: (hit) =&gt; null,             // 默认 null = 锚在点击点
+    builder: (context, hit) =&gt; SigmetPopupCard(
+      hits: [byId[hit.feature.id]!],     // hit 只带冠军那条
+      onClose: popup.close,
+    ),
+  ),
+);</code></pre>
+<table>
+<thead><tr><th>字段</th><th>默认</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>priority</code></td><td><code>0</code></td><td>多处命中时大者胜；平手取查询结果里靠前的</td></tr>
+<tr><td><code>cardSize</code></td><td>必填</td><td>卡片最大逻辑尺寸</td></tr>
+<tr><td><code>anchor</code></td><td><code>bottom</code></td><td>九宫格（见 10.4）</td></tr>
+<tr><td><code>anchorOf</code></td><td><code>null</code></td><td>覆盖锚点；默认用<strong>点击点</strong>（<code>setLngLat(e.lngLat)</code> 语义）</td></tr>
+<tr><td><code>builder</code></td><td>必填</td><td>卡片构造器，拿 <code>hit.feature.id</code> 回查业务对象</td></tr>
+</tbody>
+</table>
+<p>读取：<code>registry.popupOf(sourceId)</code>。运行时挂载/卸载用 <code>popup.registerPopup(id, binding)</code> / <code>popup.unregisterPopup(id)</code>。</p>
+<p><strong>② 宿主</strong>——全局只挂一个：</p>
+<pre><code>GeoMapPopupHost(
+  controller: mapController,
+  popup: ref.watch(geoPopupControllerProvider),
+  keepOut: EdgeInsets.only(top: 54, left: 110, right: 85, bottom: 72),
+),</code></pre>
+<p><strong>③ 点击</strong>——命中、仲裁、开关全在控制层：</p>
+<pre><code>popup.handleTap(
+  tap,
+  controller: mapController,
+  registry: registry,
+  hits: hits,        // 可选：宿主已查过就传进来，避免二次查询
+  pointRadiusPx: GeoEngineTuning.featurePickRadiusPx,
+);</code></pre>
+<p><code>handleTap</code> 内部：<code>queryFeatures</code> → 过滤出注册了 binding 的源 → 按 <code>priority</code> 选冠军 → <code>geoPopup.show(binding.anchorOf?.call(hit) ?? tap)</code> → 没赢家就 <code>close()</code>（closeOnClick）。</p>
+<p>控制层<strong>不持有</strong>注册表（每次传 <code>registry</code>），所以不会读到旧快照，也不会与 Riverpod 的 <code>mapFeatureRegistryProvider</code> 形成循环依赖。渲染侧读 <code>activeBuilder</code> / <code>activeCardSize</code> / <code>activeAnchor</code>，由宿主喂给 <code>GeoMapPopup</code>。</p>
+<h3 id="104-九宫格锚点">10.4 九宫格锚点</h3>
+<p><code>PopupAnchor</code> 九档（对齐 MapLibre <code>PositionAnchor</code>）：</p>
+<table>
+<thead><tr><th>值</th><th>卡片位置</th></tr></thead>
+<tbody>
+<tr><td><code>bottom</code>（默认）</td><td>卡片在锚点<strong>上方</strong>，底边中点对齐</td></tr>
+<tr><td><code>top</code></td><td>卡片在锚点<strong>下方</strong>，顶边中点对齐</td></tr>
+<tr><td><code>left</code> / <code>right</code></td><td>卡片在锚点右/左侧，竖边中点对齐</td></tr>
+<tr><td><code>center</code></td><td>中心对齐</td></tr>
+<tr><td><code>topLeft</code> / <code>topRight</code> / <code>bottomLeft</code> / <code>bottomRight</code></td><td>四角对齐</td></tr>
+</tbody>
+</table>
+<p>与 symbol 的锚点（<a href="#73-锚点九宫格">7.3</a>）语义一致，但<strong>卡片的九档是"哪个边贴住锚点"</strong>， 不含 <code>baseline</code> 之类的文字排版锚点。</p>
+<h3 id="105-约束与踩坑">10.5 约束与踩坑</h3>
+<ol>
+<li><strong>必须在 <code>GeoMap</code> 外层 Stack</strong>（见 10.1），进 <code>children</code> 点不到。</li>
+<li><strong>宿主只挂一个</strong>：两个 <code>GeoMapPopupHost</code> 会画两份卡片（共用一个 popup 状态）。</li>
+<li><strong><code>cardSize</code> 写卡片真实最大尺寸</strong>：写小了会被夹进 <code>keepOut</code> 后越界。</li>
+<li><strong><code>keepOut</code> 要覆盖所有固定 UI</strong>：顶栏/侧栏/底栏/播放条都算，否则卡片被压在下面。</li>
+<li><strong><code>ChangeNotifierProvider</code> 会自动 dispose</strong>：不要再 <code>ref.onDispose(c.dispose)</code>，</li>
+</ol>
+<p>否则容器销毁时 double dispose，debug 抛 <code>used after being disposed</code>。</p>
+<ol>
+<li><strong><code>builder</code> 只拿冠军 hit</strong>：要"一张卡列出全部重叠"就自己用同一锚点再查一次</li>
+</ol>
+<p>（点击点即 <code>popup.geoPopup.anchor</code>）。</p>
+<ol>
+<li><strong><code>show</code> 幂等</strong>：锚点相等不重复 <code>notifyListeners()</code>。</li>
+</ol>
 <p><em>文档基于 <code>geo_map</code> / <code>geo_map_core</code> 源码整理，API 以实际包导出为准。</em></p>
 <p><em>同名 HTML 版由 <code>docs/build_api_html.py</code> 从本文件生成 —— 修改本文件后，执行 <code>python docs/build_api_html.py</code> 重新生成即可（样式在 <code>docs/api_style.css</code>）。</em></p>
   </main>

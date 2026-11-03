@@ -169,6 +169,44 @@ void main() {
     expect(spec.layers[0].isSupported, isFalse);
   });
 
+  test('background layer parses, is supported, and needs no source', () {
+    final spec = StyleSpec.parse({
+      'version': 8,
+      'layers': [
+        {
+          'id': 'bg',
+          'type': 'background',
+          'paint': {'background-color': '#D7E3EC'},
+        },
+      ],
+    });
+    final layer = spec.layers[0];
+    expect(layer.isSupported, isTrue);
+    expect(layer.source, isNull);
+    expect(layer.sourceLayer, isNull);
+    final ctx = ExpressionContext(zoom: 4);
+    final c = layer.color('background-color', ctx)!;
+    expect(c.r, 0xD7);
+    expect(c.g, 0xE3);
+    expect(c.b, 0xEC);
+    // 未写 opacity → 命中 defs 默认值 1。
+    expect(layer.number('background-opacity', ctx), 1);
+  });
+
+  test('background visibility none hides it', () {
+    final spec = StyleSpec.parse({
+      'version': 8,
+      'layers': [
+        {
+          'id': 'bg',
+          'type': 'background',
+          'layout': {'visibility': 'none'},
+        },
+      ],
+    });
+    expect(spec.layers[0].isVisibleAt(4), isFalse);
+  });
+
   group('fill outline', () {
     StyleLayer fill(Map<String, Object?> paint) => StyleSpec.parse({
           'version': 8,
