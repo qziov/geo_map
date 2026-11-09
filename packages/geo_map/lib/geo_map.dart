@@ -84,6 +84,8 @@ export 'src/source/debug_tiles_source.dart';
 // so importing this barrel never drags `dart:io` into a browser build.
 export 'src/source/mbtiles_source.dart'
     if (dart.library.js_interop) 'src/source/mbtiles_source_stub.dart';
+export 'src/source/mbtiles_store.dart'
+    if (dart.library.js_interop) 'src/source/mbtiles_store_stub.dart';
 export 'src/vendor/flutter_map_camera/flutter_map_camera.dart'
     hide CrsWithStaticTransformation, Projection;
 export 'src/widget/geo_map.dart';
