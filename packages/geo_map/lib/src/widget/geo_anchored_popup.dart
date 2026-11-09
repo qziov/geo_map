@@ -22,6 +22,9 @@ import '../vendor/flutter_map_camera/projection_delegate.dart'
     show MapProjectionDelegate;
 import 'geo_popup_binding.dart';
 
+/// 卡片子树的稳定 key：显隐切换时让 Element / RenderObject 保持同一身份。
+const _kPopupCardKey = ValueKey<String>('geo_popup_card');
+
 /// 纯布局结果（`left/top` 是逻辑像素）。
 class AnchoredPopupLayout {
   const AnchoredPopupLayout({
@@ -130,7 +133,13 @@ class GeoAnchoredPopup extends StatelessWidget {
   });
 
   final GeoMapController controller;
-  final LatLng anchor;
+
+  /// 锚点；`null` 表示强制隐藏。
+  ///
+  /// 隐藏时仍返回同一个 `Positioned` + `Offstage` 结构，只切 `offstage`，
+  /// 以免 Stack 子节点在两种 RenderObject 之间翻转（见 [build] 注释）。
+  final LatLng? anchor;
+
   final Widget child;
   final EdgeInsets keepOut;
 
@@ -140,13 +149,13 @@ class GeoAnchoredPopup extends StatelessWidget {
   /// 卡片贴锚点的哪一侧（九宫格）。默认 [PopupAnchor.bottom]（卡片在锚点上方）。
   final PopupAnchor anchorSide;
 
-  Offset _project() {
+  Offset _project(LatLng a) {
     final MapProjectionDelegate d = controller.delegate;
     // 平面用 projectForVector：折回离相机最近的世界副本（跨日界线才准）；
     // 球面用 project：被遮挡返回哨兵，交给布局判 hidden。
     return d is FlatProjectionDelegate
-        ? d.projectForVector(anchor)
-        : d.project(anchor);
+        ? d.projectForVector(a)
+        : d.project(a);
   }
 
   @override
@@ -154,29 +163,45 @@ class GeoAnchoredPopup extends StatelessWidget {
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
-        if (controller.viewport.isEmpty) return const SizedBox.shrink();
-        if (!controller.delegate.isVisible(anchor)) {
-          return const SizedBox.shrink();
-        }
-        final layout = layoutAnchoredPopup(
-          anchor: _project(),
-          viewport: controller.viewport,
-          card: cardSize,
-          keepOut: keepOut,
-          anchorSide: anchorSide,
-        );
-        if (!layout.visible) return const SizedBox.shrink();
+        final a = anchor;
+        final layout = (a == null ||
+                controller.viewport.isEmpty ||
+                !controller.delegate.isVisible(a))
+            ? AnchoredPopupLayout.hidden
+            : layoutAnchoredPopup(
+                anchor: _project(a),
+                viewport: controller.viewport,
+                card: cardSize,
+                keepOut: keepOut,
+                anchorSide: anchorSide,
+              );
+
+        // 关键：**恒定**返回 Positioned，只切 Offstage。
+        //
+        // 旧实现在「隐藏」时返回 SizedBox.shrink()、「显示」时返回 Positioned，
+        // 让 Stack 的同一个子节点在两种 RenderObject 之间反复 attach/detach；
+        // Flutter 3.47 的语义树会在这种翻转后残留 `_SemanticsParentData`
+        // （debug 下每帧报 `!semantics.parentDataDirty`）。
+        // Offstage 始终挂载子树：offstage 时 hitTest 返回 false、不 paint，
+        // 且 `visitChildrenForSemantics` 直接跳过，语义上等价于隐藏。
         return Positioned(
           left: layout.left,
           top: layout.top,
-          child: Material(
-            type: MaterialType.transparency,
-            // 浮层作为独立覆盖层：吞掉内部点击，避免漏给下面的地图
-            // （对齐 MapLibre Popup 的 DOM 事件隔离）。内层按钮更深，仍优先。
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {},
-              child: child,
+          child: Offstage(
+            key: const ValueKey('geo_anchored_popup'),
+            offstage: !layout.visible,
+            child: Material(
+              type: MaterialType.transparency,
+              // 浮层作为独立覆盖层：吞掉内部点击，避免漏给下面的地图
+              // （对齐 MapLibre Popup 的 DOM 事件隔离）。内层按钮更深，仍优先。
+              // excludeFromSemantics：该层只负责拦截、没有可读内容；保留命中
+              // 行为，但不往语义树里塞 RenderSemanticsGestureHandler。
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                excludeFromSemantics: true,
+                onTap: () {},
+                child: KeyedSubtree(key: _kPopupCardKey, child: child),
+              ),
             ),
           ),
         );
@@ -239,7 +264,7 @@ class GeoMapPopupController extends ChangeNotifier {
 /// 自监听 [popup]：调用 `popup.show/hide` 即自动重绘，宿主无需在父级 `watch`。
 /// 业务内容通过 [builder]（入参含锚点）注入——这就是留给宿主的"接口"：在此
 /// 返回自己的卡片（含关闭按钮，关闭按钮调用 [GeoMapPopupController.hide]）。
-class GeoMapPopup extends StatelessWidget {
+class GeoMapPopup extends StatefulWidget {
   const GeoMapPopup({
     super.key,
     required this.controller,
@@ -269,19 +294,33 @@ class GeoMapPopup extends StatelessWidget {
   final PopupAnchor anchorSide;
 
   @override
+  State<GeoMapPopup> createState() => _GeoMapPopupState();
+}
+
+class _GeoMapPopupState extends State<GeoMapPopup> {
+  /// 最后一次构建出的卡片。
+  ///
+  /// 关闭（`popup.anchor == null`）时刻意保留：锚点传 null 让
+  /// [GeoAnchoredPopup] 切到 offstage，但 child 仍是同一棵子树，
+  /// Stack 子节点的 RenderObject 不会被 attach/detach。
+  Widget? _card;
+
+  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: popup,
+      listenable: widget.popup,
       builder: (context, _) {
-        final anchor = popup.anchor;
-        if (anchor == null) return const SizedBox.shrink();
+        final a = widget.popup.anchor;
+        // 仅赋值、不 setState：这里本来就在 build 内。
+        if (a != null) _card = widget.builder(context, a);
         return GeoAnchoredPopup(
-          controller: controller,
-          anchor: anchor,
-          keepOut: keepOut,
-          cardSize: cardSize,
-          anchorSide: anchorSide,
-          child: builder(context, anchor),
+          key: const ValueKey('geo_map_popup_anchored'),
+          controller: widget.controller,
+          anchor: a,
+          keepOut: widget.keepOut,
+          cardSize: widget.cardSize,
+          anchorSide: widget.anchorSide,
+          child: _card ?? const SizedBox.shrink(),
         );
       },
     );

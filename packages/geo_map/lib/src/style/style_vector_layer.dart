@@ -12,6 +12,7 @@
 /// when the style has a single source (or when the layers carry no `source`).
 library;
 
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -244,13 +245,28 @@ class _StyleVectorPainter extends CustomPainter {
           final w = layer.number('line-width', ctx) ?? 1;
           final o = (layer.number('line-opacity', ctx) ?? 1) * opacity;
           if (c == null || o <= 0 || w <= 0) continue;
+
+          // `line-dasharray` 用 MapLibre 语义：数值是 line-width 的倍数，
+          // 与 MvtVectorLayer._dashPattern / 矢量底图样式保持一致。
+          // ctx 是 per-feature 的，因此 ['get', 'dasharray'] 这类数据驱动
+          // 写法同样生效。路径只切一次，避免 _drawWithCopies 在多个 world
+          // copy 上重复 computeMetrics()。
+          final dash = _dashPattern(layer, ctx);
+          final ui.Path paintPath = dash == null
+              ? paths.stroke
+              : _dashedStroke(paths.stroke, [for (final v in dash) v * w]);
+          // 圆头会给每个短 dash 两端各外扩半个线宽，几像素级的虚线会粘连
+          // 成近实线；虚线统一用 butt（与 line-cap 默认值一致），实线保持
+          // 原样以免改变既有图层的观感。
+          final cap = dash == null ? StrokeCap.round : StrokeCap.butt;
+
           void draw() {
             canvas.drawPath(
-              paths.stroke,
+              paintPath,
               Paint()
                 ..style = PaintingStyle.stroke
                 ..strokeWidth = w
-                ..strokeCap = StrokeCap.round
+                ..strokeCap = cap
                 ..strokeJoin = StrokeJoin.round
                 ..color = _color(c, o),
             );
@@ -277,6 +293,50 @@ class _StyleVectorPainter extends CustomPainter {
 
   static ui.Color _color(StyleColor c, double opacity) =>
       ui.Color.fromRGBO(c.r, c.g, c.b, (c.a / 255.0) * opacity);
+
+  /// 解析 `line-dasharray`（line-width 倍数），与 MvtVectorLayer 同规则。
+  /// 返回 null 表示画实线：属性缺失或值非法（长度 < 2、负数、非数字、
+  /// 总和为 0）。奇数长度合法，末位与首位都是实线并相接。
+  static List<double>? _dashPattern(StyleLayer layer, ExpressionContext ctx) {
+    final raw = layer.valueOf('line-dasharray', ctx);
+    if (raw is! List || raw.length < 2) return null;
+    final out = <double>[];
+    var sum = 0.0;
+    for (final value in raw) {
+      if (value is! num || value < 0) return null;
+      out.add(value.toDouble());
+      sum += value;
+    }
+    return sum <= 0 ? null : out;
+  }
+
+  /// 把 [source] 按屏幕像素 [patternPx] 切成只含实线段的路径。
+  ///
+  /// 每条 contour 都从 pattern 起点重新起拍（与 GlobeVectorLayer 的
+  /// `_drawDashed` 一致）；flat 模式下多个 world copy 复用同一个预计算
+  /// 结果，接缝处不续拍是当前的已知限制。
+  static ui.Path _dashedStroke(ui.Path source, List<double> patternPx) {
+    final out = ui.Path();
+    for (final metric in source.computeMetrics()) {
+      var distance = 0.0;
+      var index = 0;
+      while (distance < metric.length) {
+        final len = patternPx[index % patternPx.length];
+        if (index.isEven && len > 0) {
+          out.addPath(
+            metric.extractPath(
+              distance,
+              math.min(distance + len, metric.length),
+            ),
+            ui.Offset.zero,
+          );
+        }
+        distance += len;
+        index++;
+      }
+    }
+    return out;
+  }
 
   /// Paints visible `background` layers in style order, clipped to the globe
   /// disc when a clip is active (see _MvtPainter._paintBackgrounds). Defaults
@@ -483,6 +543,10 @@ class _StyleVectorPainter extends CustomPainter {
       oldDelegate.style != style ||
       oldDelegate.camera != camera ||
       oldDelegate.features != features ||
+      // 用 ofSources 时要素走 [sources]，[features] 恒为空；漏比 [sources]
+      // 会导致图标位置更新（例如选中台风点移动）不触发重绘，看起来像"延迟"。
+      oldDelegate.sources != sources ||
+      oldDelegate.sprite != sprite ||
       oldDelegate.opacity != opacity;
 }
 

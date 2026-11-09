@@ -50,6 +50,8 @@ class GeoPopupCard extends StatelessWidget {
     return GestureDetector(
       // 卡片内空白点击不落到地图；内层按钮（更深）仍优先响应。
       behavior: HitTestBehavior.opaque,
+      // 这层只负责吞点击、没有可读内容：卡片内 Text/按钮仍各自贡献语义。
+      excludeFromSemantics: true,
       onTap: () {},
       child: Container(
         width: width,

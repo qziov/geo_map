@@ -176,6 +176,8 @@ class _GlobeGestureOverlayState extends State<GlobeGestureOverlay> {
       onPointerSignal: _onPointerSignal,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        // 纯指针拦截层，没有可读内容：保留手势，但不进语义树。
+        excludeFromSemantics: true,
         onScaleStart: (details) {
           _fling?.cancel();
           _lastScale = 1;

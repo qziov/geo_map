@@ -158,6 +158,105 @@ Future<bool> _hasOpaqueInColumns(
   return found;
 }
 
+/// A single `line` layer over an otherwise empty (transparent) canvas, so a
+/// horizontal stroke can be inspected row by row.
+StyleSpec _lineStyle({Object? dasharray, double width = 2}) =>
+    StyleSpec.parse(<String, Object?>{
+      'version': 8,
+      'sources': <String, Object?>{'s': <String, Object?>{'type': 'geojson'}},
+      'layers': <Object?>[
+        <String, Object?>{
+          'id': 'line',
+          'type': 'line',
+          'source': 's',
+          'paint': <String, Object?>{
+            'line-color': '#000000',
+            'line-width': width,
+            if (dasharray != null) 'line-dasharray': dasharray,
+          },
+        },
+      ],
+    });
+
+/// A constant-latitude line: ~650 px wide at zoom 4.2, entirely inside one
+/// world copy so the multi-copy phase behaviour cannot skew the segment count.
+List<GeoJsonFeature> _horizontalLine({
+  Map<String, Object?> props = const <String, Object?>{},
+}) =>
+    <GeoJsonFeature>[
+      GeoJsonFeature(
+        properties: props,
+        geometry: LineStringGeometry(<LatLng>[
+          const LatLng(35, 80),
+          const LatLng(35, 130),
+        ]),
+      ),
+    ];
+
+Future<ui.Image> _paintLine(
+  WidgetTester tester, {
+  Object? dasharray,
+  double width = 2,
+  Map<String, Object?> props = const <String, Object?>{},
+  MapProjectionDelegate? delegate,
+}) async {
+  await tester.pumpWidget(
+    _host(
+      StyleVectorLayer(
+        style: _lineStyle(dasharray: dasharray, width: width),
+        features: _horizontalLine(props: props),
+      ),
+      delegate: delegate,
+    ),
+  );
+  await tester.pumpAndSettle();
+  return _renderImage(tester);
+}
+
+Future<int> _opaqueOfImage(WidgetTester tester, ui.Image image) async {
+  var opaque = 0;
+  await tester.runAsync(() async {
+    opaque = await countOpaquePixels(image);
+  });
+  return opaque;
+}
+
+/// Counts `transparent -> painted` transitions on the densest row: a solid
+/// stroke has 1 run, a dashed stroke has many.
+Future<int> _rowRuns(WidgetTester tester, ui.Image image) async {
+  var mask = const <bool>[];
+  await tester.runAsync(() async {
+    final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (data == null) return;
+    final w = image.width;
+    var bestRow = -1;
+    var bestCount = -1;
+    for (var y = 0; y < image.height; y++) {
+      var count = 0;
+      final row = y * w;
+      for (var x = 0; x < w; x++) {
+        if (data.getUint8((row + x) * 4 + 3) > 0) count++;
+      }
+      if (count > bestCount) {
+        bestCount = count;
+        bestRow = y;
+      }
+    }
+    if (bestRow < 0) return;
+    final row = bestRow * w;
+    mask = <bool>[
+      for (var x = 0; x < w; x++) data.getUint8((row + x) * 4 + 3) > 0,
+    ];
+  });
+  var runs = 0;
+  var previous = false;
+  for (final on in mask) {
+    if (on && !previous) runs++;
+    previous = on;
+  }
+  return runs;
+}
+
 void main() {
   group('StyleVectorLayer (2D)', () {
     testWidgets('parses style, projects and paints without throwing',
@@ -329,6 +428,100 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(await _opaquePixelsOf(tester), 800 * 600);
+    });
+  });
+
+  group('StyleVectorLayer line-dasharray', () {
+    testWidgets('a constant [3, 3] really splits the stroke', (tester) async {
+      final solid = await _paintLine(tester);
+      final solidPixels = await _opaqueOfImage(tester, solid);
+      final solidRuns = await _rowRuns(tester, solid);
+
+      final dashed = await _paintLine(tester, dasharray: <Object?>[3, 3]);
+      final dashPixels = await _opaqueOfImage(tester, dashed);
+      final dashRuns = await _rowRuns(tester, dashed);
+
+      expect(tester.takeException(), isNull);
+      expect(solidRuns, 1);
+      expect(dashRuns, greaterThan(1));
+      expect(dashPixels, greaterThan(0));
+      expect(dashPixels, lessThan((solidPixels * 0.85).round()));
+    });
+
+    testWidgets('data-driven dasharray through a get expression',
+        (tester) async {
+      final dashStyle = _lineStyle(dasharray: <Object?>['get', 'dasharray']);
+
+      await tester.pumpWidget(_host(StyleVectorLayer(
+        style: dashStyle,
+        features: _horizontalLine(props: const <String, Object?>{
+          'dasharray': <Object?>[4, 4],
+        }),
+      )));
+      await tester.pumpAndSettle();
+      final dashed = await _renderImage(tester);
+      expect(await _rowRuns(tester, dashed), greaterThan(1));
+
+      // Missing property -> valueOf returns null -> solid stroke.
+      await tester.pumpWidget(_host(StyleVectorLayer(
+        style: dashStyle,
+        features: _horizontalLine(),
+      )));
+      await tester.pumpAndSettle();
+      final solid = await _renderImage(tester);
+      expect(await _rowRuns(tester, solid), 1);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('invalid patterns fall back to a solid stroke', (tester) async {
+      for (final pattern in <Object?>[
+        <Object?>[0, 0], // zero sum
+        <Object?>[3], // too short
+        <Object?>[3, -1], // negative
+        <Object?>[3, 'x'], // non-numeric
+      ]) {
+        final image = await _paintLine(tester, dasharray: pattern);
+        expect(await _rowRuns(tester, image), 1, reason: 'pattern $pattern');
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('pattern units are line-width multiples', (tester) async {
+      final narrow = await _paintLine(
+        tester,
+        dasharray: <Object?>[3, 3],
+        width: 1,
+      );
+      final wide = await _paintLine(
+        tester,
+        dasharray: <Object?>[3, 3],
+        width: 3,
+      );
+      final narrowRuns = await _rowRuns(tester, narrow);
+      final wideRuns = await _rowRuns(tester, wide);
+      expect(narrowRuns, greaterThan(1));
+      expect(wideRuns, greaterThan(1));
+      // A screen-pixel implementation would produce the same count.
+      expect(wideRuns, lessThan(narrowRuns));
+    });
+
+    testWidgets('dashes also render on the 3D globe', (tester) async {
+      final solid = await _paintLine(
+        tester,
+        delegate: GlobeProjectionDelegate(),
+      );
+      final solidPixels = await _opaqueOfImage(tester, solid);
+      final dashed = await _paintLine(
+        tester,
+        dasharray: <Object?>[3, 3],
+        delegate: GlobeProjectionDelegate(),
+      );
+      final dashPixels = await _opaqueOfImage(tester, dashed);
+
+      expect(tester.takeException(), isNull);
+      expect(solidPixels, greaterThan(0));
+      expect(dashPixels, greaterThan(0));
+      expect(dashPixels, lessThan((solidPixels * 0.95).round()));
     });
   });
 }

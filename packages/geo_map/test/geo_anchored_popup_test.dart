@@ -140,8 +140,17 @@ void main() {
         ),
       ));
 
-      expect(find.byType(Positioned), findsNothing);
-      // The widget itself still mounts (no throw), just renders an empty box.
+      // 结构恒定：始终有一个 Positioned，只把 Offstage 置为 true。
+      expect(find.byType(Positioned), findsOneWidget);
+      expect(
+        tester
+            .widget<Offstage>(find.byKey(
+              const ValueKey('geo_anchored_popup'),
+              skipOffstage: false,
+            ))
+            .offstage,
+        isTrue,
+      );
       expect(find.byType(GeoAnchoredPopup), findsOneWidget);
     });
   });
@@ -222,7 +231,82 @@ void main() {
 
     testWidgets('renders nothing when closed', (tester) async {
       await tester.pumpWidget(buildApp()); // popup starts hidden
-      expect(find.byType(Positioned), findsNothing);
+      expect(find.byType(Positioned), findsOneWidget);
+      expect(
+        tester
+            .widget<Offstage>(find.byKey(
+              const ValueKey('geo_anchored_popup'),
+              skipOffstage: false,
+            ))
+            .offstage,
+        isTrue,
+      );
+    });
+
+    testWidgets('显隐切换不翻转卡片的 RenderObject', (tester) async {
+      popup.show(const LatLng(0, 0));
+      await tester.pumpWidget(buildApp());
+      await tester.pump();
+
+      final r1 = tester.renderObject(
+        find.byKey(const ValueKey('geo_popup_card'), skipOffstage: false),
+      );
+
+      popup.hide();
+      await tester.pump();
+      final r2 = tester.renderObject(
+        find.byKey(const ValueKey('geo_popup_card'), skipOffstage: false),
+      );
+
+      popup.show(const LatLng(1, 1));
+      await tester.pump();
+      final r3 = tester.renderObject(
+        find.byKey(const ValueKey('geo_popup_card'), skipOffstage: false),
+      );
+
+      expect(identical(r1, r2), isTrue);
+      expect(identical(r2, r3), isTrue);
+      expect(r1.runtimeType, r3.runtimeType);
+    });
+
+    testWidgets('弹窗拦截层不参与语义树', (tester) async {
+      popup.show(const LatLng(0, 0));
+      await tester.pumpWidget(buildApp());
+      await tester.pump();
+
+      final detector = tester.widget<GestureDetector>(
+        find
+            .ancestor(
+              of: find.byKey(
+                const ValueKey('geo_popup_card'),
+                skipOffstage: false,
+              ),
+              matching: find.byType(GestureDetector),
+            )
+            .first,
+      );
+      expect(detector.excludeFromSemantics, isTrue);
+    });
+
+    testWidgets('语义开启后反复显隐不抛异常（smoke）', (tester) async {
+      final handle = tester.ensureSemantics();
+
+      popup.show(const LatLng(0, 0));
+      await tester.pumpWidget(buildApp());
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      popup.hide();
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      popup.show(const LatLng(0, 0));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      // 必须在测试体结束前释放：框架在 _endOfTestVerifications 里校验，
+      // addTearDown 的执行时机晚于该检查。
+      handle.dispose();
     });
   });
 }
