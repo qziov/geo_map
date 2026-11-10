@@ -107,6 +107,15 @@ class GeoPopupController extends ChangeNotifier {
   /// The open card's anchor side (nine-grid).
   PopupAnchor get activeAnchor => _active?.binding.anchor ?? PopupAnchor.bottom;
 
+  /// The hit that opened the current popup, or `null` when nothing is open.
+  ///
+  /// Hosts use it for business reactions tied to the winning hit (e.g. "the
+  /// selected typhoon track point must follow the tapped one").
+  GeoQueryHit? get activeHit => _active?.hit;
+
+  /// The source id of the current popup, or `null` when nothing is open.
+  String? get activeSourceId => _active?.sourceId;
+
   /// The single entry point for a map tap.
   ///
   /// Queries [registry], filters to sources that registered a popup, and opens

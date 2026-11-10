@@ -16,8 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../camera/geo_map_controller.dart';
-import '../vendor/flutter_map_camera/flat_projection_delegate.dart'
-    show FlatProjectionDelegate;
+import '../camera/projection_mode.dart' show projectMapPoint;
 import '../vendor/flutter_map_camera/projection_delegate.dart'
     show MapProjectionDelegate;
 import 'geo_popup_binding.dart';
@@ -153,9 +152,8 @@ class GeoAnchoredPopup extends StatelessWidget {
     final MapProjectionDelegate d = controller.delegate;
     // 平面用 projectForVector：折回离相机最近的世界副本（跨日界线才准）；
     // 球面用 project：被遮挡返回哨兵，交给布局判 hidden。
-    return d is FlatProjectionDelegate
-        ? d.projectForVector(a)
-        : d.project(a);
+    // T5d: 分支收口到 projectMapPoint，语义完全不变。
+    return projectMapPoint(d, a);
   }
 
   @override

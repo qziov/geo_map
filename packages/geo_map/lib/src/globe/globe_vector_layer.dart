@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:geo_map_core/geo_map_core.dart';
 import '../vendor/flutter_map_camera/flutter_map_camera.dart';
 import 'package:latlong2/latlong.dart';
+import '../camera/projection_mode.dart' show isFlatProjection;
 
 /// A polyline on the sphere, drawn in screen space.
 class GlobePolyline {
@@ -164,7 +165,7 @@ class _VectorPainter extends CustomPainter {
     if (size.isEmpty) return;
 
     // ★ 投影多态：flat 走 delegate 仿射（antimeridian 最近副本），globe 走正交。
-    final flat = camera.projectionDelegate is FlatProjectionDelegate;
+    final flat = isFlatProjection(camera.projectionDelegate);
     final lat0 = camera.center.latitude * math.pi / 180;
     final lng0 = camera.center.longitude * math.pi / 180;
     final radius = flat

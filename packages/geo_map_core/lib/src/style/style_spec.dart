@@ -85,7 +85,11 @@ class StyleLayer {
 
   /// Whether the M1 renderer can draw this layer type.
   bool get isSupported =>
-      type == 'background' || type == 'fill' || type == 'line' || type == 'symbol';
+      type == 'background' ||
+      type == 'fill' ||
+      type == 'line' ||
+      type == 'symbol' ||
+      type == 'raster';
 
   static StyleLayer parse(Map<String, Object?> json) {
     final id = '${json['id'] ?? ''}';

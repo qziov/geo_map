@@ -19,6 +19,8 @@ import 'package:flutter/material.dart';
 import 'package:geo_map_core/geo_map_core.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 
+import '../camera/projection_mode.dart' show isFlatProjection;
+import '../globe/image_overlay.dart' show ImageSource, paintImageOverlay;
 import '../vendor/flutter_map_camera/flutter_map_camera.dart';
 import 'sprite_atlas.dart';
 import 'style_controller.dart';
@@ -33,6 +35,7 @@ class StyleVectorLayer extends StatelessWidget {
     required this.features,
     this.opacity = 1.0,
     this.sprite,
+    this.imageSources,
   })  : sources = null,
         assert(style != null || controller != null,
             'provide either style or controller');
@@ -49,6 +52,7 @@ class StyleVectorLayer extends StatelessWidget {
     required Map<String, List<GeoJsonFeature>> this.sources,
     this.opacity = 1.0,
     this.sprite,
+    this.imageSources,
   })  : features = const [],
         assert(style != null || controller != null,
             'provide either style or controller');
@@ -69,11 +73,16 @@ class StyleVectorLayer extends StatelessWidget {
   /// Icons for `icon-image`; without one the labels are still drawn.
   final SpriteAtlas? sprite;
 
+  /// Runtime images behind `raster` layers (A2). When a controller is used its
+  /// registry wins; this field also lets a static style supply images directly.
+  final Map<String, ImageSource>? imageSources;
+
   @override
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
 
-    Widget paintWith(StyleSpec spec) => RepaintBoundary(
+    Widget paintWith(StyleSpec spec, Map<String, ImageSource>? images) =>
+        RepaintBoundary(
           child: CustomPaint(
             painter: _StyleVectorPainter(
               style: spec,
@@ -82,16 +91,20 @@ class StyleVectorLayer extends StatelessWidget {
               sprite: sprite,
               camera: camera,
               opacity: opacity,
+              imageSources: images,
             ),
             child: const SizedBox.expand(),
           ),
         );
 
     final c = controller;
-    if (c == null) return paintWith(style!);
+    if (c == null) return paintWith(style!, imageSources);
     return AnimatedBuilder(
       animation: c,
-      builder: (_, __) => paintWith(c.document.toSpec()),
+      // `c.spec` is cached by revision: an unchanged style keeps the same
+      // StyleSpec identity, so `_StyleVectorPainter.shouldRepaint` stays false
+      // instead of repainting every frame.
+      builder: (_, __) => paintWith(c.spec, c.imageSources),
     );
   }
 }
@@ -104,6 +117,7 @@ class _StyleVectorPainter extends CustomPainter {
     required this.sprite,
     required this.camera,
     required this.opacity,
+    required this.imageSources,
   });
 
   final StyleSpec style;
@@ -112,12 +126,13 @@ class _StyleVectorPainter extends CustomPainter {
   final SpriteAtlas? sprite;
   final MapCamera camera;
   final double opacity;
+  final Map<String, ImageSource>? imageSources;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
 
-    final flat = camera.projectionDelegate is FlatProjectionDelegate;
+    final flat = isFlatProjection(camera.projectionDelegate);
     final projector =
         flat ? const MercatorProjector() : const OrthographicProjector();
     final state = CameraState(
@@ -183,6 +198,14 @@ class _StyleVectorPainter extends CustomPainter {
           ));
           symbolOrder += 2;
         }
+        continue;
+      }
+
+      // Raster has no features — it only needs the runtime ImageSource keyed by
+      // `layer.source`. Drawn at its style z-order, in the same clip context as
+      // the vector geometry (paintImageOverlay clips itself on the globe).
+      if (layer.type == 'raster') {
+        _paintRaster(canvas, size, layer);
         continue;
       }
 
@@ -354,6 +377,27 @@ class _StyleVectorPainter extends CustomPainter {
       if (o <= 0) continue;
       canvas.drawRect(Offset.zero & size, Paint()..color = _color(c, o));
     }
+  }
+
+  /// Paints one `raster` overlay layer from the image registry. Raster has no
+  /// features, so it never touches [features]/[sources]; it only needs the
+  /// runtime [ImageSource] keyed by the layer's `source`.
+  void _paintRaster(Canvas canvas, Size size, StyleLayer layer) {
+    final img = imageSources?[layer.source];
+    if (img == null) return;
+    final ctx = ExpressionContext(zoom: camera.zoom);
+    final o = (layer.number('raster-opacity', ctx) ?? 1) * opacity;
+    if (o <= 0) return;
+    paintImageOverlay(
+      canvas,
+      size,
+      camera: camera,
+      image: img.image,
+      bounds: img.bounds,
+      opacity: o,
+      mercatorSampling: layer.boolean('mercator-sampling', ctx) ?? false,
+      subdivisions: img.subdivisions,
+    );
   }
 
   /// Draw [draw] once per visible world copy when flat.
@@ -547,7 +591,8 @@ class _StyleVectorPainter extends CustomPainter {
       // 会导致图标位置更新（例如选中台风点移动）不触发重绘，看起来像"延迟"。
       oldDelegate.sources != sources ||
       oldDelegate.sprite != sprite ||
-      oldDelegate.opacity != opacity;
+      oldDelegate.opacity != opacity ||
+      oldDelegate.imageSources != imageSources;
 }
 
 class _FeaturePaths {

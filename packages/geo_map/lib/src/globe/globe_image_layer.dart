@@ -1,18 +1,22 @@
-import 'dart:math' as math;
-import 'dart:typed_data';
-import 'dart:ui' as ui;
-
-import 'package:flutter/material.dart';
-import 'package:latlong2/latlong.dart';
-import '../vendor/flutter_map_camera/flutter_map_camera.dart'
-    show FlatProjectionDelegate, MapCamera, LatLngBounds;
-
 /// Image overlay (weather radar, satellite swath, …) drawn on the globe.
 ///
 /// flutter_map's `OverlayImageLayer` maps the image onto a quad from four
 /// corners, which on a sphere looks like a flat sheet: no curvature, no horizon
 /// clipping. This layer tessellates the bounds into a mesh and projects every
 /// vertex, so the overlay follows the surface and disappears behind it.
+///
+/// The actual drawing lives in `image_overlay.dart` (`paintImageOverlay`) so the
+/// style raster layer renders exactly the same pixels.
+library;
+
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+
+import '../vendor/flutter_map_camera/flutter_map_camera.dart'
+    show LatLngBounds, MapCamera;
+import 'image_overlay.dart' show paintImageOverlay;
+
 class GlobeImageLayer extends StatefulWidget {
   const GlobeImageLayer({
     super.key,
@@ -20,12 +24,20 @@ class GlobeImageLayer extends StatefulWidget {
     required this.bounds,
     this.opacity = 0.85,
     this.subdivisions = 24,
+    /// 当图片本身是 **Web Mercator** 投影渲染时（如 WAFS 全球 PNG），
+    /// 把网格也按 Mercator y 均匀细分、UV v 用同一 Mercator v 值，
+    /// 让几何和 UV 采样共用同一个空间，避免平面模式下的拉伸和条纹。
+    ///
+    /// 等经纬度 / Plate-Carrée 投影的图层（卫星图、雷达拼图）不要开，
+    /// 保持默认的线性纬度采样。
+    this.mercatorSampling = false,
   });
 
   final ImageProvider image;
   final LatLngBounds bounds;
   final double opacity;
   final int subdivisions;
+  final bool mercatorSampling;
 
   @override
   State<GlobeImageLayer> createState() => _GlobeImageLayerState();
@@ -93,6 +105,7 @@ class _GlobeImageLayerState extends State<GlobeImageLayer> {
           bounds: widget.bounds,
           opacity: widget.opacity,
           subdivisions: widget.subdivisions,
+          mercatorSampling: widget.mercatorSampling,
         ),
       ),
     );
@@ -106,6 +119,7 @@ class _ImagePainter extends CustomPainter {
     required this.bounds,
     required this.opacity,
     required this.subdivisions,
+    required this.mercatorSampling,
   });
 
   final MapCamera camera;
@@ -113,180 +127,19 @@ class _ImagePainter extends CustomPainter {
   final LatLngBounds bounds;
   final double opacity;
   final int subdivisions;
-
-  static const double _eps = 0.01;
-  static const double _cutoff = -0.12;
+  final bool mercatorSampling;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    if (size.isEmpty) return;
-
-    final flat = camera.projectionDelegate is FlatProjectionDelegate;
-    final lat0 = camera.center.latitude * math.pi / 180;
-    final lng0 = camera.center.longitude * math.pi / 180;
-    final radius = 256 * math.pow(2, camera.zoom) / (2 * math.pi);
-    if (!flat && radius <= 0) return;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    final n = subdivisions.clamp(4, 64);
-    final vertexCount = (n + 1) * (n + 1);
-    final positions = Float32List(vertexCount * 2);
-    final uvs = Float32List(vertexCount * 2);
-    final depths = Float32List(vertexCount);
-
-    final west = bounds.west;
-    final east = bounds.east;
-    final north = bounds.north;
-    final south = bounds.south;
-    final imageWidth = image.width.toDouble();
-    final imageHeight = image.height.toDouble();
-
-    var allFront = true;
-    var anyFront = false;
-
-    for (var j = 0; j <= n; j++) {
-      final fy = j / n;
-      final lat = north + (south - north) * fy;
-      for (var i = 0; i <= n; i++) {
-        final fx = i / n;
-        final lng = west + (east - west) * fx;
-        final index = j * (n + 1) + i;
-
-        if (flat) {
-          // 2D：bounds 格点走 delegate 仿射，无视深度/圆盘。
-          final pt = camera.projectClamped(LatLng(lat, lng));
-          positions[index * 2] = pt.x;
-          positions[index * 2 + 1] = pt.y;
-          depths[index] = 1;
-          anyFront = true;
-        } else {
-          final v = _view(lng * math.pi / 180, lat * math.pi / 180, lat0, lng0);
-          depths[index] = v.$3;
-          var vx = v.$1;
-          var vy = v.$2;
-          if (v.$3 <= _eps) {
-            allFront = false;
-            final len = math.sqrt(vx * vx + vy * vy);
-            if (len < 1e-6) {
-              vx = 0;
-              vy = 0;
-            } else {
-              vx /= len;
-              vy /= len;
-            }
-          } else {
-            anyFront = true;
-          }
-          positions[index * 2] = center.dx + vx * radius;
-          positions[index * 2 + 1] = center.dy - vy * radius;
-        }
-        uvs[index * 2] = fx * imageWidth;
-        uvs[index * 2 + 1] = fy * imageHeight;
-      }
-    }
-
-    if (!anyFront) return;
-
-    final indices = allFront ? _staticIndices(n) : _culledIndices(n, depths);
-
-    final vertices = ui.Vertices.raw(
-      ui.VertexMode.triangles,
-      positions,
-      textureCoordinates: uvs,
-      indices: indices,
-    );
-
-    final paint = Paint()
-      ..isAntiAlias = true
-      // ★ 不透明度直接乘进 color（shader 纹理 × color alpha，srcOver 语义等价）。
-      //   不能用 saveLayer(Paint()..color=黑×opacity)：Impeller 的层合成会把
-      //   saveLayer paint 的黑色带进层内容 → 整个 bounds 变实心黑块（黑瓦真凶）。
-      ..color = Color.fromRGBO(255, 255, 255, opacity)
-      ..shader = ui.ImageShader(
-        image,
-        ui.TileMode.clamp,
-        ui.TileMode.clamp,
-        _identity(),
-        filterQuality: ui.FilterQuality.low,
+  void paint(Canvas canvas, Size size) => paintImageOverlay(
+        canvas,
+        size,
+        camera: camera,
+        image: image,
+        bounds: bounds,
+        opacity: opacity,
+        mercatorSampling: mercatorSampling,
+        subdivisions: subdivisions,
       );
-
-    canvas.save();
-    if (!flat) {
-      canvas.clipPath(
-        ui.Path()..addOval(Rect.fromCircle(center: center, radius: radius)),
-      );
-    }
-    canvas.drawVertices(vertices, BlendMode.srcOver, paint);
-    canvas.restore();
-
-    vertices.dispose();
-  }
-
-  (double, double, double) _view(
-    double lng,
-    double lat,
-    double lat0,
-    double lng0,
-  ) {
-    final dLng = lng - lng0;
-    final cosLat = math.cos(lat);
-    return (
-      cosLat * math.sin(dLng),
-      math.cos(lat0) * math.sin(lat) - math.sin(lat0) * cosLat * math.cos(dLng),
-      math.sin(lat0) * math.sin(lat) + math.cos(lat0) * cosLat * math.cos(dLng),
-    );
-  }
-
-  static final Map<int, Uint16List> _indexCache = {};
-
-  static Uint16List _staticIndices(int n) => _indexCache.putIfAbsent(n, () {
-    final out = <int>[];
-    for (var j = 0; j < n; j++) {
-      for (var i = 0; i < n; i++) {
-        final i00 = j * (n + 1) + i;
-        final i10 = i00 + 1;
-        final i01 = i00 + n + 1;
-        final i11 = i01 + 1;
-        out.addAll([i00, i10, i11, i00, i11, i01]);
-      }
-    }
-    return Uint16List.fromList(out);
-  });
-
-  static Uint16List _culledIndices(int n, Float32List depths) {
-    final out = <int>[];
-    for (var j = 0; j < n; j++) {
-      for (var i = 0; i < n; i++) {
-        final i00 = j * (n + 1) + i;
-        final i10 = i00 + 1;
-        final i01 = i00 + n + 1;
-        final i11 = i01 + 1;
-
-        final z00 = depths[i00];
-        final z10 = depths[i10];
-        final z01 = depths[i01];
-        final z11 = depths[i11];
-
-        if (z00 <= _eps && z10 <= _eps && z01 <= _eps && z11 <= _eps) {
-          continue;
-        }
-        if (z00 < _cutoff || z10 < _cutoff || z01 < _cutoff || z11 < _cutoff) {
-          continue;
-        }
-        out.addAll([i00, i10, i11, i00, i11, i01]);
-      }
-    }
-    return Uint16List.fromList(out);
-  }
-
-  static Float64List _identity() {
-    final m = Float64List(16);
-    m[0] = 1;
-    m[5] = 1;
-    m[10] = 1;
-    m[15] = 1;
-    return m;
-  }
 
   @override
   bool shouldRepaint(covariant _ImagePainter oldDelegate) =>
@@ -294,5 +147,6 @@ class _ImagePainter extends CustomPainter {
       oldDelegate.image != image ||
       oldDelegate.bounds != bounds ||
       oldDelegate.opacity != opacity ||
-      oldDelegate.subdivisions != subdivisions;
+      oldDelegate.subdivisions != subdivisions ||
+      oldDelegate.mercatorSampling != mercatorSampling;
 }

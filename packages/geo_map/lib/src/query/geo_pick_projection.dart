@@ -23,17 +23,15 @@ import 'dart:ui' show Offset;
 import 'package:geo_map_core/geo_map_core.dart' show GeoEngineTuning, Vec2;
 import 'package:latlong2/latlong.dart';
 
-import '../vendor/flutter_map_camera/flat_projection_delegate.dart'
-    show FlatProjectionDelegate;
+import '../camera/projection_mode.dart' show projectMapPoint;
 import '../vendor/flutter_map_camera/projection_delegate.dart'
     show MapProjectionDelegate;
 
 /// The screen position of [point] for picking, or `null` when it cannot be
 /// picked (the far side of the globe, or a non-finite coordinate).
 Vec2? projectForPick(MapProjectionDelegate delegate, LatLng point) {
-  final Offset offset = delegate is FlatProjectionDelegate
-      ? delegate.projectForVector(point)
-      : delegate.project(point);
+  // T5d: flat/globe selection is funnelled through the shared helper.
+  final Offset offset = projectMapPoint(delegate, point);
 
   if (!offset.dx.isFinite || !offset.dy.isFinite) return null;
 

@@ -10,6 +10,8 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:geo_map_core/geo_map_core.dart';
 
+import '../globe/image_overlay.dart' show ImageSource;
+
 class GeoStyleController extends ChangeNotifier {
   GeoStyleController(StyleSpec spec) : _document = StyleDocument.fromSpec(spec);
 
@@ -24,6 +26,24 @@ class GeoStyleController extends ChangeNotifier {
   /// Monotonic revision; changes only when the document actually changed.
   int get revision => _revision;
 
+  StyleSpec? _specCache;
+  int _specCacheRevision = -1;
+
+  /// The current spec, cached by [revision].
+  ///
+  /// The renderers compare `StyleSpec` by identity in `shouldRepaint`. Calling
+  /// `document.toSpec()` on every build produced a fresh object and forced a
+  /// repaint even when nothing changed. The cache is invalidated only when a
+  /// mutation bumps [revision], so an unchanged style keeps one identity and a
+  /// changed style produces exactly one new one.
+  StyleSpec get spec {
+    if (_specCache == null || _specCacheRevision != _revision) {
+      _specCache = _document.toSpec();
+      _specCacheRevision = _revision;
+    }
+    return _specCache!;
+  }
+
   void _set(StyleDocument next) {
     if (identical(next, _document)) return;
     _document = next;
@@ -37,6 +57,43 @@ class GeoStyleController extends ChangeNotifier {
       _set(_document.addSource(id, source));
 
   void removeSource(String id) => _set(_document.removeSource(id));
+
+  // --- runtime images (A2: style documents stay JSON-like / pure Dart) ------
+
+  Map<String, ImageSource> _imageSources = const <String, ImageSource>{};
+
+  /// The images behind `raster` layers, keyed by the source id in the style
+  /// document. Registering or removing one rebuilds the renderers but does
+  /// **not** bump [revision], because the document itself did not change.
+  Map<String, ImageSource> get imageSources => _imageSources;
+
+  void addImageSource(String id, ImageSource source) {
+    _imageSources = Map<String, ImageSource>.unmodifiable(
+      <String, ImageSource>{..._imageSources, id: source},
+    );
+    notifyListeners();
+  }
+
+  void removeImageSource(String id) {
+    if (!_imageSources.containsKey(id)) return;
+    _imageSources = Map<String, ImageSource>.unmodifiable(
+      <String, ImageSource>{..._imageSources}..remove(id),
+    );
+    notifyListeners();
+  }
+
+  /// Update (or register) the image behind an existing raster layer.
+  ///
+  /// Used when a time-animated layer swaps its frame: the layer id stays the
+  /// same, only the decoded [ui.Image] changes. Like [addImageSource], this
+  /// rebuilds the renderers but does **not** bump [revision], because the
+  /// document itself did not change.
+  void updateImageSource(String id, ImageSource source) {
+    _imageSources = Map<String, ImageSource>.unmodifiable(
+      <String, ImageSource>{..._imageSources, id: source},
+    );
+    notifyListeners();
+  }
 
   // --- layers (order = z-order) -------------------------------------------------
 

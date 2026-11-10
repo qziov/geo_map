@@ -31,6 +31,17 @@ class StylePropertyDef {
 
 /// `layerType -> paint property -> definition`.
 const Map<String, Map<String, StylePropertyDef>> layerPaintDefs = {
+  // `raster` is an image overlay keyed by a runtime ImageSource id in
+  // `GeoStyleController`. The style document only carries its description;
+  // no dart:ui object leaks into geo_map_core.
+  'raster': {
+    'raster-opacity': StylePropertyDef(StylePropertyType.number,
+        defaultValue: 1, interpolated: true),
+    // Whether the source image is Web-Mercator rendered (radar / WAFS) and
+    // the mesh must sample Mercator y rather than linear latitude.
+    'mercator-sampling': StylePropertyDef(StylePropertyType.boolean,
+        defaultValue: false),
+  },
   'background': {
     'background-color': StylePropertyDef(StylePropertyType.color,
         defaultValue: '#000000', interpolated: true),

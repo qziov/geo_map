@@ -36,8 +36,10 @@ import 'package:flutter/material.dart';
 import 'package:geo_map_core/geo_map_core.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 
+import '../camera/projection_mode.dart' show isFlatProjection;
 import '../globe/tile_source.dart' show HttpTileSource;
 import '../vendor/flutter_map_camera/flutter_map_camera.dart';
+import '../globe/image_overlay.dart' show ImageSource, paintImageOverlay;
 import 'sprite_atlas.dart';
 import 'style_controller.dart';
 import 'symbol_painter.dart';
@@ -104,6 +106,7 @@ class MvtVectorLayer extends StatefulWidget {
     this.maxCachedTiles = 160,
     this.renderWorldCopies = true,
     this.sprite,
+    this.imageSources,
     this.onDiagnostics,
   }) : assert(style != null || controller != null,
             'provide either style or controller');
@@ -124,6 +127,10 @@ class MvtVectorLayer extends StatefulWidget {
   /// Defaults to `true` (MapLibre's `renderWorldCopies`). Set `false` for a
   /// fixed single-world view: off-screen data is clipped instead of repeated.
   final bool renderWorldCopies;
+
+  /// Runtime images behind `raster` layers (A2). When a controller is used its
+  /// registry wins; this field also lets a static style supply images directly.
+  final Map<String, ImageSource>? imageSources;
 
   /// Icons for `icon-image`; without one the labels are still drawn.
   final SpriteAtlas? sprite;
@@ -298,14 +305,22 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
     }
     return AnimatedBuilder(
       animation: controller,
-      builder: (_, __) => _layerWith(camera, controller.document.toSpec()),
+      // Revision-cached spec: unchanged style keeps its identity, so
+      // `_MvtPainter.shouldRepaint` does not repaint on every rebuild.
+      builder: (_, __) => _layerWith(camera, controller.spec),
     );
   }
 
   Widget _layerWith(MapCamera camera, StyleSpec spec) {
-    final flat = camera.projectionDelegate is FlatProjectionDelegate;
+    final flat = isFlatProjection(camera.projectionDelegate);
     final projector =
         flat ? const MercatorProjector() : const OrthographicProjector();
+    // When a style controller is driving this layer, read the live image
+    // registry from it (refreshed on every notify) rather than the parent's
+    // static `imageSources` snapshot — otherwise newly registered raster images
+    // would not reach the painter.
+    final imageSources =
+        widget.controller?.imageSources ?? widget.imageSources;
     final state = CameraState(
       center: camera.center,
       zoom: camera.zoom,
@@ -372,6 +387,7 @@ class _MvtVectorLayerState extends State<MvtVectorLayer> {
           sourceMinZoom: widget.source.minZoom,
           sourceMaxZoom: widget.source.maxZoom,
           scheme: widget.source.scheme,
+          imageSources: imageSources,
         ),
         child: const SizedBox.expand(),
       ),
@@ -517,6 +533,7 @@ class _MvtPainter extends CustomPainter {
     required this.sourceMinZoom,
     required this.sourceMaxZoom,
     required this.scheme,
+    required this.imageSources,
   });
 
   final StyleSpec style;
@@ -532,12 +549,13 @@ class _MvtPainter extends CustomPainter {
   final int sourceMinZoom;
   final int sourceMaxZoom;
   final TileSchemeKind scheme;
+  final Map<String, ImageSource>? imageSources;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
 
-    final flat = camera.projectionDelegate is FlatProjectionDelegate;
+    final flat = isFlatProjection(camera.projectionDelegate);
     final projector =
         flat ? const MercatorProjector() : const OrthographicProjector();
     final state = CameraState(
@@ -587,6 +605,14 @@ class _MvtPainter extends CustomPainter {
 
     for (final layer in style.layers) {
       if (!layer.isSupported || !layer.isVisibleAt(camera.zoom)) continue;
+
+      // Raster overlays are image-backed (no tile features): draw them from the
+      // image registry at their style z-order, then skip the tile path below.
+      if (layer.type == 'raster') {
+        _paintRaster(canvas, size, layer);
+        continue;
+      }
+
       final sourceLayer = layer.sourceLayer;
       if (sourceLayer == null) continue;
       if (layer.type == 'fill') {
@@ -611,6 +637,30 @@ class _MvtPainter extends CustomPainter {
         drawOrder,
       );
     }
+  }
+
+  // --- raster overlay --------------------------------------------------------
+
+  /// Paints one `raster` overlay layer from the image registry. Raster has no
+  /// tile features, so it only needs the runtime [ImageSource] keyed by the
+  /// layer's `source`. Shares `paintImageOverlay` with `GlobeImageLayer` and
+  /// `StyleVectorLayer`, so all three render identical pixels.
+  void _paintRaster(Canvas canvas, Size size, StyleLayer layer) {
+    final img = imageSources?[layer.source];
+    if (img == null) return;
+    final ctx = ExpressionContext(zoom: camera.zoom);
+    final o = (layer.number('raster-opacity', ctx) ?? 1) * opacity;
+    if (o <= 0) return;
+    paintImageOverlay(
+      canvas,
+      size,
+      camera: camera,
+      image: img.image,
+      bounds: img.bounds,
+      opacity: o,
+      mercatorSampling: layer.boolean('mercator-sampling', ctx) ?? false,
+      subdivisions: img.subdivisions,
+    );
   }
 
   // --- background ------------------------------------------------------------
@@ -1132,5 +1182,10 @@ class _MvtPainter extends CustomPainter {
       oldDelegate.style != style ||
       oldDelegate.camera != camera ||
       oldDelegate.opacity != opacity ||
-      oldDelegate.renderWorldCopies != renderWorldCopies;
+      oldDelegate.renderWorldCopies != renderWorldCopies ||
+      // 图片组（radar / satellite / WAFS）经 `updateImageSource` 注册：它只
+      // `notifyListeners`、**不** bump revision。若 camera 身份稳定，仅靠上面的
+      // 比较不会触发重绘，导致新图片不出现。这里补上 imageSources 的身份比较
+      // （每次注册都重建不可变 map），让控制器驱动的 raster 层及时刷新。
+      oldDelegate.imageSources != imageSources;
 }

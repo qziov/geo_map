@@ -260,5 +260,52 @@ void main() {
       expect(fill({'fill-antialias': false}).valueOf('fill-antialias', ctx),
           isFalse);
     });
+
+    test('raster layer parses mercator-sampling and raster-opacity (T3)', () {
+      final spec = StyleSpec.parse({
+        'version': 8,
+        'sources': {
+          'img': {'type': 'image'},
+        },
+        'layers': [
+          {
+            'id': 'r',
+            'type': 'raster',
+            'source': 'img',
+            'paint': {
+              'mercator-sampling': true,
+              'raster-opacity': 0.5,
+            },
+          },
+        ],
+      });
+
+      final r = spec.layers[0];
+      expect(r.type, 'raster');
+      expect(r.isSupported, isTrue);
+      expect(r.source, 'img');
+
+      const ctx = ExpressionContext(zoom: 5);
+      expect(r.boolean('mercator-sampling', ctx), isTrue);
+      expect(r.number('raster-opacity', ctx), 0.5);
+    });
+
+    test('raster layer defaults: mercator-sampling false, opacity 1', () {
+      final spec = StyleSpec.parse({
+        'version': 8,
+        'layers': [
+          {
+            'id': 'r',
+            'type': 'raster',
+            'source': 'img',
+          },
+        ],
+      });
+      final r = spec.layers[0];
+      expect(r.isSupported, isTrue);
+      const ctx = ExpressionContext(zoom: 5);
+      expect(r.boolean('mercator-sampling', ctx), isFalse);
+      expect(r.number('raster-opacity', ctx), 1);
+    });
   });
 }
