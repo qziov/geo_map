@@ -35,6 +35,11 @@ export 'package:geo_map_core/geo_map_core.dart'
         PropertyValue,
         Expr,
         ExpressionContext,
+        FeatureStateExpr,
+        GeoSourceDiff,
+        GeoSourceUpdate,
+        indexFeaturesById,
+        applySourceDiff,
         GeoJsonFeature,
         GeoJsonGeometry,
         // Geometry subclasses: needed to build features in code, not only by

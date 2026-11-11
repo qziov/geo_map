@@ -25,6 +25,7 @@ import '../vendor/flutter_map_camera/flutter_map_camera.dart';
 import 'sprite_atlas.dart';
 import 'style_controller.dart';
 import 'symbol_painter.dart';
+import '../query/geo_feature_registry.dart';
 import 'symbol_style.dart';
 
 class StyleVectorLayer extends StatelessWidget {
@@ -36,6 +37,7 @@ class StyleVectorLayer extends StatelessWidget {
     this.opacity = 1.0,
     this.sprite,
     this.imageSources,
+    this.registry,
   })  : sources = null,
         assert(style != null || controller != null,
             'provide either style or controller');
@@ -53,6 +55,7 @@ class StyleVectorLayer extends StatelessWidget {
     this.opacity = 1.0,
     this.sprite,
     this.imageSources,
+    this.registry,
   })  : features = const [],
         assert(style != null || controller != null,
             'provide either style or controller');
@@ -77,34 +80,64 @@ class StyleVectorLayer extends StatelessWidget {
   /// registry wins; this field also lets a static style supply images directly.
   final Map<String, ImageSource>? imageSources;
 
+  /// Optional runtime data source.
+  ///
+  /// When set, feature data comes from [GeoFeatureRegistry.sourcesView] and
+  /// per-feature `["feature-state", ...]` expressions read
+  /// [GeoFeatureRegistry.getFeatureState]. This makes one `setData` call drive
+  /// rendering, hit-testing and repainting together — the renderer can no
+  /// longer disagree with `queryFeatures`.
+  ///
+  /// Leaving it `null` keeps the original declarative behaviour exactly:
+  /// [features] / [sources] are used and no notifier is subscribed.
+  final GeoFeatureRegistry? registry;
+
   @override
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
-
-    Widget paintWith(StyleSpec spec, Map<String, ImageSource>? images) =>
-        RepaintBoundary(
-          child: CustomPaint(
-            painter: _StyleVectorPainter(
-              style: spec,
-              features: features,
-              sources: sources,
-              sprite: sprite,
-              camera: camera,
-              opacity: opacity,
-              imageSources: images,
-            ),
-            child: const SizedBox.expand(),
-          ),
-        );
-
     final c = controller;
-    if (c == null) return paintWith(style!, imageSources);
+    final r = registry;
+
+    Widget paintWith(StyleSpec spec, Map<String, ImageSource>? images) {
+      // A registry owns the data. Its `sourcesView` is identity-stable until a
+      // real change, so camera-only rebuilds do not defeat `shouldRepaint`'s
+      // identity short-circuit.
+      final effectiveSources = r != null ? r.sourcesView : sources;
+      final effectiveFeatures =
+          r != null ? const <GeoJsonFeature>[] : features;
+      return RepaintBoundary(
+        child: CustomPaint(
+          painter: _StyleVectorPainter(
+            style: spec,
+            features: effectiveFeatures,
+            sources: effectiveSources,
+            registry: r,
+            registryRevision: r?.revision ?? 0,
+            sprite: sprite,
+            camera: camera,
+            opacity: opacity,
+            imageSources: images,
+          ),
+          child: const SizedBox.expand(),
+        ),
+      );
+    }
+
+    final listenables = <Listenable>[
+      if (c != null) c,
+      if (r != null) r,
+    ];
+    if (listenables.isEmpty) return paintWith(style!, imageSources);
+
     return AnimatedBuilder(
-      animation: c,
+      animation: listenables.length == 1
+          ? listenables.first
+          : Listenable.merge(listenables),
       // `c.spec` is cached by revision: an unchanged style keeps the same
       // StyleSpec identity, so `_StyleVectorPainter.shouldRepaint` stays false
       // instead of repainting every frame.
-      builder: (_, __) => paintWith(c.spec, c.imageSources),
+      builder: (_, __) =>
+          paintWith(c?.spec ?? style!, c?.imageSources ?? imageSources),
     );
   }
 }
@@ -114,6 +147,8 @@ class _StyleVectorPainter extends CustomPainter {
     required this.style,
     required this.features,
     required this.sources,
+    required this.registry,
+    required this.registryRevision,
     required this.sprite,
     required this.camera,
     required this.opacity,
@@ -123,10 +158,26 @@ class _StyleVectorPainter extends CustomPainter {
   final StyleSpec style;
   final List<GeoJsonFeature> features;
   final Map<String, List<GeoJsonFeature>>? sources;
+  final GeoFeatureRegistry? registry;
+  final int registryRevision;
   final SpriteAtlas? sprite;
   final MapCamera camera;
   final double opacity;
   final Map<String, ImageSource>? imageSources;
+
+  /// Runtime state for one feature, fed into `["feature-state", key]`.
+  ///
+  /// MapLibre resolves the id from `feature.id` (or `promoteId`); geo_map's
+  /// `GeoJsonFeature.id` is the equivalent. A feature without an id, or a
+  /// layer without a source id, simply sees an empty state map — no exception.
+  Map<String, Object?> _stateFor(GeoJsonFeature feature, String? sourceId) {
+    final r = registry;
+    final id = feature.id;
+    if (r == null || id == null || id.isEmpty || sourceId == null) {
+      return const <String, Object?>{};
+    }
+    return r.getFeatureState(sourceId: sourceId, featureId: id);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -180,6 +231,7 @@ class _StyleVectorPainter extends CustomPainter {
           final ctx = ExpressionContext(
             zoom: camera.zoom,
             properties: feature.properties,
+            featureState: _stateFor(feature, layer.source),
           );
           symbols.addAll(resolveSymbols(
             layer: layer,
@@ -224,6 +276,7 @@ class _StyleVectorPainter extends CustomPainter {
         final ctx = ExpressionContext(
           zoom: camera.zoom,
           properties: feature.properties,
+          featureState: _stateFor(feature, layer.source),
         );
 
         if (layer.type == 'fill') {
@@ -590,6 +643,10 @@ class _StyleVectorPainter extends CustomPainter {
       // 用 ofSources 时要素走 [sources]，[features] 恒为空；漏比 [sources]
       // 会导致图标位置更新（例如选中台风点移动）不触发重绘，看起来像"延迟"。
       oldDelegate.sources != sources ||
+      // Feature state changes do not replace `sourcesView`, so the revision
+      // is the only signal that a `["feature-state", ...]` value changed.
+      oldDelegate.registry != registry ||
+      oldDelegate.registryRevision != registryRevision ||
       oldDelegate.sprite != sprite ||
       oldDelegate.opacity != opacity ||
       oldDelegate.imageSources != imageSources;

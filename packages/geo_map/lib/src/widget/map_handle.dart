@@ -18,7 +18,6 @@ import '../camera/camera_animation.dart'
 import '../camera/camera_animator.dart';
 import '../camera/geo_map_controller.dart';
 import '../query/geo_feature_registry.dart';
-import '../query/geo_query_hit.dart';
 import '../style/style_controller.dart';
 import '../vendor/flutter_map_camera/flutter_map_camera.dart' show LatLngBounds;
 import 'geo_popup_binding.dart';

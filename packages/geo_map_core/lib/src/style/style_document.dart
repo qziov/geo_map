@@ -45,6 +45,12 @@ class StyleDocument {
     if (sources.containsKey(id)) {
       throw ArgumentError('source already exists: $id');
     }
+    // MapLibre `style.addSource` (style.ts:1092) rejects a source without a
+    // `type`. A duplicate id is checked first so that callers relying on the
+    // existing "source already exists" message keep it.
+    if (source['type'] == null) {
+      throw ArgumentError('source "$id" must define a type');
+    }
     return _copy(sources: {...sources, id: Map.unmodifiable(source)});
   }
 

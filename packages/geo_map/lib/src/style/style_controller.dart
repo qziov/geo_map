@@ -58,6 +58,14 @@ class GeoStyleController extends ChangeNotifier {
 
   void removeSource(String id) => _set(_document.removeSource(id));
 
+  /// Look up a style source definition by id (MapLibre `map.getSource`,
+  /// `style.ts:1158-1160`). Returns `null` for an unknown id instead of
+  /// throwing.
+  ///
+  /// Note this returns the **definition** (`{'type': ...}`), not feature data.
+  /// Runtime feature data lives in `GeoFeatureRegistry`; see `getData`.
+  Map<String, Object?>? getSource(String id) => _document.sources[id];
+
   // --- runtime images (A2: style documents stay JSON-like / pure Dart) ------
 
   Map<String, ImageSource> _imageSources = const <String, ImageSource>{};

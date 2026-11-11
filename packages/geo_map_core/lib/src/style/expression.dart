@@ -6,10 +6,15 @@
 /// (`evaluation_context.ts`) and the feature/zoom constant analysis
 /// (`index.ts` `isFeatureConstant` / `isGlobalPropertyConstant`).
 ///
-/// Supported here (spike): literal, get, has, zoom, `== != > < >= <=`,
-/// `all any !`, `interpolate` (linear / exponential), `step`, `case`,
-/// `coalesce`, `to-number/to-string/to-color`. Everything else throws a
-/// [FormatException] — deliberately loud rather than silently wrong.
+/// Supported here (spike): literal, get, has, feature-state, zoom,
+/// `== != > < >= <=`, `all any !`, `interpolate` (linear / exponential),
+/// `step`, `case`, `coalesce`, `to-number/to-string/to-color`. Everything else
+/// throws a [FormatException] — deliberately loud rather than silently wrong.
+///
+/// `feature-state` mirrors MapLibre's `["feature-state", key]`: it reads
+/// per-feature runtime state (hover / select) rather than the feature's own
+/// properties. MapLibre forbids it in filters, so this package only supplies
+/// state to paint/layout expression contexts, never to `compileFilter`.
 library;
 
 import 'dart:math' as math;
@@ -26,6 +31,7 @@ class ExpressionContext {
     required this.zoom,
     this.properties = const {},
     this.variables = const {},
+    this.featureState = const {},
   });
 
   final double zoom;
@@ -33,6 +39,13 @@ class ExpressionContext {
 
   /// Bindings introduced by [`let`] expressions.
   final Map<String, Object?> variables;
+
+  /// Runtime state for the current feature (`["feature-state", key]`).
+  ///
+  /// Kept separate from [properties]: state is owned by the host, is not part
+  /// of the GeoJSON payload, and changes without replacing the feature. Empty
+  /// by default so every pre-existing caller keeps its old behaviour.
+  final Map<String, Object?> featureState;
 }
 
 /// A parsed expression node.
@@ -84,6 +97,22 @@ class HasExpr extends Expr {
   @override
   Object? evaluate(ExpressionContext ctx) =>
       ctx.properties.containsKey(key) && ctx.properties[key] != null;
+  @override
+  bool get isFeatureConstant => false;
+  @override
+  bool get isZoomConstant => true;
+}
+
+/// `["feature-state", key]` — reads host-owned per-feature runtime state.
+///
+/// Feature-dependent (so paint properties using it are never constant-folded)
+/// but zoom-independent, matching MapLibre's `isFeatureConstant` analysis.
+class FeatureStateExpr extends Expr {
+  const FeatureStateExpr(this.key);
+  final String key;
+
+  @override
+  Object? evaluate(ExpressionContext ctx) => ctx.featureState[key];
   @override
   bool get isFeatureConstant => false;
   @override
@@ -369,12 +398,14 @@ class LetExpr extends Expr {
         zoom: ctx.zoom,
         properties: ctx.properties,
         variables: vars,
+        featureState: ctx.featureState,
       ));
     }
     return body.evaluate(ExpressionContext(
       zoom: ctx.zoom,
       properties: ctx.properties,
       variables: vars,
+      featureState: ctx.featureState,
     ));
   }
 
@@ -504,6 +535,8 @@ Expr _parseArray(List json) {
       return GetExpr(_string(json[1]));
     case 'has':
       return HasExpr(_string(json[1]));
+    case 'feature-state':
+      return FeatureStateExpr(_string(json[1]));
     case 'zoom':
       return const ZoomExpr();
     case '==':
