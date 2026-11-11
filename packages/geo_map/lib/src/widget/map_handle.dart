@@ -4,13 +4,24 @@
 /// the popup arbiter. Business code should talk to this handle instead of
 /// importing each controller separately. Method names mirror MapLibre's
 /// `map.*` / `map.style.*`; `before` is equivalent to MapLibre's `beforeId`.
+///
+/// **Two kinds of "source" live here and must not be confused**:
+/// * [addSource] / [removeSource] manage **style source definitions**
+///   (`StyleDocument.sources`, the `{'type': ...}` declarations).
+/// * [setData] / [updateData] / [getSource] manage **feature data**
+///   (`GeoFeatureRegistry`, i.e. `map.getSource(id).setData(data)` in MapLibre).
+///
+/// `removeSource` was already taken by the style document when the data facade
+/// was added, so dropping feature data uses [removeFeatureSource]. Both keep
+/// their original signatures — this is a purely additive API extension.
 library;
 
 import 'dart:ui' show Size;
 
 import 'package:flutter/animation.dart' show Curve, Curves;
 import 'package:flutter/painting.dart' show EdgeInsets;
-import 'package:geo_map_core/geo_map_core.dart' show GeoGeometryKind;
+import 'package:geo_map_core/geo_map_core.dart'
+    show GeoGeometryKind, GeoJsonFeature, GeoSourceDiff;
 import 'package:latlong2/latlong.dart';
 
 import '../camera/camera_animation.dart'
@@ -64,6 +75,82 @@ class MapHandle {
       style.addSource(id, source);
 
   void removeSource(String id) => style.removeSource(id);
+
+  // --- feature data (MapLibre `map.getSource(id).setData / updateData`) -----
+  //
+  // These forward to GeoFeatureRegistry, never to StyleDocument. `setData`
+  // creates the source when the id is unknown, so there is no separate
+  // "add feature source" step. `removeSource` above is already taken by style
+  // definitions, hence [removeFeatureSource].
+
+  /// `map.getSource(id)` for feature data; `null` for an unknown id.
+  GeoSourceHandle? getSource(String id) => features.getSource(id);
+
+  /// Get-or-create handle, so callers can write
+  /// `map.source('poi').setData(points)` without a registration step.
+  GeoSourceHandle source(String id) => features.source(id);
+
+  /// `map.getSource(id).setData(data)`: replace (or create) one source's data.
+  void setData(
+    String sourceId,
+    List<GeoJsonFeature> data, {
+    bool visible = true,
+    String? layerId,
+    double? pointRadiusPx,
+    GeoPopupBinding? popup,
+  }) =>
+      features.setData(
+        sourceId,
+        data,
+        visible: visible,
+        layerId: layerId,
+        pointRadiusPx: pointRadiusPx,
+        popup: popup,
+      );
+
+  /// `map.getSource(id).updateData(diff)`: incremental update by feature id.
+  /// Returns `false` when nothing changed; callers may fall back to [setData].
+  bool updateData(String sourceId, GeoSourceDiff diff) =>
+      features.updateData(sourceId, diff);
+
+  /// Current data of one source (empty immutable list for an unknown id).
+  List<GeoJsonFeature> getData(String sourceId) => features.getData(sourceId);
+
+  /// Drop a feature source. Does **not** touch style source definitions.
+  void removeFeatureSource(String sourceId) => features.removeSource(sourceId);
+
+  // --- feature state (MapLibre `map.setFeatureState`) -----------------------
+
+  void setFeatureState({
+    required String sourceId,
+    required String featureId,
+    required Map<String, Object?> state,
+  }) =>
+      features.setFeatureState(
+        sourceId: sourceId,
+        featureId: featureId,
+        state: state,
+      );
+
+  Map<String, Object?> getFeatureState({
+    required String sourceId,
+    required String featureId,
+  }) =>
+      features.getFeatureState(
+        sourceId: sourceId,
+        featureId: featureId,
+      );
+
+  void removeFeatureState({
+    required String sourceId,
+    String? featureId,
+    String? key,
+  }) =>
+      features.removeFeatureState(
+        sourceId: sourceId,
+        featureId: featureId,
+        key: key,
+      );
 
   // --- query (MapLibre `queryRenderedFeatures`) -----------------------------
 

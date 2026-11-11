@@ -11,6 +11,12 @@ StyleSpec _empty() => StyleSpec.parse(const <String, Object?>{
       'layers': <Object?>[],
     });
 
+GeoJsonFeature _dot(String id) => GeoJsonFeature(
+      id: id,
+      properties: const <String, Object?>{'level': 1},
+      geometry: PointGeometry(const LatLng(0, 0)),
+    );
+
 void main() {
   late GeoMapController camera;
   late GeoStyleController style;
@@ -81,5 +87,75 @@ void main() {
       handle.queryRenderedFeatures(const LatLng(0, 0)),
       isEmpty,
     );
+  });
+
+  group('feature data facade', () {
+    test('setData creates the source and reaches getData / getSource', () {
+      handle.setData('poi', [_dot('a')]);
+      expect(handle.getData('poi'), hasLength(1));
+      expect(handle.getSource('poi'), isA<GeoSourceHandle>());
+      expect(handle.source('poi').getData(), hasLength(1));
+    });
+
+    test('getSource is null for an unknown id, source() creates it', () {
+      expect(handle.getSource('missing'), isNull);
+      handle.source('made').setData([_dot('a')]);
+      expect(handle.getData('made'), hasLength(1));
+    });
+
+    test('updateData applies a diff and reports a no-op', () {
+      handle.setData('poi', [_dot('a'), _dot('b')]);
+      final changed = handle.updateData(
+        'poi',
+        GeoSourceDiff(remove: const ['a'], add: [_dot('c')]),
+      );
+      expect(changed, isTrue);
+      expect([for (final f in handle.getData('poi')) f.id], ['b', 'c']);
+      expect(handle.updateData('poi', const GeoSourceDiff()), isFalse);
+      expect(handle.updateData('unknown', const GeoSourceDiff()), isFalse);
+    });
+
+    test('feature state forwards to the registry', () {
+      handle.setData('poi', [_dot('a')]);
+      handle.setFeatureState(
+        sourceId: 'poi',
+        featureId: 'a',
+        state: const <String, Object?>{'selected': true},
+      );
+      expect(
+        handle.getFeatureState(sourceId: 'poi', featureId: 'a')['selected'],
+        isTrue,
+      );
+      handle.removeFeatureState(sourceId: 'poi', featureId: 'a');
+      expect(
+        handle.getFeatureState(sourceId: 'poi', featureId: 'a'),
+        isEmpty,
+      );
+    });
+
+    test('feature sources and style sources are independent namespaces', () {
+      handle.addSource('poi', const <String, Object?>{'type': 'geojson'});
+      handle.setData('poi', [_dot('a')]);
+      expect(style.document.sources.containsKey('poi'), isTrue);
+      expect(handle.getData('poi'), hasLength(1));
+
+      handle.removeFeatureSource('poi'); // drops feature data only
+      expect(handle.getData('poi'), isEmpty);
+      expect(style.document.sources.containsKey('poi'), isTrue);
+
+      handle.removeSource('poi'); // drops the style definition only
+      expect(style.document.sources.containsKey('poi'), isFalse);
+    });
+
+    test('queryRenderedFeatures sees data written through the facade', () {
+      handle.setData('poi', [_dot('a')]);
+      expect(
+        handle.queryRenderedFeatures(
+          const LatLng(0, 0),
+          sourceIds: const {'poi'},
+        ),
+        isNotEmpty,
+      );
+    });
   });
 }
